@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Client Heatmap</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    :root { --md-ink:#333333; --md-bg:#d3d3d3; --md-card:#f7f7f7; --md-line:#c0c0c0; --md-accent:#696969; --md-muted:#808080; }
+    body { background:var(--md-bg); color:var(--md-ink); }
+    .heatmap-page { max-width:1400px; margin:14px auto; padding:0 14px; }
+    .heatmap-header { background:#fff; border:1px solid var(--md-line); border-radius:18px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; box-shadow:0 10px 22px rgba(25,36,71,.07); }
+    .heatmap-header h1 { margin:0; font-size:20px; }
+    .heatmap-header p { margin:4px 0 0; color:#696969; font-size:12px; }
+    .heatmap-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+    .heatmap-actions a, .heatmap-actions button { background:#696969; color:#fff; border:0; border-radius:10px; padding:9px 12px; font-weight:800; text-decoration:none; cursor:pointer; }
+    .heatmap-actions button.secondary, .heatmap-actions a.secondary { background:#a9a9a9; color:#222; }
+    .heatmap-actions select { border:1px solid var(--md-line); border-radius:10px; padding:9px 10px; font-weight:800; background:#fff; min-width:320px; }
+    .heatmap-shell { background:#fff; border:1px solid var(--md-line); border-radius:18px; padding:12px; box-shadow:0 10px 22px rgba(25,36,71,.07); }
+    #clientHeatmap { width:100%; height:calc(100vh - 220px); min-height:530px; border-radius:14px; overflow:hidden; background:#eef2f7; }
+    .heatmap-status { margin-top:8px; color:#333; font-size:12px; background:#fff; border:1px solid #d0d0d0; border-radius:10px; padding:8px 10px; }
+    .progress-wrap {height:14px;background:#d3d3d3;border-radius:99px;overflow:hidden;margin:8px 0 4px;border:1px solid #c0c0c0}
+    .progress-bar {height:100%;width:0%;background:#696969;transition:width .2s ease}
+    .map-debug { font-family:Arial,sans-serif; background:rgba(255,255,255,.96); padding:8px 10px; border-radius:8px; border:1px solid #ccc; font-size:12px; max-width:560px; margin:10px; }
+    @media (max-width:800px){ .heatmap-header{align-items:flex-start; flex-direction:column;} #clientHeatmap{height:70vh; min-height:460px;} }
+  </style>
+</head>
+<body>
+  <div class="heatmap-page">
+    <div class="heatmap-header">
+      <div>
+        <h1>Client Heatmap</h1>
+        <p><strong>{{ selected }}</strong> | Client addresses only. Dashboard map shows franchise addresses only.</p>
+      </div>
+      <div class="heatmap-actions">
+        <form method="get" action="{{ url_for('client_heatmap_page') }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select name="franchise" onchange="this.form.submit()" title="Choose all clients or one franchise">
+            {% for fr in franchises or ['All'] %}
+              <option value="{{ fr }}" {% if fr == selected %}selected{% endif %}>{{ fr }}</option>
+            {% endfor %}
+          </select>
+        </form>
+        <a class="secondary" href="{{ url_for('dashboard', franchise=selected if selected else 'All') }}">Back to dashboard</a>
+        <button type="button" id="heatOnlyBtn" onclick="window.MDSetClientMapMode && window.MDSetClientMapMode('heat')">Heatmap</button>
+        <button type="button" id="pinsOnlyBtn" class="secondary" onclick="window.MDSetClientMapMode && window.MDSetClientMapMode('pins')">Pins</button>
+        <button type="button" id="bothBtn" class="secondary" onclick="window.MDSetClientMapMode && window.MDSetClientMapMode('both')">Both</button>
+      </div>
+    </div>
+    <div class="heatmap-shell">
+      <div class="heatmap-status">
+        <strong id="progressTitle">Preparing client map...</strong>
+        <div class="progress-wrap"><div class="progress-bar" id="clientMapProgressBar"></div></div>
+        <span id="clientHeatmapStatus">Waiting for Google Maps...</span>
+      </div>
+      <div id="clientHeatmap"><div style="padding:24px">Loading map...</div></div>
+    </div>
+  </div>
+
+  <script>window.MD_HEATMAP_SELECTED = {{ selected|tojson }};</script>
+  {% if google_maps_api_key %}
+  <script>
+    (function(){
+      var map = null, infoWindow = null;
+      var heatCircles = [], pinMarkers = [], franchiseMarkers = [];
+      var currentMode = 'both';
+      var selected = window.MD_HEATMAP_SELECTED || 'All';
+      var SA_CENTER = {lat:-30.5595, lng:22.9375};
+      var totalGroups = 0, loadedGroups = 0, mappedGroups = 0, mappedClients = 0;
+      var prepStartTime = 0, prepLastCached = 0;
+      function byId(id){ return document.getElementById(id); }
+      function status(message){ var el = byId('clientHeatmapStatus'); if(el){ el.textContent = message; } }
+      function updateProgress(){
+        var pct = totalGroups ? Math.min(100, Math.round(loadedGroups / totalGroups * 100)) : 0;
+        if(byId('clientMapProgressBar')) byId('clientMapProgressBar').style.width = pct + '%';
+        if(byId('progressTitle')) byId('progressTitle').textContent = 'Loading client coordinates: ' + pct + '%';
+        status('Loaded address groups ' + loadedGroups.toLocaleString() + ' / ' + (totalGroups || 0).toLocaleString() + ' | Plotted groups ' + mappedGroups.toLocaleString() + ' | Clients represented ' + mappedClients.toLocaleString() + ' | Mode ' + currentMode.toUpperCase());
+      }
+      function setPrepProgress(summary, phase){
+        var total = Number(summary.groups_total || 0), cached = Number(summary.groups_cached || 0), missing = Number(summary.groups_missing || 0);
+        var pct = total ? Math.min(100, Math.round(cached / total * 100)) : 100;
+        if(byId('clientMapProgressBar')) byId('clientMapProgressBar').style.width = pct + '%';
+        if(byId('progressTitle')) byId('progressTitle').textContent = (phase || 'Preparing client coordinates') + ': ' + pct + '%';
+        var elapsed = prepStartTime ? Math.max(1, (Date.now() - prepStartTime) / 1000) : 1;
+        var speed = Math.max(0, Math.round((cached - prepLastCached) / elapsed));
+        status('Preparing coordinates ' + cached.toLocaleString() + ' / ' + total.toLocaleString() + ' address groups | Missing ' + missing.toLocaleString() + ' | Speed ' + speed.toLocaleString() + ' groups/sec | Clients represented ' + Number(summary.clients_total || 0).toLocaleString());
+      }
+      function esc(v){ return String(v || '').replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
+      function setButtonClasses(mode){
+        currentMode = mode || currentMode;
+        ['heatOnlyBtn','pinsOnlyBtn','bothBtn'].forEach(function(id){ var b=byId(id); if(b){ b.className='secondary'; }});
+        if(currentMode === 'heat' && byId('heatOnlyBtn')) byId('heatOnlyBtn').className='';
+        if(currentMode === 'pins' && byId('pinsOnlyBtn')) byId('pinsOnlyBtn').className='';
+        if(currentMode === 'both' && byId('bothBtn')) byId('bothBtn').className='';
+      }
+      window.MDSetClientMapMode = function(mode){
+        if(!map){ return; }
+        setButtonClasses(mode);
+        var showHeat = currentMode === 'heat' || currentMode === 'both';
+        var showPins = currentMode === 'pins' || currentMode === 'both';
+        heatCircles.forEach(function(c){ c.setMap(showHeat ? map : null); });
+        pinMarkers.forEach(function(m){ m.setMap(showPins ? map : null); });
+        updateProgress();
+      };
+      function addDebug(){
+        var div = document.createElement('div');
+        div.className = 'map-debug';
+        div.innerHTML = '<b>Map status</b><br>Selected: '+esc(selected)+'<br>Loaded groups: '+loadedGroups.toLocaleString()+' / '+(totalGroups||0).toLocaleString()+'<br>Plotted groups: '+mappedGroups.toLocaleString()+'<br>Clients represented: '+mappedClients.toLocaleString();
+        map.controls[google.maps.ControlPosition.TOP_LEFT].clear();
+        map.controls[google.maps.ControlPosition.TOP_LEFT].push(div);
+      }
+      function makePoint(row, bounds){
+        var lat = Number(row.lat), lng = Number(row.lng);
+        if(!isFinite(lat) || !isFinite(lng)){ return false; }
+        if(lat < -35.8 || lat > -21 || lng < 16 || lng > 33.8){ return false; }
+        var count = Math.max(1, Number(row.count || 1));
+        var pos = {lat:lat, lng:lng};
+        var radius = Math.max(220, Math.min(6500, 240 + Math.sqrt(count) * 130));
+        var circle = new google.maps.Circle({center: pos, radius: radius, strokeColor:'#b00000', strokeOpacity:.45, strokeWeight:1, fillColor:'#ff2a00', fillOpacity:.35, clickable:true, map:(currentMode==='heat'||currentMode==='both')?map:null});
+        circle.addListener('click', function(){ infoWindow.setContent('<strong>'+esc(row.franchise)+'</strong><br>'+esc(row.client || 'Client density')+'<br>'+esc(row.address || row.locality_address)+'<br>Clients represented: '+count); infoWindow.setPosition(pos); infoWindow.open(map); });
+        var marker = new google.maps.Marker({position: pos, map:(currentMode==='pins'||currentMode==='both')?map:null, title:(row.client || row.franchise || 'Client') + ' - ' + (row.address || ''), label: count > 1 ? {text:String(Math.min(count,999)), color:'#fff', fontWeight:'700'} : undefined});
+        marker.addListener('click', function(){ infoWindow.setContent('<strong>'+esc(row.franchise)+'</strong><br>'+esc(row.client || 'Client location')+'<br>'+esc(row.address || row.locality_address)+'<br>Clients represented: '+count); infoWindow.open(map, marker); });
+        heatCircles.push(circle); pinMarkers.push(marker); bounds.extend(pos); return true;
+      }
+      async function prepareClientCoordinates(){
+        prepStartTime = Date.now();
+        prepLastCached = 0;
+        var params = new URLSearchParams();
+        params.set('franchise', selected || 'All');
+        var summaryResp = await fetch('/api/client-map-cache-summary?' + params.toString(), {cache:'no-store'});
+        var summaryPayload = await summaryResp.json();
+        if(!summaryPayload.ok){ throw new Error(summaryPayload.error || 'Could not read map preparation status'); }
+        var summary = summaryPayload.summary || summaryPayload;
+        prepLastCached = Number(summary.groups_cached || 0);
+        setPrepProgress(summary, 'Checking prepared coordinates');
+        var guard = 0;
+        while(Number(summary.groups_missing || 0) > 0 && guard < 5000){
+          guard += 1;
+          var beforeCached = Number(summary.groups_cached || 0);
+          var batchResp = await fetch('/admin/prepare_client_map_locations/batch', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({franchise:selected || 'All', batch_size:10})
+          });
+          var batchPayload = await batchResp.json();
+          if(!batchPayload.ok){ throw new Error(batchPayload.error || 'Coordinate preparation failed'); }
+          summary = batchPayload.summary || summary;
+          setPrepProgress(summary, 'Preparing client coordinates');
+          if(Number(summary.groups_missing || 0) <= 0){ break; }
+          if(Number(batchPayload.prepared || 0) === 0 && Number(batchPayload.skipped_cached || 0) === 0 && Number(batchPayload.failed || 0) === 0){ break; }
+          if(Number(summary.groups_cached || 0) === beforeCached && Number(batchPayload.failed || 0) > 0){ await new Promise(function(resolve){ setTimeout(resolve, 1200); }); }
+          else { await new Promise(function(resolve){ setTimeout(resolve, 250); }); }
+        }
+        return summary;
+      }
+      async function loadClientPages(){
+        var offset = 0, limit = 500, bounds = new google.maps.LatLngBounds();
+        loadedGroups = 0; mappedGroups = 0; mappedClients = 0; totalGroups = 0;
+        updateProgress();
+        while(true){
+          var params = new URLSearchParams();
+          params.set('franchise', selected || 'All');
+          params.set('mode', selected === 'All' ? 'heat' : 'pins');
+          params.set('offset', offset); params.set('limit', limit);
+          var resp = await fetch('/api/client-map-locations-page?' + params.toString(), {cache:'no-store'});
+          var payload = await resp.json();
+          totalGroups = Number(payload.total_groups || totalGroups || 0);
+          loadedGroups = Math.min(totalGroups || (offset + Number(payload.raw_count || 0)), offset + Number(payload.raw_count || 0));
+          (payload.locations || []).forEach(function(row){ if(makePoint(row, bounds)){ mappedGroups += 1; mappedClients += Math.max(1, Number(row.count || 1)); }});
+          addDebug(); updateProgress(); window.MDSetClientMapMode(currentMode);
+          if(payload.done || payload.next_offset === null || payload.next_offset === undefined){ break; }
+          offset = Number(payload.next_offset || 0);
+          await new Promise(function(resolve){ setTimeout(resolve, 80); });
+        }
+        if(mappedGroups > 0 && !bounds.isEmpty()){ map.fitBounds(bounds); if(selected !== 'All' && map.getZoom() > 13){ map.setZoom(13); } }
+        else { map.setCenter(SA_CENTER); map.setZoom(selected === 'All' ? 5 : 8); }
+        if(byId('progressTitle')) byId('progressTitle').textContent = 'Client map loaded';
+        addDebug(); updateProgress();
+      }
+      window.initFullClientHeatmap = function(){
+        var el = byId('clientHeatmap');
+        if(!el || !window.google || !google.maps){ return; }
+        map = new google.maps.Map(el, {center:SA_CENTER, zoom:selected==='All'?5:8, mapTypeId:'roadmap', scrollwheel:true, gestureHandling:'greedy', fullscreenControl:true, streetViewControl:false, mapTypeControl:true});
+        infoWindow = new google.maps.InfoWindow();
+        setButtonClasses('both');
+        status('Preparing saved client coordinates in batches...');
+        prepareClientCoordinates().then(function(){
+          status('Coordinates prepared. Loading saved client coordinates in batches...');
+          return loadClientPages();
+        }).catch(function(err){ status('Client map preparation/loading stopped: ' + err.message); });
+      };
+    })();
+  </script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=visualization&callback=initFullClientHeatmap"></script>
+  {% else %}
+  <script>document.getElementById('clientHeatmap').innerHTML='<iframe title="South Africa map" width="100%" height="100%" style="border:0" loading="lazy" src="https://www.google.com/maps?q=South%20Africa&output=embed"></iframe>'; document.getElementById('clientHeatmapStatus').textContent='GOOGLE_MAPS_API_KEY is not configured. Add it to .env and prepare client map locations.';</script>
+  {% endif %}
+</body>
+</html>

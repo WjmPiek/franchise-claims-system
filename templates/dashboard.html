@@ -1,0 +1,1266 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Franchise Claims Analytics System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container compact">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% if current_user %}
+      <div class="user-session-bar no-print">
+        <span>Logged in as <strong>{{ current_user.name or current_user.email }}</strong> ({{ current_user.role }})</span>
+        <span class="session-links">
+          {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('admin_users') }}">Manage Users</a>
+            <a href="{{ url_for('admin_claims_rules') }}">Claims Rules</a>
+            <a href="{{ url_for('admin_map_cache_manager') }}">Map Cache Manager</a>
+            <a href="{{ url_for('database_health') }}">Database Health</a>
+          {% endif %}
+          <a href="{{ url_for('claims_workflow') }}">Claims Workflow</a>
+          <a href="{{ url_for('change_password') }}">Change Password</a>
+          <a href="{{ url_for('logout') }}">Logout</a>
+        </span>
+      </div>
+    {% endif %}
+
+    {% if workspace == 'home' %}
+      <style>
+        :root {
+          --md-ink: #333333;
+          --md-bg: #d3d3d3;
+          --md-card: #f7f7f7;
+          --md-line: #c0c0c0;
+          --md-accent: #696969;
+          --md-muted: #808080;
+          --md-green: #696969;
+          --md-red: #808080;
+        }
+        body { background: var(--md-bg); }
+        .container.compact { max-width: 1840px; margin: 22px auto; padding: 0 22px 28px; }
+        @media (max-width: 900px) { .container.compact { margin: 12px auto; padding: 0 12px 20px; } }
+        .executive-shell { display:grid; grid-template-columns: 270px minmax(0, 1fr); gap:14px; align-items:start; }
+        .executive-sidebar { position:sticky; top:10px; background:#ffffff; color:var(--md-ink); border:1px solid var(--md-line); border-radius:20px; box-shadow:0 12px 28px rgba(15,23,42,.08); overflow:hidden; }
+        .executive-brand { padding:20px; border-bottom:1px solid var(--md-line); }
+        .executive-brand h1 { font-size:18px; margin:0 0 6px; color:var(--md-ink); }
+        .executive-brand p { margin:0; color:var(--md-muted); font-size:11px; }
+        .side-tabs { padding:12px; display:flex; flex-direction:column; gap:10px; }
+        .side-group { background:#f8fafc; border:1px solid var(--md-line); border-radius:14px; overflow:hidden; }
+        .side-group summary { cursor:pointer; list-style:none; padding:13px 14px; font-weight:800; display:flex; justify-content:space-between; align-items:center; }
+        .side-group summary::-webkit-details-marker { display:none; }
+        .side-group summary:after { content:'›'; transform:rotate(90deg); color:var(--md-muted); }
+        .side-group[open] summary:after { transform:rotate(-90deg); }
+        .side-group a, .side-group span { display:block; padding:10px 14px; color:var(--md-ink); text-decoration:none; border-top:1px solid var(--md-line); font-size:13px; }
+        .side-group a:hover { background:#eef2f7; }
+        .executive-main { min-width:0; }
+        .executive-topbar { background:var(--md-card); border:1px solid var(--md-line); border-radius:18px; padding:12px 16px; display:flex; justify-content:space-between; gap:12px; align-items:center; box-shadow:0 10px 20px rgba(25,36,71,.07); margin-bottom:14px; }
+        .executive-topbar h1 { margin:0; color:var(--md-ink); font-size:20px; }
+        .executive-topbar p { margin:4px 0 0; color:#696969; font-size:12px; }
+        .dashboard-period-form.executive-filter { margin:0; display:flex; align-items:end; gap:10px; flex-wrap:wrap; }
+        .executive-filter select, .executive-filter input { border:1px solid var(--md-line); border-radius:10px; padding:10px; background:#fff; }
+        .executive-filter button { background:var(--md-accent); border:0; color:#fff; border-radius:10px; padding:11px 16px; font-weight:800; }
+        .exec-grid { display:grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap:10px; }
+        .exec-card { background:#fff; border:1px solid var(--md-line); border-radius:14px; padding:10px 12px; box-shadow:0 8px 18px rgba(25,36,71,.06); min-height:78px; }
+        .exec-card h2 { margin:0 0 8px; color:var(--md-ink); font-size:13px; }
+        .client-mini-map-link { display:block; margin-top:12px; border:1px solid var(--md-line); border-radius:14px; overflow:hidden; text-decoration:none; color:var(--md-ink); background:#eef2f7; }
+        .client-mini-map { height:150px; width:100%; border:0; display:block; background:#eef2f7; }
+        .client-mini-map-footer { display:flex; justify-content:space-between; align-items:center; padding:9px 10px; background:#fff; font-size:11px; font-weight:800; }
+        .client-mini-map-footer span:last-child { color:#696969; }
+        .exec-card small { color:#717b92; }
+        .span-3 { grid-column:span 3; } .span-4 { grid-column:span 4; } .span-5 { grid-column:span 5; } .span-6 { grid-column:span 6; } .span-7 { grid-column:span 7; } .span-8 { grid-column:span 8; } .span-12 { grid-column:span 12; }
+        .hero-card { background:#fff; border-left:7px solid var(--md-accent); }
+        .kpi-title { color:#696969; font-size:10px; text-transform:uppercase; letter-spacing:.05em; font-weight:900; }
+        .kpi-value { display:block; color:var(--md-ink); font-size:18px; line-height:1.05; margin-top:4px; font-weight:900; }
+        .kpi-sub { margin-top:3px; color:#707a92; font-size:10.5px; }
+        .status-mini-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+        .status-mini { border:1px solid #eceff6; border-radius:10px; padding:8px; background:#fbfcff; }
+        .status-mini strong { display:block; font-size:19px; color:var(--md-accent); }
+        .chart-bars { display:flex; flex-direction:column; gap:9px; }
+        .bar-row { display:grid; grid-template-columns:minmax(260px, 420px) minmax(180px, 1fr) auto; gap:12px; align-items:center; font-size:12px; }
+        .bar-row span { white-space:normal; word-break:normal; overflow:visible; line-height:1.25; font-weight:700; }
+        .bar-track { height:12px; border-radius:999px; background:#edf0f7; overflow:hidden; }
+        .bar-fill { height:100%; border-radius:999px; background:#334155; }
+        .bar-fill.gold { background:#64748b; }
+        .bar-fill.green { background:#15803d; }
+        .line-chart { width:100%; height:190px; }
+        .donut-wrap { display:flex; gap:16px; align-items:center; }
+        .donut { width:140px; height:140px; border-radius:50%; background:#edf0f7; position:relative; flex:0 0 auto; }
+        .donut:after { content:''; position:absolute; inset:32px; border-radius:50%; background:#fff; box-shadow:inset 0 0 0 1px #edf0f7; }
+        .legend { display:flex; flex-direction:column; gap:7px; font-size:12px; }
+        .legend span:before { content:''; display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:7px; background:#334155; }
+        .legend span:nth-child(2):before { background:#64748b; } .legend span:nth-child(3):before { background:#94a3b8; } .legend span:nth-child(4):before { background:#cbd5e1; } .legend span:nth-child(5):before { background:var(--md-green); }
+        .heatmap-card { min-height:300px; }
+        .heatmap-map { position:relative; height:300px; border-radius:18px; overflow:hidden; background:#eef2f7; border:1px solid #dce2ef; }
+        
+        .heat-dot { position:absolute; transform:translate(-50%,-50%); border-radius:50%; background:rgba(51,65,85,.24); border:2px solid rgba(51,65,85,.55); box-shadow:0 0 0 8px rgba(51,65,85,.08); display:flex; align-items:center; justify-content:center; color:#fff; font-size:9px; font-weight:800; }
+        .heat-dot:hover { z-index:10; background:#334155; color:#fff; border-color:#111827; }
+        .heat-tooltip { position:absolute; left:12px; bottom:12px; right:12px; background:rgba(255,255,255,.92); border:1px solid var(--md-line); border-radius:12px; padding:10px; font-size:12px; color:#3f4860; }
+        .exec-table { width:100%; border-collapse:collapse; font-size:10.5px; }
+        .exec-table th, .exec-table td { padding:6px 6px; border-bottom:1px solid #edf0f7; text-align:left; }
+        .exec-table th { color:#696969; font-size:9.5px; text-transform:uppercase; }
+        .client-map-list { max-height:180px; overflow:auto; margin-top:10px; font-size:10.5px; } .client-map-list a { color:var(--md-accent); }
+        @media (max-width:1100px){ .executive-shell{grid-template-columns:1fr}.executive-sidebar{position:relative}.span-3,.span-4,.span-5,.span-6,.span-7,.span-8{grid-column:span 12}.executive-topbar{align-items:flex-start;flex-direction:column}.status-mini-grid{grid-template-columns:repeat(2,1fr)} }
+      
+    .premium-analysis-table th:first-child, .premium-analysis-table td:first-child{width:55%;font-weight:700;letter-spacing:.04em}
+    .premium-analysis-table td:last-child{font-weight:800;text-align:right;font-size:1.05rem}
+    .premium-analysis-table .highlight-row{background:#f7f7f7}
+
+</style>
+      {% set ed = executive_dashboard or {} %}
+      {% set ek = ed.get('kpis', {}) %}
+      <div class="executive-shell">
+        <aside class="executive-sidebar no-print">
+          <div class="executive-brand">
+            <h1>Claims Command Centre</h1>
+            <p>Dashboard controls and reports</p>
+          </div>
+          <div class="side-tabs">
+            <details class="side-group" open>
+              <summary>Executive Overview</summary>
+              <span>Premium, claims, loss ratio and status KPIs</span>
+              <a href="{{ url_for('client_heatmap_page', franchise=selected) }}">Client heatmap</a>
+              <a href="#topFranchises">Top franchise table</a>
+            </details>
+            <details class="side-group">
+              <summary>Claims</summary>
+              <a href="{{ url_for('claims_workflow') }}">Claims Workflow</a>
+              <a href="{{ url_for('claims_workflow') }}">Claims Reports</a>
+              <a href="{{ url_for('workspace_page', workspace='claims_reconciliation') }}">Claims Reconciliation</a>
+              <a href="{{ url_for('workspace_page', workspace='claims_mapping') }}">Claims Mapping</a>
+            </details>
+            <details class="side-group">
+              <summary>Analysis</summary>
+              <a href="{{ url_for('workspace_page', workspace='claim_ratio') }}">Claim Ratio Analysis</a>
+              <a href="{{ url_for('workspace_page', workspace='move_recommendations') }}">Move Recommendations</a>
+              <a href="{{ url_for('workspace_page', workspace='franchise_money') }}">Franchise Money</a>
+              <a href="{{ url_for('workspace_page', workspace='advanced_analytics') }}">Advanced Analytics</a>
+            </details>
+            <details class="side-group">
+              <summary>Finance</summary>
+              <a href="{{ url_for('workspace_page', workspace='commission_analysis') }}">Commission Analysis</a>
+              <a href="{{ url_for('workspace_page', workspace='commission_business') }}">Commission Comparison</a>
+              <a href="{{ url_for('workspace_page', workspace='underwriter_allocation') }}">Underwriter Allocation</a>
+              <a href="{{ url_for('workspace_page', workspace='book_value') }}">Book Value Analysis</a>
+              <a href="{{ url_for('workspace_page', workspace='scenario_comparison') }}">Scenario Comparison</a>
+              <a href="#premiumParlourAnalysis">Premium / Parlour Fee Analysis</a>
+            </details>
+            <details class="side-group">
+              <summary>Admin & Imports</summary>
+              <a href="#importPanel">Import Excel</a>
+              <a href="{{ url_for('workspace_page', workspace='franchise_configuration') }}">Franchise Configuration</a>
+              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_parlour_fee_settings') }}">Parlour Fee Settings</a>{% endif %}
+              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_users') }}">Manage Users</a><a href="{{ url_for('admin_claims_rules') }}">Claims Rules</a><a href="{{ url_for('admin_map_cache_manager') }}">Map Cache Manager</a><a href="{{ url_for('admin_prepare_client_map_locations') }}">Prepare Client Map</a><a href="{{ url_for('database_health') }}">Database Health</a>{% endif %}
+            </details>
+          </div>
+        </aside>
+        <main class="executive-main">
+          <div class="executive-topbar">
+            <div>
+              <h1>Executive Summary</h1>
+              <p>{{ ed.get('period_label','') }} · {{ 'All franchises' if selected == 'All' else selected }}</p>
+            </div>
+            <form method="get" action="{{ url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
+              <input type="hidden" name="period_view" value="{{ period_view }}">
+              <input type="hidden" name="traffic_filter" value="{{ traffic_filter }}">
+              <label>Franchise<br>
+                <select name="franchise" onchange="this.form.q.value=''">
+                  <option value="All" {% if selected == 'All' %}selected{% endif %}>All Franchises</option>
+                  {% for f in franchises %}<option value="{{ f }}" {% if selected == f %}selected{% endif %}>{{ f }}</option>{% endfor %}
+                </select>
+              </label>
+              <label>Dashboard period<br>
+                <select name="dashboard_period_view">
+                  <option value="month" {% if dashboard_period_view == 'month' %}selected{% endif %}>Latest month</option>
+                  <option value="six_months" {% if dashboard_period_view == 'six_months' %}selected{% endif %}>Latest 6 months</option>
+                  <option value="year" {% if dashboard_period_view == 'year' %}selected{% endif %}>Latest 12 months</option>
+                </select>
+              </label>
+              <input name="q" value="{{ search_text }}" placeholder="Search franchise">
+              <button type="submit">Apply</button>
+            </form>
+          </div>
+          <section class="exec-grid">
+            <div class="exec-card span-3 hero-card"><span class="kpi-title">Premium Amount</span><strong class="kpi-value">{{ ek.get('premium_amount',0)|money }}</strong><div class="kpi-sub">Imported retail premium</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Claim Amount</span><strong class="kpi-value">{{ ek.get('claim_amount',0)|money }}</strong><div class="kpi-sub">Paid/imported claims</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">No. of Claims</span><strong class="kpi-value">{{ ek.get('claim_count',0)|int }}</strong><div class="kpi-sub">From claims workbook/workflow</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Average Claim Value</span><strong class="kpi-value">{{ ek.get('average_claim_value',0)|money }}</strong><div class="kpi-sub">Claim amount ÷ claim count</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Loss Ratio</span><strong class="kpi-value">{{ ek.get('loss_ratio',0)|pct }}</strong><div class="kpi-sub">Claims ÷ risk premium</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Policies / Clients</span><strong class="kpi-value">{{ ek.get('policy_count',0)|int }}</strong><div class="kpi-sub">Policy quantity imported</div><p style="margin:6px 0 0"><a class="btn" href="{{ url_for('client_heatmap_page', franchise=selected) }}">Open client heatmap</a></p></div>
+            <div class="exec-card span-3"><span class="kpi-title">Franchise Admin Fee</span><strong class="kpi-value">{{ ek.get('franchise_admin_fee',0)|money }}</strong><div class="kpi-sub">Retail premiums - risk premiums</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Franchise Money</span><strong class="kpi-value">{{ ek.get('franchise_money',0)|money }}</strong><div class="kpi-sub">Retail - claims - paid commissions</div></div>
+            <div class="exec-card span-12 premium-parlour-analysis" id="premiumParlourAnalysis"><h2>Franchise Premium / Parlour Fee Analysis</h2>
+              <div class="kpi-sub" style="margin-bottom:10px">Current period compared with the same period last year. Fee percentages are editable per franchise.</div>
+              {% set ppa = ed.get('premium_parlour_analysis', {}) %}
+              <form method="get" action="{{ url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print" style="margin:0 0 10px;align-items:end">
+                <input type="hidden" name="franchise" value="{{ selected }}">
+                <input type="hidden" name="dashboard_period_view" value="{{ dashboard_period_view }}">
+                <label>Analysis month<br>
+                  <select name="premium_analysis_month">
+                    <option value="" {% if not ppa.get('selected_month') %}selected{% endif %}>Use dashboard period</option>
+                    {% for m in ppa.get('available_months', []) %}<option value="{{ m }}" {% if ppa.get('selected_month') == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+                  </select>
+                </label>
+                <button type="submit">Compare</button>
+              </form>
+              <div class="table-wrap"><table class="exec-table premium-analysis-table"><thead><tr><th>Metric</th><th>{{ 'All Franchises' if selected == 'All' else selected }}</th></tr></thead><tbody>
+                {% for r in ppa.get('rows', []) %}
+                  <tr class="{% if 'Total to Parlour' in r.label %}highlight-row{% endif %}"><td>{{ r.label }}</td><td class="money-cell">
+                    {% if r.type == 'money' %}{{ r.value|money }}
+                    {% elif r.type == 'pct' %}{{ r.value|pct }}
+                    {% elif r.type == 'signed_money' %}{% if r.value > 0 %}+{% elif r.value < 0 %}-{% endif %}{{ (r.value|abs)|money }}
+                    {% elif r.type == 'signed_pct_points' %}{% if r.value > 0 %}+{% endif %}{{ r.value|round(2) }}
+                    {% else %}{{ r.value }}{% endif %}
+                  </td></tr>
+                {% else %}<tr><td colspan="2">No premium data available.</td></tr>{% endfor %}
+              </tbody></table></div>
+              {% if current_user and current_user.role == 'admin' %}<p style="margin-top:10px"><a class="btn" href="{{ url_for('admin_parlour_fee_settings', franchise=selected if selected != 'All' else None) }}">Edit Parlour Fee Percentages</a></p>{% endif %}
+            </div>
+            <div class="exec-card span-12"><h2>Google Map</h2>
+              <div class="client-mini-map-link" title="Open client heatmap" onclick="window.location.href='{{ url_for('client_heatmap_page', franchise=selected) }}'" style="cursor:pointer">
+                <div id="dashboardClientMiniMap" class="client-mini-map" data-franchise="{{ selected }}" style="height:300px"></div>
+                <div class="client-mini-map-footer"><span>Open client heatmap</span><span>Heatmap / pins</span></div>
+              </div>
+            </div>
+            <div class="exec-card span-6"><h2>Claim Amount Comparison Over Time</h2><svg class="line-chart" id="claimTrendChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg></div>
+            <div class="exec-card span-6"><h2>New Policy / Client Trend</h2><svg class="line-chart" id="policyTrendChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg></div>
+            <div class="exec-card span-12"><h2>Policy Relation Counts</h2>
+              {% set rc = ed.get('relation_counts', {}) %}
+              <div class="status-mini-grid">
+                {% for r in rc.get('rows', []) %}
+                  <div class="status-mini"><small>{{ r.code }} - {{ r.label }}</small><strong>{{ r.count|int }}</strong></div>
+                {% else %}
+                  <div class="status-mini"><small>No PolicyData relation counts yet</small><strong>0</strong></div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="exec-card span-12"><h2>Age Limit Notifications</h2>
+              <p class="kpi-sub">Daily check from PolicyData Column I relation and Column F ID number. Click a franchise to list all affected members.</p>
+              {% set ant = ed.get('age_notification_totals', {}) %}
+              <div class="status-mini-grid" style="margin-bottom:10px">
+                <div class="status-mini"><small>Total to Fix</small><strong>{{ ant.get('total',0)|int }}</strong></div>
+                <div class="status-mini"><small>Franchises</small><strong>{{ ant.get('franchises',0)|int }}</strong></div>
+              </div>
+              <div class="status-mini-grid" style="margin-bottom:10px">
+                {% for b in ed.get('age_notification_age_bands', []) %}
+                  <div class="status-mini"><small>{{ b.age_band }}</small><strong>{{ b.count|int }}</strong></div>
+                {% endfor %}
+              </div>
+              <form method="post" action="{{ url_for('admin_refresh_policy_age_notifications') }}" class="no-print" style="margin-bottom:10px">
+                <input type="hidden" name="franchise" value="{{ selected }}">
+                <input type="hidden" name="limit" value="600000">
+                <button class="btn" type="submit">Refresh Notifications</button>
+              </form>
+              <table class="exec-table"><thead><tr><th>Franchise</th><th>Total to Fix</th><th>Next Due</th></tr></thead><tbody>
+                {% for n in ed.get('age_notification_summary', []) %}
+                <tr>
+                  <td><a class="link" href="{{ url_for('admin_age_notifications_franchise', franchise_name=n.franchise_name) }}">{{ n.franchise_name }}</a></td>
+                  <td>{{ n.notification_count|int }}</td>
+                  <td>{{ n.next_due_date or '-' }}</td>
+                </tr>
+                {% else %}<tr><td colspan="3">No active age notifications. Click Refresh Notifications to scan PolicyData.</td></tr>{% endfor %}
+              </tbody></table>
+            </div>
+            <div class="exec-card span-12"><h2>Claims by Status</h2><div class="status-mini-grid">{% for s in ed.get('status_cards', []) %}<div class="status-mini"><small>{{ s.label }}</small><strong>{{ s.value }}</strong></div>{% endfor %}</div></div>
+            <div class="exec-card span-12"><h2>Claims by Franchise</h2><div class="chart-bars" data-bars="claims_by_franchise"></div></div>
+            <div class="exec-card span-6"><h2>Status Distribution</h2><div class="donut-wrap"><div class="donut" id="statusDonut"></div><div class="legend" id="statusLegend"></div></div></div>
+            <div class="exec-card span-6"><h2>Loss Ratio by Franchise</h2><div class="chart-bars" data-bars="loss_ratio_by_franchise"></div></div>
+            {% set fd = ed.get('franchise_detail') %}
+            {% if fd %}
+            <div class="exec-card span-12" id="franchiseDetail"><h2>{{ fd.name }} - Full Franchise Detail</h2>
+              <div class="status-mini-grid">
+                <div class="status-mini"><small>Retail Premium</small><strong>{{ fd.totals.get('Retail Premium',0)|money }}</strong></div>
+                <div class="status-mini"><small>Risk Premium</small><strong>{{ fd.totals.get('Risk Premium',0)|money }}</strong></div>
+                <div class="status-mini"><small>Claims</small><strong>{{ fd.totals.get('Claims',0)|money }}</strong></div>
+                <div class="status-mini"><small>Claim Ratio</small><strong>{{ fd.totals.get('Claim Ratio',0)|pct }}</strong></div>
+                <div class="status-mini"><small>Total Commission</small><strong>{{ fd.totals.get('Total Commission',0)|money }}</strong></div>
+                <div class="status-mini"><small>Paid Commissions</small><strong>{{ fd.totals.get('Total Paid Commissions',0)|money }}</strong></div>
+                <div class="status-mini"><small>Franchise Money</small><strong>{{ fd.totals.get('BrightRock Month Total',0)|money }}</strong></div>
+                <div class="status-mini"><small>Book Value</small><strong>{{ fd.totals.get('Total Book Value',0)|money }}</strong></div>
+                <div class="status-mini"><small>Policies / Clients</small><strong>{{ fd.totals.get('Policy Qty',0)|int }}</strong></div>
+                <div class="status-mini"><small>Mapped Addresses</small><strong>{{ fd.address_count }}</strong></div>
+              </div>
+              <h2 style="margin-top:14px">Portfolio Comparison</h2>
+              <div class="chart-bars">{% for c in fd.comparisons %}<div class="bar-row"><span>{{ c.label }}</span><div class="bar-track"><div class="bar-fill" style="width:{{ [c.value,100]|min }}%"></div></div><strong>{{ c.value|pct }}</strong></div>{% endfor %}</div>
+              <h2 style="margin-top:14px">Monthly Franchise Detail</h2>
+              <div class="table-wrap"><table class="exec-table"><thead><tr><th>Month</th><th>Retail</th><th>Risk</th><th>Claims</th><th>No. Claims</th><th>Claim Ratio</th><th>Commission</th><th>Paid Comm.</th><th>Franchise Money</th><th>Book Value</th></tr></thead><tbody>{% for m in fd.monthly_rows %}<tr><td>{{ m.month }}</td><td>{{ m.retail|money }}</td><td>{{ m.risk|money }}</td><td>{{ m.claims|money }}</td><td>{{ m.claim_count|int }}</td><td>{{ m.ratio|pct }}</td><td>{{ m.commission|money }}</td><td>{{ m.paid_commission|money }}</td><td>{{ m.franchise_money|money }}</td><td>{{ m.book_value|money }}</td></tr>{% else %}<tr><td colspan="10">No monthly detail available.</td></tr>{% endfor %}</tbody></table></div>
+            </div>
+            {% endif %}
+            <div class="exec-card span-12" id="topFranchises"><h2>Top Franchise Claims Detail</h2><table class="exec-table"><thead><tr><th>Franchise</th><th>Premium</th><th>Claims</th><th>No. Claims</th><th>Loss Ratio</th></tr></thead><tbody>{% for r in ed.get('top_franchise_rows', []) %}<tr><td><a href="{{ url_for('dashboard', franchise=r.franchise, dashboard_period_view=dashboard_period_view) }}">{{ r.franchise }}</a></td><td>{{ r.premium|money }}</td><td>{{ r.claims|money }}</td><td>{{ r.claim_count|int }}</td><td>{{ r.ratio|pct }}</td></tr>{% else %}<tr><td colspan="5">No imported data yet.</td></tr>{% endfor %}</tbody></table></div>
+          </section>
+        </main>
+      </div>
+      <script id="execDashboardData" type="application/json">{{ executive_dashboard|tojson }}</script>
+      <script>
+        (function(){
+          const data = JSON.parse(document.getElementById('execDashboardData').textContent || '{}');
+          const money = (v) => 'R' + Number(v || 0).toLocaleString(undefined,{maximumFractionDigits:0});
+          const pct = (v) => Number(v || 0).toFixed(1) + '%';
+          function renderBars(key, formatter){
+            document.querySelectorAll('[data-bars="'+key+'"]').forEach(el => {
+              const rows = data[key] || [];
+              const max = Math.max(1, ...rows.map(r => Number(r.value || 0)));
+              el.innerHTML = rows.slice(0,12).map((r,i) => '<div class="bar-row"><span title="'+r.label+'">'+String(r.label)+'</span><div class="bar-track"><div class="bar-fill '+(key.includes('loss')?'gold':'')+'" style="width:'+Math.max(3, Number(r.value||0)/max*100)+'%"></div></div><strong>'+formatter(r.value)+'</strong></div>').join('') || '<small>No data yet</small>';
+            });
+          }
+          function renderLine(id, rows, valueKey, fmt){
+            const svg = document.getElementById(id); if(!svg) return;
+            const w=600,h=210,p=28; const values=rows.map(r=>Number(r[valueKey]||0)); const max=Math.max(1,...values);
+            const step = rows.length>1 ? (w-p*2)/(rows.length-1) : 0;
+            const pts = rows.map((r,i)=>[p+i*step, h-p-(Number(r[valueKey]||0)/max)*(h-p*2)]);
+            const line = pts.map((pt,i)=>(i?'L':'M')+pt[0].toFixed(1)+' '+pt[1].toFixed(1)).join(' ');
+            const area = pts.length ? line + ' L '+(p+(rows.length-1)*step)+' '+(h-p)+' L '+p+' '+(h-p)+' Z' : '';
+            svg.innerHTML = '<rect x="0" y="0" width="600" height="210" fill="#fff"/><g stroke="#e3e7f1" stroke-width="1">'+[0,1,2,3].map(i=>'<line x1="28" x2="590" y1="'+(p+i*(h-p*2)/3)+'" y2="'+(p+i*(h-p*2)/3)+'"/>').join('')+'</g><path d="'+area+'" fill="rgba(105,105,105,.12)"/><path d="'+line+'" fill="none" stroke="#696969" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>'+pts.map((pt,i)=>'<circle cx="'+pt[0]+'" cy="'+pt[1]+'" r="5" fill="#c0c0c0" stroke="#696969" stroke-width="2"><title>'+rows[i].label+': '+fmt(rows[i][valueKey])+'</title></circle>').join('')+'<g fill="#5e687d" font-size="11">'+rows.map((r,i)=> i%Math.ceil(rows.length/6||1)===0?'<text x="'+(p+i*step)+'" y="202" text-anchor="middle">'+r.label+'</text>':'').join('')+'</g>';
+          }
+          function renderHeat(){
+            const map=document.getElementById('heatmapMap'); if(!map) return;
+            const rows=data.heatmap_points||[];
+            map.innerHTML = rows.map(p => { const size=18 + Number(p.intensity||0)*42; return '<div class="heat-dot" style="left:'+p.x+'%;top:'+p.y+'%;width:'+size+'px;height:'+size+'px"><title>'+p.label+' | Clients: '+Math.round(p.clients||0)+' | Claims: '+money(p.claims)+'</title></div>'; }).join('') + '<div class="heat-tooltip"><strong>'+ (data.selected === 'All' ? 'All franchises' : data.selected) +'</strong><br>Dot size = imported policy/client count plus claim count. Hover dots for franchise values.</div>';
+          }
+          function renderDonut(){
+            const rows=(data.claims_by_status||[]).slice(0,5); const total=rows.reduce((a,r)=>a+Number(r.value||0),0); const donut=document.getElementById('statusDonut'); const legend=document.getElementById('statusLegend'); if(!donut||!legend) return;
+            const colors=['#696969','#808080','#a9a9a9','#c0c0c0','#d3d3d3']; let acc=0; const stops=[];
+            rows.forEach((r,i)=>{ const deg= total? Number(r.value||0)/total*360 : 0; stops.push(colors[i]+' '+acc+'deg '+(acc+deg)+'deg'); acc+=deg; });
+            donut.style.background = stops.length ? 'conic-gradient('+stops.join(',')+')' : '#edf0f7';
+            legend.innerHTML = rows.map((r,i)=>'<span>'+r.label+': <strong>'+r.value+'</strong></span>').join('') || '<small>No workflow status data yet</small>';
+          }
+          renderBars('claims_by_franchise', money); renderBars('loss_ratio_by_franchise', pct); renderLine('claimTrendChart', data.claim_trend||[], 'claims', money); renderLine('policyTrendChart', data.policy_trend||[], 'value', v=>Number(v||0).toFixed(0)); renderDonut();
+        })();
+      </script>
+
+      {% if google_maps_api_key %}
+      <script>
+        window.initDashboardMiniClientMap = function(){
+          const el = document.getElementById('dashboardClientMiniMap');
+          if(!el || !window.google || !google.maps) return;
+          const selected = (el.getAttribute('data-franchise') || 'All').trim() || 'All';
+          const SA_CENTER = {lat:-30.5595,lng:22.9375};
+          const map = new google.maps.Map(el, {
+            center: SA_CENTER,
+            zoom: 5,
+            mapTypeId:'roadmap',
+            disableDefaultUI:true,
+            gestureHandling:'none',
+            clickableIcons:false,
+            draggable:false,
+            scrollwheel:false,
+            keyboardShortcuts:false
+          });
+          el.addEventListener('click', function(){
+            window.location.href = '{{ url_for('client_heatmap_page') }}?franchise=' + encodeURIComponent(selected);
+          });
+          function setFallback(){
+            const q = encodeURIComponent(selected === 'All' ? 'South Africa' : (selected + ', South Africa'));
+            const z = selected === 'All' ? 5 : 12;
+            el.innerHTML = '<iframe title="Dashboard Franchise Map" style="width:100%;height:100%;border:0;pointer-events:none" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q='+q+'&z='+z+'&output=embed"></iframe>';
+          }
+          // Dashboard rule: All = South Africa only. Selected franchise = franchise address only.
+          if(selected === 'All'){
+            map.setCenter(SA_CENTER);
+            map.setZoom(5);
+            return;
+          }
+          fetch('/api/franchise-map-locations?franchise=' + encodeURIComponent(selected), {cache:'no-store'})
+            .then(r => r.json())
+            .then(payload => {
+              const rows = payload.locations || [];
+              let first = null;
+              for(const row of rows){
+                const lat = Number(row.lat), lng = Number(row.lng);
+                if(!isFinite(lat) || !isFinite(lng)) continue;
+                first = {row: row, pos: {lat:lat, lng:lng}};
+                break;
+              }
+              if(!first){ setFallback(); return; }
+              map.setCenter(first.pos);
+              map.setZoom(12);
+              new google.maps.Marker({position:first.pos, map:map, title:first.row.franchise || selected});
+            })
+            .catch(() => setFallback());
+        };
+      </script>
+      <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initDashboardMiniClientMap"></script>
+      {% else %}
+      <script>
+        (function(){
+          const el=document.getElementById('dashboardClientMiniMap');
+          if(!el){ return; }
+          const selected=(el.getAttribute('data-franchise')||'All').trim() || 'All';
+          el.addEventListener('click', function(){ window.location.href='{{ url_for('client_heatmap_page') }}?franchise=' + encodeURIComponent(selected); });
+          const query=encodeURIComponent(selected === 'All' ? 'South Africa' : (selected + ', South Africa'));
+          const z=selected === 'All' ? 5 : 12;
+          el.innerHTML='<iframe title="Dashboard Franchise Map" style="width:100%;height:100%;border:0;pointer-events:none" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q='+query+'&z='+z+'&output=embed"></iframe>';
+        })();
+      </script>
+      {% endif %}
+
+      <section class="card import-card bottom-import" id="importPanel">
+        <h2>Import Excel</h2>
+        <form method="post" action="{{ url_for('dashboard') }}" enctype="multipart/form-data" class="grid-form" id="importForm">
+          <input type="hidden" name="action" value="import">
+          <label>Policy / premium Excel files<input type="file" name="excel_file" accept=".xlsx,.xls" multiple></label>
+          <label>Claims paid Excel files<input type="file" name="claims_file" accept=".xlsx,.xls" multiple></label>
+          <button type="submit" id="importSubmitBtn">Import / Recalculate</button>
+        </form>
+        <div id="importProgress" class="import-progress" style="display:none;">
+          <div class="progress-head"><strong id="importProgressTextInline">Preparing import...</strong><span id="importProgressPctInline">0%</span></div>
+          <div class="progress-track"><div id="importProgressBarInline" class="progress-bar" style="width:0%"></div></div>
+          <p class="small-note">You can select multiple monthly PolicyData files at once. The system imports all files first, then recalculates once. Please keep this page open until the dashboard reloads.</p>
+        </div>
+
+        <div id="importProgressModal" class="import-modal" style="display:none;" aria-live="polite" aria-modal="true" role="dialog">
+          <div class="import-modal-card">
+            <h2>Importing Excel files</h2>
+            <p id="importModalFile" class="import-modal-file">Preparing selected files...</p>
+            <div class="progress-head"><strong id="importProgressText">Starting import...</strong><span id="importProgressPct">0%</span></div>
+            <div class="progress-track modal-track"><div id="importProgressBar" class="progress-bar" style="width:0%"></div></div>
+            <div class="import-step-grid">
+              <span id="importStepFiles">Files selected: 0</span>
+              <span id="importStepRows">Rows processed: calculating...</span>
+              <span id="importStepStatus">Please keep this page open.</span>
+            </div>
+            <p class="small-note">The import can take time for large PolicyData files. The page will reload automatically when finished.</p>
+          </div>
+        </div>
+
+        <p class="small-note">Claims are allocated by Participating Group and Date Of Claim Paid, then matched to the imported franchise/month.</p>
+
+        {% if policy_import_summary %}
+          <div class="claims-summary policy-summary">
+            <strong>Policy Import Summary</strong>
+            <span>File: {{ policy_import_summary.get('file_name', '') }}</span>
+            <span>Month: {{ policy_import_summary.get('month', '') }}</span>
+            <span>Total rows: {{ policy_import_summary.get('total_rows', 0)|int }}</span>
+            <span>Main Members: {{ policy_import_summary.get('mem_rows', 0)|int }}</span>
+            <span>Franchises allocated: {{ policy_import_summary.get('franchises_found', 0)|int }}</span>
+            <span>Policies paid: {{ policy_import_summary.get('total_policies', 0)|int }}</span>
+            <span>Retail: {{ policy_import_summary.get('total_retail', 0)|money }}</span>
+            <span>Risk after deductions: {{ policy_import_summary.get('total_risk', 0)|money }}</span>
+            <span>R1 Fee: {{ policy_import_summary.get('total_r1', 0)|money }}</span>
+            <span>2.1% Fee: {{ policy_import_summary.get('total_underwriter_fee', 0)|money }}</span>
+          </div>
+        {% endif %}
+        {% if claims_import_summary %}
+          <div class="claims-summary">
+            <strong>Claims Import Summary</strong>
+            <span>Imported: {{ claims_import_summary.get('total_claims_imported', 0)|money }}</span>
+            <span>Matched: {{ claims_import_summary.get('matched_claims', 0)|money }}</span>
+            <span>Written to Franchise Records: {{ claims_import_summary.get('written_claims', 0)|money }}</span>
+            <span>Difference: {{ claims_import_summary.get('difference_claims', 0)|money }}</span>
+            <span>Claims-only / Unmatched: {{ claims_import_summary.get('unmatched_claims', 0)|money }}</span>
+          </div>
+          {% if claims_import_summary.get('rows') %}
+            <details class="claims-details">
+              <summary>View top claims matches</summary>
+              <table>
+                <thead><tr><th>Claims Franchise</th><th>Matched Key</th><th>Status</th><th>Claims</th><th>Claim Count</th></tr></thead>
+                <tbody>
+                  {% for r in claims_import_summary.get('rows', []) %}
+                    <tr>
+                      <td>{{ r.claims_franchise if r.claims_franchise is defined else r.get('claims_franchise','') }}</td>
+                      <td>{{ r.matched_key }}</td>
+                      <td>{{ r.status }}</td>
+                      <td>{{ (r.claims if r.claims is defined else r.get('claims',0))|money }}</td>
+                      <td>{{ (r.claim_count if r.claim_count is defined else r.get('claim_count',0))|int }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </details>
+          {% endif %}
+        {% endif %}
+
+        <div class="actions compact-actions">
+          <a href="{{ url_for('sample') }}">Download sample Excel</a>
+          <a href="{{ url_for('export') }}">Export results</a>
+          <a class="pdf-btn" href="{{ url_for('board_report', dashboard_period_view=dashboard_period_view) }}">One-click PDF board report</a>
+        </div>
+      </section>
+    {% else %}
+      <div class="top-toolbar no-print">
+        <a class="back-btn" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+        <button onclick="window.print()">Print</button>
+        <a href="{{ url_for('board_report', period_view=period_view, franchise=selected) }}">Export PDF</a>
+        <a href="{{ url_for('export') }}">Export Excel</a>
+      </div>
+
+      <section class="print-cover">
+        <div class="print-cover-inner">
+          <img class="print-logo" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martin's Funerals Logo">
+          <h1>Martin's Funerals South Africa</h1>
+          <h2>{{ workspace_title }}</h2>
+          <p>{{ workspace_subtitle }}</p>
+          <p>Generated: {{ current_timestamp }}</p>
+          <p>Period: {{ period_view|replace('_', ' ')|title }}</p>
+          <p class="confidential">Confidential</p>
+        </div>
+      </section>
+
+      <header class="workspace-header">
+        <h1>{{ workspace_title }}</h1>
+        <p>{{ workspace_subtitle }}</p>
+      </header>
+
+      <section class="card filters no-print">
+        <form method="get" class="quick-filter-form">
+          <label>Franchise
+            <select name="franchise" onchange="this.form.q.value=''">
+              <option value="All" {% if selected == 'All' %}selected{% endif %}>All Franchises</option>
+              {% for f in franchises %}<option value="{{ f }}" {% if selected == f %}selected{% endif %}>{{ f }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Period
+            <select name="period_view">
+              <option value="month" {% if period_view == 'month' %}selected{% endif %}>Monthly</option>
+              <option value="six_months" {% if period_view == 'six_months' %}selected{% endif %}>Every 6 Months</option>
+              <option value="year" {% if period_view == 'year' %}selected{% endif %}>Yearly</option>
+            </select>
+          </label>
+          <label>Traffic Light
+            <select name="traffic_filter">
+              <option value="All" {% if traffic_filter == 'All' %}selected{% endif %}>All</option>
+              <option value="Blue" {% if traffic_filter == 'Blue' %}selected{% endif %}>Blue - Move (<50%)</option>
+              <option value="Green" {% if traffic_filter == 'Green' %}selected{% endif %}>Green - Can Move (50%-69.99%)</option>
+              <option value="Red" {% if traffic_filter == 'Red' %}selected{% endif %}>Red - Stay / High Risk (70%+)</option>
+            </select>
+          </label>
+          <button type="submit">Apply</button>
+        </form>
+      </section>
+
+      {% if workspace == 'claim_ratio' %}
+        <section class="card wide">
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claims</th><th>Claim Count</th><th>Average Claim</th><th>Claim Ratio</th><th>Recommendation</th></tr></thead>
+              <tbody>
+              {% for _, r in quick_view.iterrows() %}
+                <tr>
+                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td>{{ r['Period View'] }}</td>
+                  <td class="money-cell positive">{{ r['Retail Premium']|money }}</td>
+                  <td>{{ r['Risk Premium']|money }}</td>
+                  <td>{{ r['Claims']|money }}</td>
+                  <td>{{ r.get('Claim Count', 0)|int }}</td>
+                  <td>{{ r.get('Average Claim', 0)|money }}</td>
+                  <td>{{ r['Claim Ratio']|pct }}</td>
+                  <td><span class="pill {{ r['Claim Ratio Status']|lower }}">{{ r['Claim Ratio Label'] }}</span></td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% elif workspace == 'move_recommendations' %}
+        <section class="card wide">
+          <div class="table-wrap draggable-table short-table">
+            <table class="compact-table">
+              <thead><tr><th>Franchise</th><th>Analysis Period</th><th>Start Date</th><th>End Date</th><th>Months Analysed</th><th>Claim Ratio</th><th>Recommendation</th></tr></thead>
+              <tbody>
+              {% for _, r in quick_view.iterrows() %}
+                <tr>
+                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td>{{ r.get('Period View','') }}</td>
+                  <td>{{ r.get('Start Date','') }}</td>
+                  <td>{{ r.get('End Date','') }}</td>
+                  <td>{{ r.get('Months Analysed', 0)|int }}</td>
+                  <td>{{ r['Claim Ratio']|pct }}</td>
+                  <td><span class="pill {{ r['Claim Ratio Status']|lower }}">{{ r['Claim Ratio Label'] }}</span></td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% elif workspace == 'franchise_money' %}
+        <section class="card wide">
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claims</th><th>Claim Count</th><th>Average Claim</th><th>Claim Ratio</th><th>Total Commissions</th><th>R1 Policy Fee</th><th>Adv Fee 2.1%</th><th>Total Paid</th><th>Franchise Money</th><th>Accumulated Balance</th><th>Status</th></tr></thead>
+              <tbody>
+              {% for _, r in money_view.iterrows() %}
+                <tr>
+                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td>{{ r['Period View'] }}</td>
+                  <td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r.get('Claim Count', 0)|int }}</td><td>{{ r.get('Average Claim', 0)|money }}</td><td>{{ r['Claim Ratio']|pct }}</td><td>{{ r['Total Commission']|money }}</td><td>{{ r['R1 Policy Fee']|money }}</td><td>{{ r.get('Underwriter 2.1% Fee', 0)|money }}</td><td>{{ r.get('Total Paid Commissions', r['Total Commission'])|money }}</td>
+                  <td class="money-cell {% if r['Franchise Money'] < 0 %}negative{% else %}positive{% endif %}">{{ r['Franchise Money']|money }}</td>
+                  <td class="money-cell {% if r['Accumulated Balance'] < 0 %}negative{% else %}positive{% endif %}">{{ r['Accumulated Balance']|money }}</td>
+                  <td><span class="pill {{ r['Money Traffic']|lower }}">{{ r['Money Status'] }}</span></td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% elif workspace == 'commission_analysis' %}
+        <section class="card simulator-card no-print">
+          <form method="post" class="input-form settings-form">
+            <input type="hidden" name="action" value="what_if">
+            <label>BrightRock %<input type="number" min="0" max="100" step="0.01" name="brightrock_rate" value="{{ rates['BrightRock'] }}"></label>
+            <label>Mkhulu %<input type="number" min="0" max="100" step="0.01" name="inkulu_rate" value="{{ rates['Inkulu'] }}"></label>
+            <label>MFF %<input type="number" min="0" max="100" step="0.01" name="mff_rate" value="{{ rates['MFF'] }}"></label>
+            
+            <label>MFF Book Value %<input type="number" min="0" max="100" step="0.01" name="mff_book_rate" value="{{ book_rates['MFF Book Value'] }}"></label>
+            <label>Franchise Book Value %<input type="number" min="0" max="100" step="0.01" name="franchise_book_rate" value="{{ book_rates['Franchise Book Value'] }}"></label>
+            <button type="submit">Recalculate</button>
+          </form>
+        </section>
+        <section class="card filters no-print">
+          <form method="get" class="quick-filter-form">
+            <input type="hidden" name="franchise" value="{{ selected }}">
+            <input type="hidden" name="period_view" value="{{ period_view }}">
+            <label>Commission View
+              <select name="commission_focus">
+                {% for opt in ['All','BrightRock','Inkulu','MFF','R1 Policy Fee','Adv Fee','MFF Book Value','Franchise Book Value','Total Commissions'] %}
+                  <option value="{{ opt }}" {% if commission_focus == opt %}selected{% endif %}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <button type="submit">Apply Commission View</button>
+          </form>
+        </section>
+        <section class="card wide">
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claims</th><th>Claim Ratio</th>{% if commission_focus in ['All','BrightRock'] %}<th>BrightRock</th>{% endif %}{% if commission_focus in ['All','Inkulu'] %}<th>Mkhulu</th>{% endif %}{% if commission_focus in ['All','MFF'] %}<th>MFF</th>{% endif %}{% if commission_focus in ['All','R1 Policy Fee'] %}<th>R1 Per Paid Policy</th>{% endif %}{% if commission_focus in ['All','Adv Fee'] %}<th>Adv Fee 2.1%</th>{% endif %}{% if commission_focus in ['All','MFF Book Value'] %}<th>MFF Book Value</th>{% endif %}{% if commission_focus in ['All','Franchise Book Value'] %}<th>Franchise Book Value</th>{% endif %}<th>Total Commissions</th><th>Total Paid</th></tr></thead>
+              <tbody>
+              {% for _, r in commission_view.iterrows() %}
+                <tr>
+                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period View'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Claim Ratio']|pct }}</td>
+                  {% if commission_focus in ['All','BrightRock'] %}<td>{{ rates['BrightRock']|pct }}<br><strong>{{ r['BrightRock Amount']|money }}</strong></td>{% endif %}
+                  {% if commission_focus in ['All','Inkulu'] %}<td>{{ rates['Inkulu']|pct }}<br><strong>{{ r['Inkulu Amount']|money }}</strong></td>{% endif %}
+                  {% if commission_focus in ['All','MFF'] %}<td>{{ rates['MFF']|pct }}<br><strong>{{ r['MFF Amount']|money }}</strong></td>{% endif %}
+                  {% if commission_focus in ['All','R1 Policy Fee'] %}<td>R1.00<br><strong>{{ r['R1 Policy Fee']|money }}</strong></td>{% endif %}
+                  {% if commission_focus in ['All','Adv Fee'] %}<td>2.10%<br><strong>{{ r.get('Underwriter 2.1% Fee', 0)|money }}</strong></td>{% endif %}
+                  {% if commission_focus in ['All','MFF Book Value'] %}<td>{{ book_rates['MFF Book Value']|pct }}<br><strong>{{ r['MFF Book Value 2.5%']|money }}</strong></td>{% endif %}
+                  {% if commission_focus in ['All','Franchise Book Value'] %}<td>{{ book_rates['Franchise Book Value']|pct }}<br><strong>{{ r['Franchise Book Value 2.5%']|money }}</strong></td>{% endif %}
+                  <td><strong>{{ r['Total Commission']|money }}</strong></td><td><strong>{{ r.get('Total Paid Commissions', r['Total Commission'])|money }}</strong></td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% elif workspace == 'underwriter_allocation' %}
+        <section class="card wide">
+          <p class="small-note"><strong>Formula:</strong> R1 Policy Fee = MPIA x R1. ADV Fee 2.1% = (Original Risk Premium - R1 Policy Fee) x 2.1%. Underwriter Premium Payable = Original Risk Premium - R1 Policy Fee - ADV Fee 2.1%.</p>
+          <div class="toolbar mini-toolbar">
+            <a class="btn" href="{{ url_for('export_payover', insurer='BrightRock', period_view=period_view, franchise=selected) }}">Export BrightRock Payover</a>
+            <a class="btn" href="{{ url_for('export_payover', insurer='Mkhulu', period_view=period_view, franchise=selected) }}">Export Mkhulu Payover</a>
+            <a class="btn" href="{{ url_for('export_payover', insurer='All', period_view=period_view, franchise=selected) }}">Export All Payovers</a>
+          </div>
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Original Risk Premium</th><th>MPIA / Policy Qty</th><th>R1 Policy Fee</th><th>Risk After R1</th><th>ADV Fee 2.1%</th><th>ADV Check</th><th>Underwriter Premium Payable</th><th>Retail Less Payover</th><th>Risk Premium Used</th><th>Claims</th><th>Claim Ratio</th></tr></thead>
+              <tbody>
+              {% for _, r in underwriter_view.iterrows() %}
+                <tr>
+                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td>{{ r['Period View'] }}</td>
+                  <td>{{ r['Retail Premium']|money }}</td>
+                  <td>{{ r['Original Risk Premium']|money }}</td>
+                  <td>{{ r.get('Policy Qty', 0)|int }}</td>
+                  <td>{{ r.get('R1 Policy Fee', 0)|money }}</td>
+                  <td>{{ r.get('Risk After R1', 0)|money }}</td>
+                  <td><strong>{{ r.get('ADV Fee 2.1%', 0)|money }}</strong></td>
+                  <td>{{ r.get('Calculated ADV Check', 0)|money }}</td>
+                  <td><strong>{{ r.get('Underwriter Premium Payable', 0)|money }}</strong></td>
+                  <td>{{ (r.get('Retail Premium', 0) - r.get('Underwriter Premium Payable', 0))|money }}</td>
+                  <td>{{ r.get('Risk Premium', 0)|money }}</td>
+                  <td>{{ r.get('Claims', 0)|money }}</td>
+                  <td>{{ r.get('Claim Ratio', 0)|pct }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      {% elif workspace == 'commission_business' %}
+        <section class="card filters no-print"><form method="get" class="quick-filter-form"><input type="hidden" name="franchise" value="{{ selected }}"><input type="hidden" name="period_view" value="{{ period_view }}"><label>Scenario View<select name="scenario_filter"><option value="Both" {% if scenario_filter == 'Both' %}selected{% endif %}>Both</option><option value="100%" {% if scenario_filter == '100%' %}selected{% endif %}>100% Only</option><option value="BrightRock" {% if scenario_filter == 'BrightRock' %}selected{% endif %}>BrightRock Only</option></select></label><button type="submit">Apply Scenario View</button></form></section>
+        <section class="card wide">
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claim Ratio</th>{% if scenario_filter in ['Both','100%'] %}<th>BR 100%</th>{% endif %}{% if scenario_filter in ['Both','BrightRock'] %}<th>BR BrightRock</th>{% endif %}{% if scenario_filter in ['Both','100%'] %}<th>Mkhulu 100%</th>{% endif %}{% if scenario_filter in ['Both','BrightRock'] %}<th>Mkhulu BrightRock</th>{% endif %}{% if scenario_filter in ['Both','100%'] %}<th>MFF 100%</th>{% endif %}{% if scenario_filter in ['Both','BrightRock'] %}<th>MFF BrightRock</th>{% endif %}<th>Policies</th><th>R1 Policy Fee</th></tr></thead>
+              <tbody>
+              {% for _, r in commission_business_view.iterrows() %}
+                <tr>
+                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td>{{ r['Period View'] }}</td>
+                  <td>{{ r['Retail Premium']|money }}</td>
+                  <td>{{ r['Risk Premium']|money }}</td>
+                  <td>{{ r['Claim Ratio']|pct }}</td>
+                  {% if scenario_filter in ['Both','100%'] %}<td>{{ rates['BrightRock']|pct }}<br><strong>{{ r['BR 100% Amount']|money }}</strong></td>{% endif %}
+                  {% if scenario_filter in ['Both','BrightRock'] %}<td>{{ rates['BrightRock']|pct }}<br><strong>{{ r['BR BrightRock Amount']|money }}</strong></td>{% endif %}
+                  {% if scenario_filter in ['Both','100%'] %}<td>{{ rates['Inkulu']|pct }}<br><strong>{{ r['Inkulu 100% Amount']|money }}</strong></td>{% endif %}
+                  {% if scenario_filter in ['Both','BrightRock'] %}<td>{{ rates['Inkulu']|pct }}<br><strong>{{ r['Inkulu BrightRock Amount']|money }}</strong></td>{% endif %}
+                  {% if scenario_filter in ['Both','100%'] %}<td>{{ rates['MFF']|pct }}<br><strong>{{ r['MFF 100% Amount']|money }}</strong></td>{% endif %}
+                  {% if scenario_filter in ['Both','BrightRock'] %}<td>{{ rates['MFF']|pct }}<br><strong>{{ r['MFF BrightRock Amount']|money }}</strong></td>{% endif %}
+                  <td>{{ r.get('Policy Qty', 0)|int }}</td>
+                  <td>R1.00<br><strong>{{ r.get('R1 Policy Fee', 0)|money }}</strong></td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      {% elif workspace == 'claims_reconciliation' %}
+        {% set mh = claims_reconciliation.mapping_health|default({'imported_claims':0,'mapped_claims':0,'unmapped_claims':0,'unmapped_count':0,'status':'Not available'}) %}
+        <section class="summary-grid compact-summary">
+          <div class="metric"><span>Workbook Claims</span><strong>{{ claims_reconciliation.summary.workbook_total|money }}</strong></div>
+          <div class="metric green"><span>Mapped Claims</span><strong>{{ claims_reconciliation.summary.matched_total|money }}</strong></div>
+          <div class="metric"><span>Written/System Claims</span><strong>{{ claims_reconciliation.summary.system_total|money }}</strong></div>
+          <div class="metric {% if claims_reconciliation.summary.difference|abs > 0.01 %}red{% else %}green{% endif %}"><span>Audit Difference</span><strong>{{ claims_reconciliation.summary.difference|money }}</strong></div>
+          <div class="metric {% if claims_reconciliation.summary.unmatched_total|float > 0 %}red{% else %}green{% endif %}"><span>Unmapped Claims</span><strong>{{ claims_reconciliation.summary.unmatched_total|money }}</strong></div>
+          <div class="metric"><span>Mapping Status</span><strong>{{ claims_reconciliation.summary.status }}</strong></div>
+        </section>
+        <section class="summary-grid compact-summary">
+          <div class="metric"><span>Mapping Health: Imported</span><strong>{{ mh.imported_claims|money }}</strong></div>
+          <div class="metric green"><span>Mapping Health: Mapped</span><strong>{{ mh.mapped_claims|money }}</strong></div>
+          <div class="metric {% if mh.unmapped_claims|float > 0 %}red{% else %}green{% endif %}"><span>Mapping Health: Unmapped</span><strong>{{ mh.unmapped_claims|money }}</strong></div>
+          <div class="metric"><span>Unmapped Rows</span><strong>{{ mh.unmapped_count|int }}</strong></div>
+          <div class="metric green"><span>Green</span><strong>{{ claims_reconciliation.summary.green_count|default(0) }}</strong></div>
+          <div class="metric amber"><span>Amber</span><strong>{{ claims_reconciliation.summary.amber_count|default(0) }}</strong></div>
+          <div class="metric red"><span>Red</span><strong>{{ claims_reconciliation.summary.red_count|default(0) }}</strong></div>
+        </section>
+        <section class="card wide">
+          <h2>Franchise Claim Ratio Traffic Light</h2>
+          <p class="muted">Mapping health is separate above. This table now rates each franchise by claim ratio: Green 0-60%, Amber 60-80%, Red above 80%.</p>
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Claims Workbook Name</th><th>System Franchise</th><th>Workbook Claims</th><th>System Claims</th><th>Difference</th><th>Claim Count</th><th>Risk Premium</th><th>Claim Ratio</th><th>Traffic Light</th></tr></thead>
+              <tbody>
+              {% for _, r in claims_reconciliation.rows.iterrows() %}
+                <tr>
+                  <td>{{ r['Claims Franchise'] }}</td>
+                  <td>{{ r['System Franchise'] }}</td>
+                  <td>{{ r['Workbook Claims']|money }}</td>
+                  <td>{{ r['System Claims']|money }}</td>
+                  <td class="money-cell {% if r['Difference']|abs > 0.01 %}negative{% else %}positive{% endif %}">{{ r['Difference']|money }}</td>
+                  <td>{{ r['Claim Count']|int }}</td>
+                  <td>{{ r.get('Risk Premium', 0)|money }}</td>
+                  <td>{{ r.get('Claim Ratio', 0)|pct }}</td>
+                  <td><span class="pill {% if r['Status'] == 'Green' %}green{% elif r['Status'] == 'Amber' %}amber{% elif r['Status'] == 'Red' %}red{% else %}blue{% endif %}">{{ r['Status'] }}</span></td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="card wide">
+          <h2>Monthly Audit</h2>
+          <p class="muted">Use the franchise filter above to review one franchise month by month.</p>
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Claims Workbook Name</th><th>System Franchise</th><th>Month</th><th>Workbook Claims</th><th>System Claims</th><th>Difference</th><th>Claim Count</th></tr></thead>
+              <tbody>
+              {% for _, r in claims_reconciliation.monthly.iterrows() %}
+                {% if selected == 'All' or r['System Franchise'] == selected or r['Claims Franchise'] == selected %}
+                <tr>
+                  <td>{{ r['Claims Franchise'] }}</td>
+                  <td>{{ r['System Franchise'] }}</td>
+                  <td>{{ r['Month'] }}</td>
+                  <td>{{ r['Workbook Claims']|money }}</td>
+                  <td>{{ r['System Claims']|money }}</td>
+                  <td class="money-cell {% if r['Difference']|abs > 0.01 %}negative{% else %}positive{% endif %}">{{ r['Difference']|money }}</td>
+                  <td>{{ r['Claim Count']|int }}</td>
+                </tr>
+                {% endif %}
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="card wide">
+          <h2>Unmatched Claims Needing Mapping</h2>
+          <p class="muted">If a claims name belongs to an existing franchise, open Claims Mapping and save the mapping once. Future months will reuse it automatically.</p>
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Claims Franchise</th><th>Match Key</th><th>Month</th><th>Claims</th><th>Claim Count</th></tr></thead>
+              <tbody>
+              {% for _, r in claims_reconciliation.unmatched.iterrows() %}
+                <tr><td>{{ r.get('franchise','') }}</td><td>{{ r.get('claim_key','') }}</td><td>{{ r.get('month','') }}</td><td>{{ r.get('claims',0)|money }}</td><td>{{ r.get('claim_count',0)|int }}</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="actions compact-actions"><a href="{{ url_for('workspace_page', workspace='claims_mapping') }}">Open Claims Mapping</a></div>
+        </section>
+
+      {% elif workspace == 'claims_mapping' %}
+        <section class="card wide">
+          <h2>Claims Mapping</h2>
+          <p class="muted">Map claims-only names from the claims workbook to existing policy franchises. The mapping is saved and reused on future monthly imports.</p>
+          {% if claims_import_summary %}
+            <div class="claims-summary">
+              <strong>Claims Import Summary</strong>
+              <span>Imported: {{ claims_import_summary.get('total_claims_imported', 0)|money }}</span>
+              <span>Matched: {{ claims_import_summary.get('matched_claims', 0)|money }}</span>
+              <span>Written: {{ claims_import_summary.get('written_claims', 0)|money }}</span>
+              <span>Unmatched: {{ claims_import_summary.get('unmatched_claims', 0)|money }}</span>
+            </div>
+          {% endif %}
+          {% if mh %}
+            <div class="claims-summary">
+              <strong>Mapping Health</strong>
+              <span>Imported: {{ mh.imported_claims|money }}</span>
+              <span>Mapped: {{ mh.mapped_claims|money }}</span>
+              <span>Unmapped: {{ mh.unmapped_claims|money }}</span>
+              <span>Unmapped Rows: {{ mh.unmapped_count|int }}</span>
+              <span>Status: {{ mh.status }}</span>
+            </div>
+          {% endif %}
+          <form method="post">
+            <div class="table-wrap draggable-table">
+              <table class="compact-table">
+                <thead><tr><th>Claims Workbook Name</th><th>Current Key</th><th>Status</th><th>Claims</th><th>Claim Count</th><th>Map To Franchise</th></tr></thead>
+                <tbody>
+                {% set rows = claims_mapping_unmatched_rows if claims_mapping_unmatched_rows else (claims_import_summary.get('rows', []) if claims_import_summary else []) %}
+                {% for r in rows %}
+                  {% if r.status != 'Matched' %}
+                    <tr>
+                      <td>{{ r.claims_franchise if r.claims_franchise is defined else r.get('claims_franchise','') }}</td>
+                      <td>{{ r.matched_key if r.matched_key is defined else r.get('matched_key','') }}<input type="hidden" name="claim_key" value="{{ r.matched_key if r.matched_key is defined else r.get('matched_key','') }}"></td>
+                      <td><span class="pill red">{{ r.status if r.status is defined else r.get('status','Unmatched') }}</span></td>
+                      <td>{{ (r.claims if r.claims is defined else r.get('claims',0))|money }}</td>
+                      <td>{{ (r.claim_count if r.claim_count is defined else r.get('claim_count',0))|int }}</td>
+                      <td>
+                        <select name="target_{{ r.matched_key if r.matched_key is defined else r.get('matched_key','') }}">
+                          <option value="">Select franchise...</option>
+                          {% for opt in claims_mapping_options %}
+                            <option value="{{ opt.key }}">{{ opt.name }}</option>
+                          {% endfor %}
+                        </select>
+                      </td>
+                    </tr>
+                  {% endif %}
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <p class="small-note">After saving, the system will immediately re-apply the last imported claims file when available. Otherwise, re-import the claims workbook.</p>
+            <button type="submit">Save Claims Mappings</button>
+          </form>
+          <h3>Saved Claim Name Mappings</h3>
+          <form method="post">
+            <div class="table-wrap draggable-table">
+              <table class="compact-table">
+                <thead><tr><th>Claims Key</th><th>Maps To Key</th><th>Remove</th></tr></thead>
+                <tbody>
+                {% for k, v in franchise_config.get('claims_aliases', {}).items() %}
+                  <tr><td>{{ k }}</td><td>{{ v }}</td><td><label><input type="checkbox" name="remove_alias" value="{{ k }}"> Remove</label></td></tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <button type="submit">Update Saved Mappings</button>
+          </form>
+        </section>
+      {% elif workspace == 'franchise_configuration' %}
+        <section class="card wide">
+          <h2>Franchise Calculation and Extract Settings</h2>
+          <p class="muted">Unchecked franchises are excluded from calculations and underwriter-style extracts. Add the same group name to combine branches such as Daveyton and Benoni. Clear the group name to show them separately again.</p>
+          <form method="post">
+            <label class="inline-check"><input type="checkbox" name="use_groups" {% if franchise_config.use_groups %}checked{% endif %}> Use franchise grouping</label>
+            <div class="table-wrap draggable-table">
+              <table class="compact-table">
+                <thead><tr><th>Include</th><th>Franchise</th><th>Group Name</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for f in original_franchises %}
+                  <tr>
+                    <td><input type="checkbox" name="include_{{ loop.index0 }}" {% if f not in franchise_config.excluded %}checked{% endif %}></td>
+                    <td><input type="hidden" name="franchise_name" value="{{ f }}"><strong>{{ f }}</strong></td>
+                    <td><input type="text" name="group_{{ loop.index0 }}" value="{{ franchise_config.groups.get(f, '') }}" placeholder="Example: Daveyton/Benoni"></td>
+                    <td>{% if f in franchise_config.excluded %}<span class="pill red">Excluded</span>{% elif franchise_config.groups.get(f) %}<span class="pill green">Grouped</span>{% else %}<span class="pill blue">Included</span>{% endif %}</td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="actions compact-actions"><button type="submit">Save Configuration</button></div>
+          </form>
+        </section>
+
+      {% elif workspace == 'book_value' %}
+        <section class="card wide">
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claims</th><th>Claim Ratio</th><th>MFF Book Value</th><th>Franchise Book Value</th><th>Total Book Value</th></tr></thead>
+              <tbody>
+              {% for _, r in book_view.iterrows() %}
+                <tr><td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period View'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Claim Ratio']|pct }}</td><td>{{ r['MFF Book Value 2.5%']|money }}</td><td>{{ r['Franchise Book Value 2.5%']|money }}</td><td><strong>{{ r['Total Book Value']|money }}</strong></td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% elif workspace == 'scenario_comparison' %}
+        {% set retail_total = compare_summary.get('retail_total', 0) %}
+        <section class="scenario-calculator no-print">
+          <div class="scenario-title-row">
+            <div>
+              <h2>Scenario Comparison Calculator</h2>
+              <p class="muted">Compare commission structures between Current, Scenario A and Scenario B. Change Scenario A and B percentages to see the amounts update.</p>
+            </div>
+          </div>
+          <form method="get" id="scenarioCalcForm" class="scenario-controls">
+            <input type="hidden" name="workspace" value="scenario_comparison">
+            <div class="scenario-control-card">
+              <label>Period</label>
+              <div class="period-buttons">
+                <label><input type="radio" name="compare_period_view" value="month" {% if compare_args.compare_period_view == 'month' %}checked{% endif %}> <span>Monthly</span></label>
+                <label><input type="radio" name="compare_period_view" value="six_months" {% if compare_args.compare_period_view == 'six_months' %}checked{% endif %}> <span>6 Months</span></label>
+                <label><input type="radio" name="compare_period_view" value="year" {% if compare_args.compare_period_view == 'year' %}checked{% endif %}> <span>Yearly</span></label>
+              </div>
+            </div>
+            <div class="scenario-control-card highlight-blue"><span>Retail Premium</span><strong>{{ compare_summary.get('retail_total', 0)|money }}</strong></div>
+            <div class="scenario-control-card highlight-green"><span>Current Total Commission</span><strong>{{ compare_summary.get('current_commission', 0)|money }}</strong></div>
+            <div class="scenario-control-card">
+              <label>MFF Book Value Rate</label>
+              <div class="percent-input"><input type="number" step="0.01" name="book_value_rate" value="{{ compare_args.book_value_rate }}"><span>%</span></div>
+              <small>{{ compare_summary.get('scenario_a_book_value', 0)|money }} on selected Retail Premium</small>
+            </div>
+            <button type="submit">Calculate</button>
+            <a class="secondary-button" href="{{ url_for('workspace_page', workspace='scenario_comparison') }}">Reset Percentages</a>
+          </form>
+        </section>
+
+        <section class="card wide scenario-help-card">
+          <h2>How the Scenario Comparison is Calculated</h2>
+          <div class="table-wrap draggable-table">
+            <table class="compact-table scenario-table">
+              <thead><tr><th>Structure</th><th>Retail Premium</th><th>Hollard</th><th>Mkhulu</th><th>MFF</th><th>R1</th><th>ADV</th><th>Total Commission</th><th>MFF Book Value</th><th>Total with Book Value</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><strong>Current</strong><br><small>Non-editable</small></td>
+                  <td><strong>{{ compare_summary.get('retail_total',0)|money }}</strong><br><small>Selected period</small></td>
+                  <td><div class="scenario-rate-stack"><span>10.00%</span><strong>{{ compare_summary.get('current_hollard_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><span>2.50%</span><strong>{{ compare_summary.get('current_mkhulu_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><span>2.50%</span><strong>{{ compare_summary.get('current_mff_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><span>0.66%</span><strong>{{ compare_summary.get('current_r1_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><span>1.39%</span><strong>{{ compare_summary.get('current_adv_amount',0)|money }}</strong></div></td>
+                  <td><strong>{{ compare_summary.get('current_commission',0)|money }}</strong><br><small>Retail Premium × current percentages</small></td>
+                  <td><div class="scenario-rate-stack"><span>-</span><strong>{{ 0|money }}</strong></div></td>
+                  <td><strong>{{ compare_summary.get('current_total',0)|money }}</strong><br><small>Same as current commission</small></td>
+                </tr>
+                <tr class="scenario-a-row">
+                  <td><strong>Scenario A</strong><br><small>Editable</small></td>
+                  <td><strong>{{ compare_summary.get('retail_total',0)|money }}</strong><br><small>Selected period</small></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_hollard" value="{{ compare_args.a_hollard }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_hollard_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_mkhulu" value="{{ compare_args.a_mkhulu }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_mkhulu_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_mff" value="{{ compare_args.a_mff }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_mff_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_r1" value="{{ compare_args.a_r1 }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_r1_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_adv" value="{{ compare_args.a_adv }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_adv_amount',0)|money }}</strong></div></td>
+                  <td><strong>{{ compare_summary.get('scenario_a_commission',0)|money }}</strong><br><small>Retail Premium × Scenario A percentages</small></td>
+                  <td><div class="scenario-rate-stack"><span>{{ compare_args.book_value_rate }}%</span><strong>{{ compare_summary.get('scenario_a_book_value',0)|money }}</strong></div></td>
+                  <td><strong>{{ compare_summary.get('scenario_a_total',0)|money }}</strong><br><small>Commission + MFF Book Value</small></td>
+                </tr>
+                <tr class="scenario-b-row">
+                  <td><strong>Scenario B</strong><br><small>Editable</small></td>
+                  <td><strong>{{ compare_summary.get('retail_total',0)|money }}</strong><br><small>Selected period</small></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_hollard" value="{{ compare_args.b_hollard }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_hollard_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_mkhulu" value="{{ compare_args.b_mkhulu }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_mkhulu_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_mff" value="{{ compare_args.b_mff }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_mff_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_r1" value="{{ compare_args.b_r1 }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_r1_amount',0)|money }}</strong></div></td>
+                  <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_adv" value="{{ compare_args.b_adv }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_adv_amount',0)|money }}</strong></div></td>
+                  <td><strong>{{ compare_summary.get('scenario_b_commission',0)|money }}</strong><br><small>Retail Premium × Scenario B percentages</small></td>
+                  <td><div class="scenario-rate-stack"><span>{{ compare_args.book_value_rate }}%</span><strong>{{ compare_summary.get('scenario_b_book_value',0)|money }}</strong></div></td>
+                  <td><strong>{{ compare_summary.get('scenario_b_total',0)|money }}</strong><br><small>Commission + MFF Book Value</small></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card wide scenario-difference-detail">
+          <h2>Difference Analysis</h2>
+          {% set current_total = compare_summary.get('current_total', 0) %}
+          {% set current_commission = compare_summary.get('current_commission', 0) %}
+          {% set a_commission = compare_summary.get('scenario_a_commission', 0) %}
+          {% set b_commission = compare_summary.get('scenario_b_commission', 0) %}
+          {% set a_book = compare_summary.get('scenario_a_book_value', 0) %}
+          {% set b_book = compare_summary.get('scenario_b_book_value', 0) %}
+          {% set a_total = compare_summary.get('scenario_a_total', 0) %}
+          {% set b_total = compare_summary.get('scenario_b_total', 0) %}
+          <div class="table-wrap draggable-table">
+            <table class="compact-table scenario-detail-table">
+              <thead>
+                <tr>
+                  <th>Comparison</th>
+                  <th>Retail Premium Used</th>
+                  <th>Current Commission</th>
+                  <th>Scenario Commission</th>
+                  <th>Commission Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Scenario A vs Current</strong></td>
+                  <td>{{ compare_summary.get('retail_total',0)|money }}</td>
+                  <td>{{ current_commission|money }}</td>
+                  <td>{{ a_commission|money }}</td>
+                  <td class="money-cell {% if compare_summary.get('scenario_a_commission_diff',0) < 0 %}negative{% else %}positive{% endif %}">{{ compare_summary.get('scenario_a_commission_diff',0)|money }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Scenario B vs Current</strong></td>
+                  <td>{{ compare_summary.get('retail_total',0)|money }}</td>
+                  <td>{{ current_commission|money }}</td>
+                  <td>{{ b_commission|money }}</td>
+                  <td class="money-cell {% if compare_summary.get('scenario_b_commission_diff',0) < 0 %}negative{% else %}positive{% endif %}">{{ compare_summary.get('scenario_b_commission_diff',0)|money }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Scenario B vs Scenario A</strong></td>
+                  <td>{{ compare_summary.get('retail_total',0)|money }}</td>
+                  <td>{{ a_total|money }}</td>
+                  <td>{{ b_total|money }}</td>
+                  <td class="money-cell {% if compare_summary.get('scenario_b_commission_vs_a',0) < 0 %}negative{% else %}positive{% endif %}">{{ compare_summary.get('scenario_b_commission_vs_a',0)|money }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="scenario-detail-notes">
+            <p><strong>Current Commission Structure Total:</strong> {{ current_commission|money }}</p>
+            <p><strong>Scenario A Commission Structure Total:</strong> {{ a_commission|money }}</p>
+            <p><strong>Scenario B Commission Structure Total:</strong> {{ b_commission|money }}</p>
+          </div>
+        </section>
+
+        <section class="card wide">
+          <h2>Franchise Scenario Comparison</h2>
+          <div class="table-wrap draggable-table">
+            <table class="compact-table">
+              <thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Current Total</th><th>Scenario A Total</th><th>Scenario B Total</th><th>A vs Current</th><th>B vs Current</th><th>B vs A</th><th>Best</th></tr></thead>
+              <tbody>
+              {% for _, r in compare_full.iterrows() %}
+                <tr>
+                  <td>{{ r['Franchise'] }}</td><td>{{ r['Period View'] }}</td><td>{{ r['Retail Premium']|money }}</td>
+                  <td>{{ r.get('Current Total Benefit',0)|money }}</td><td>{{ r.get('Scenario A Total Benefit',0)|money }}</td><td>{{ r.get('Scenario B Total Benefit',0)|money }}</td>
+                  <td class="money-cell {% if r.get('Scenario A vs Current',0) < 0 %}negative{% else %}positive{% endif %}">{{ r.get('Scenario A vs Current',0)|money }}</td>
+                  <td class="money-cell {% if r.get('Scenario B vs Current',0) < 0 %}negative{% else %}positive{% endif %}">{{ r.get('Scenario B vs Current',0)|money }}</td>
+                  <td class="money-cell {% if r.get('Scenario B vs A',0) < 0 %}negative{% else %}positive{% endif %}">{{ r.get('Scenario B vs A',0)|money }}</td>
+                  <td><strong>{{ r.get('Best Scenario','Same') }}</strong></td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% elif workspace == 'advanced_analytics' %}
+        <section class="summary-grid compact-summary"><div class="metric red"><span>High Risk</span><strong>{{ portfolio.get('high_risk_count', 0) }}</strong></div><div class="metric blue"><span>Move to BrightRock</span><strong>{{ portfolio.get('move_count', 0) }}</strong></div><div class="metric green"><span>Can Move</span><strong>{{ portfolio.get('can_move_count', 0) }}</strong></div><div class="metric"><span>Portfolio Claims</span><strong>{{ portfolio.get('total_claims', 0)|money }}</strong></div></section>
+        <section class="card wide"><h2>Risk Ranking and Opportunity Filter</h2><div class="table-wrap draggable-table"><table class="compact-table"><thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claims</th><th>Claim Ratio</th><th>Claims Contribution</th><th>Franchise Money on 100%</th><th>Franchise Money on BrightRock</th><th>Recommendation</th></tr></thead><tbody>{% for _, r in advanced_view.iterrows() %}<tr><td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Weighted Claim Ratio']|pct }}</td><td>{{ r['Claims Contribution %']|pct }}</td><td>{{ r['Franchise Money on 100%']|money }}</td><td>{{ r['Franchise Money on BrightRock']|money }}</td><td><span class="pill {{ r['Claim Ratio Status']|lower }}">{{ r['Claim Ratio Label'] }}</span></td></tr>{% endfor %}</tbody></table></div></section>
+      {% elif workspace == 'ai_assistant' %}
+        <section class="card ai-panel"><h2>Ask AI Data Assistant</h2><p class="muted">This offline test build includes a rule-based assistant. In production this can connect to the OpenAI API and use the same backend calculation functions.</p><form method="get" class="ai-form"><label>Your question<input type="text" name="ask" value="{{ ai_question }}" placeholder="Example: Which franchises should move to BrightRock?"></label><button type="submit">Ask</button></form></section>
+        {% if ai_answer %}<section class="card"><h2>Answer</h2><p>{{ ai_answer.summary }}</p>{% if ai_answer.rows %}<div class="table-wrap draggable-table"><table class="compact-table"><thead><tr>{% for c in ai_answer.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>{% for row in ai_answer.rows %}<tr>{% for c in ai_answer.columns %}<td>{{ row[c] }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% endif %}</section>{% endif %}
+      {% endif %}
+    {% endif %}
+  </div>
+<script>
+  document.querySelectorAll('.draggable-table').forEach((slider) => {
+    let isDown=false,startX=0,scrollLeft=0,moved=false,rafId=null,nextScrollLeft=0;
+    const stop=()=>{isDown=false;slider.classList.remove('dragging');document.body.classList.remove('no-select');if(rafId){cancelAnimationFrame(rafId);rafId=null;}};
+    slider.addEventListener('mousedown',(e)=>{if(e.button!==0)return;isDown=true;moved=false;slider.classList.add('dragging');document.body.classList.add('no-select');startX=e.clientX;scrollLeft=slider.scrollLeft;});
+    window.addEventListener('mouseup',stop);slider.addEventListener('mouseleave',stop);
+    slider.addEventListener('mousemove',(e)=>{if(!isDown)return;e.preventDefault();const walk=(e.clientX-startX)*1.05;if(Math.abs(walk)>1)moved=true;nextScrollLeft=scrollLeft-walk;if(!rafId){rafId=requestAnimationFrame(()=>{slider.scrollLeft+=(nextScrollLeft-slider.scrollLeft)*0.85;rafId=null;});}});
+    slider.addEventListener('click',(e)=>{if(moved){e.preventDefault();e.stopPropagation();}},true);
+  });
+
+  (function(){
+    const grid = document.getElementById('dashboardCards');
+    if(!grid) return;
+    const storageKey = 'franchiseDashboardCardOrderV1';
+    const customizeBtn = document.getElementById('customizeCardsBtn');
+    const resetBtn = document.getElementById('resetCardsBtn');
+    let editMode = localStorage.getItem('franchiseDashboardEditMode') === '1';
+    let dragged = null;
+    function setEditMode(on){
+      editMode = on;
+      localStorage.setItem('franchiseDashboardEditMode', on ? '1' : '0');
+      grid.classList.toggle('dashboard-edit-mode', on);
+      grid.querySelectorAll('.dashboard-kpi').forEach(card => card.setAttribute('draggable', on ? 'true' : 'false'));
+      if(customizeBtn) customizeBtn.textContent = on ? 'Done Customizing' : 'Customize Dashboard';
+    }
+    function saveOrder(){
+      const order = Array.from(grid.querySelectorAll('.dashboard-kpi')).map(card => card.dataset.card).filter(Boolean);
+      localStorage.setItem(storageKey, JSON.stringify(order));
+    }
+    function applyOrder(){
+      let order = [];
+      try { order = JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch(e) { order = []; }
+      if(!order.length) return;
+      const cards = new Map(Array.from(grid.querySelectorAll('.dashboard-kpi')).map(card => [card.dataset.card, card]));
+      order.forEach(key => { if(cards.has(key)) grid.appendChild(cards.get(key)); });
+    }
+    function getAfterElement(container, x, y){
+      const cards = [...container.querySelectorAll('.dashboard-kpi:not(.dragging-card)')];
+      return cards.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offsetY = y - box.top - box.height / 2;
+        const offsetX = x - box.left - box.width / 2;
+        const offset = Math.abs(offsetY) > Math.abs(offsetX) ? offsetY : offsetX;
+        if(offset < 0 && offset > closest.offset) return { offset, element: child };
+        return closest;
+      }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+    }
+    applyOrder();
+    setEditMode(editMode);
+    if(customizeBtn) customizeBtn.addEventListener('click', () => setEditMode(!editMode));
+    if(resetBtn) resetBtn.addEventListener('click', () => { localStorage.removeItem(storageKey); location.reload(); });
+    grid.addEventListener('dragstart', e => {
+      const card = e.target.closest('.dashboard-kpi');
+      if(!editMode || !card) { e.preventDefault(); return; }
+      dragged = card;
+      card.classList.add('dragging-card');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.card || '');
+    });
+    grid.addEventListener('dragover', e => {
+      if(!editMode || !dragged) return;
+      e.preventDefault();
+      const after = getAfterElement(grid, e.clientX, e.clientY);
+      if(after == null) grid.appendChild(dragged); else grid.insertBefore(dragged, after);
+    });
+    grid.addEventListener('dragend', () => {
+      if(dragged) dragged.classList.remove('dragging-card');
+      dragged = null;
+      saveOrder();
+    });
+  })();
+
+  (function(){
+    const form = document.getElementById('importForm');
+    if(!form) return;
+    const inline = document.getElementById('importProgress');
+    const inlineBar = document.getElementById('importProgressBarInline');
+    const inlineText = document.getElementById('importProgressTextInline');
+    const inlinePct = document.getElementById('importProgressPctInline');
+    const modal = document.getElementById('importProgressModal');
+    const bar = document.getElementById('importProgressBar');
+    const text = document.getElementById('importProgressText');
+    const pct = document.getElementById('importProgressPct');
+    const modalFile = document.getElementById('importModalFile');
+    const stepFiles = document.getElementById('importStepFiles');
+    const stepRows = document.getElementById('importStepRows');
+    const stepStatus = document.getElementById('importStepStatus');
+    const btn = document.getElementById('importSubmitBtn');
+
+    function showProgress(value, message){
+      const displayValue = Math.min(Math.max(Math.round(value), 0), 100);
+      if(bar) bar.style.width = displayValue + '%';
+      if(pct) pct.textContent = displayValue + '%';
+      if(text) text.textContent = message;
+      if(inlineBar) inlineBar.style.width = displayValue + '%';
+      if(inlinePct) inlinePct.textContent = displayValue + '%';
+      if(inlineText) inlineText.textContent = message;
+    }
+
+    function setProcessingMode(message){
+      if(bar) { bar.classList.add('progress-bar-striped'); bar.style.width = '100%'; }
+      if(inlineBar) { inlineBar.classList.add('progress-bar-striped'); inlineBar.style.width = '100%'; }
+      if(pct) pct.textContent = 'Processing';
+      if(inlinePct) inlinePct.textContent = 'Processing';
+      if(text) text.textContent = message;
+      if(inlineText) inlineText.textContent = message;
+      if(stepStatus) stepStatus.textContent = message;
+    }
+
+    function restoreButton(){
+      if(btn){ btn.disabled = false; btn.textContent = 'Import / Recalculate'; }
+      if(bar) bar.classList.remove('progress-bar-striped');
+      if(inlineBar) inlineBar.classList.remove('progress-bar-striped');
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const policyFiles = form.querySelector('input[name="excel_file"]')?.files || [];
+      const claimsFiles = form.querySelector('input[name="claims_file"]')?.files || [];
+      const totalFiles = policyFiles.length + claimsFiles.length;
+      if(totalFiles === 0){ form.submit(); return; }
+
+      const firstFile = policyFiles[0]?.name || claimsFiles[0]?.name || 'selected file(s)';
+      const fileNames = Array.from(policyFiles).concat(Array.from(claimsFiles)).map(f => f.name);
+      const started = Date.now();
+
+      if(inline) inline.style.display = 'block';
+      if(modal) modal.style.display = 'flex';
+      if(btn){ btn.disabled = true; btn.textContent = 'Importing...'; }
+      if(stepFiles) stepFiles.textContent = 'Files selected: ' + totalFiles;
+      if(modalFile) modalFile.textContent = 'Uploading: ' + firstFile;
+      if(stepRows) stepRows.textContent = 'Rows processed: upload in progress...';
+      showProgress(0, 'Uploading selected Excel file(s)...');
+
+      const xhr = new XMLHttpRequest();
+      const importUrl = form.getAttribute('action') || window.location.href;
+      xhr.open('POST', importUrl, true);
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+      let elapsedTimer = setInterval(() => {
+        const seconds = Math.floor((Date.now() - started) / 1000);
+        if(stepRows && ((pct && pct.textContent === 'Processing') || (inlinePct && inlinePct.textContent === 'Processing'))){
+          stepRows.textContent = 'Server processing time: ' + seconds + ' seconds';
+        }
+      }, 1000);
+
+      xhr.upload.onprogress = function(event){
+        if(event.lengthComputable){
+          const uploadPct = (event.loaded / event.total) * 25;
+          showProgress(uploadPct, 'Uploading files to server...');
+          if(stepRows) stepRows.textContent = 'Uploaded ' + Math.round(event.loaded / 1024 / 1024) + ' MB of ' + Math.round(event.total / 1024 / 1024) + ' MB';
+          if(modalFile && fileNames.length){
+            modalFile.textContent = 'Uploading ' + totalFiles + ' file(s): ' + fileNames.slice(0, 3).join(', ') + (fileNames.length > 3 ? '...' : '');
+          }
+        }
+      };
+
+      xhr.onload = function(){
+        clearInterval(elapsedTimer);
+        if(xhr.status >= 200 && xhr.status < 400){
+          showProgress(100, 'Import complete. Reloading dashboard...');
+          if(stepStatus) stepStatus.textContent = 'Import complete.';
+          if(stepRows) stepRows.textContent = 'Dashboard is reloading now.';
+          window.location.href = xhr.responseURL || '{{ url_for("dashboard") }}';
+        } else {
+          restoreButton();
+          setProcessingMode('Import failed. Please check the server error and try again.');
+          if(pct) pct.textContent = 'Error';
+          if(inlinePct) inlinePct.textContent = 'Error';
+        }
+      };
+
+      xhr.onerror = function(){
+        clearInterval(elapsedTimer);
+        restoreButton();
+        setProcessingMode('Import failed due to a network/browser error.');
+        if(pct) pct.textContent = 'Error';
+        if(inlinePct) inlinePct.textContent = 'Error';
+      };
+
+      xhr.onreadystatechange = function(){
+        if(xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED || xhr.readyState === XMLHttpRequest.LOADING){
+          setProcessingMode('Server is reading Excel files, filtering MEM rows and recalculating dashboard KPIs...');
+          if(modalFile) modalFile.textContent = 'Processing ' + totalFiles + ' imported file(s). Please keep this page open.';
+        }
+      };
+
+      xhr.send(new FormData(form));
+
+      setTimeout(() => {
+        if(xhr.readyState < XMLHttpRequest.DONE && (!pct || pct.textContent !== 'Processing')){
+          setProcessingMode('Server is processing imported rows. This can take a few minutes for large monthly files...');
+          if(modalFile) modalFile.textContent = 'Processing ' + totalFiles + ' file(s).';
+        }
+      }, 2500);
+    });
+  })();
+
+</script>
+</body>
+</html>
