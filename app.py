@@ -1262,6 +1262,69 @@ def excel_serial_to_datetime(value):
 
 
 
+
+def parse_claims_tab1_paid_detail_streaming(path):
+    """Memory-safe parser for the first claims transaction tab.
+
+    Uses only the business columns needed for claims import instead of loading
+    the whole workbook/sheet into pandas:
+      - E: franchise name
+      - Y: Date Of Claim Paid
+      - Z: Amount of Claim Paid Before Net Off
+    """
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        ws = wb[wb.sheetnames[0]]
+        agg = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if len(row) < 26:
+                continue
+            franchise = row[4]
+            paid_date = row[24]
+            amount = row[25]
+            if pd.isna(franchise) or str(franchise).strip() == '':
+                continue
+            paid_dt = excel_serial_to_datetime(paid_date)
+            if pd.isna(paid_dt):
+                continue
+            claim_amount = clean_money(amount)
+            if claim_amount == 0:
+                continue
+            month = pd.Timestamp(paid_dt).to_period('M').to_timestamp()
+            key = (str(franchise).strip(), month)
+            rec = agg.setdefault(key, {'claims': 0.0, 'claim_count': 0})
+            rec['claims'] += claim_amount
+            rec['claim_count'] += 1
+        if not agg:
+            return pd.DataFrame(columns=['franchise','month','claims','claim_count','claim_paid_franchise','claim_paid_client','repudiated_pending','grand_total_claims'])
+        rows = []
+        for (franchise, month), rec in agg.items():
+            rows.append({
+                'franchise': franchise,
+                'month': month,
+                'claims': rec['claims'],
+                'claim_count': rec['claim_count'],
+                'claim_paid_franchise': 0.0,
+                'claim_paid_client': 0.0,
+                'repudiated_pending': 0.0,
+                'grand_total_claims': 0.0,
+            })
+        return pd.DataFrame(rows)
+    finally:
+        wb.close()
+
+
+def worksheet_to_dataframe_limited(ws, max_rows=None, max_cols=None):
+    """Convert a read-only worksheet to a small DataFrame for pivot fallbacks."""
+    rows = []
+    for r_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+        if max_rows is not None and r_idx > max_rows:
+            break
+        if max_cols is not None:
+            row = row[:max_cols]
+        rows.append(list(row))
+    return pd.DataFrame(rows)
+
 def parse_claims_tab1_paid_detail(df):
     """Parse claims from Tab 1 using fixed business columns.
 
@@ -1486,56 +1549,53 @@ def parse_payable_to_sheet(df):
 def read_claims_file(path):
     """Read a claims workbook and aggregate claims per franchise/month.
 
-    Current business rule uses Tab 1 transaction data as the source of truth:
-    - Column E: franchise name
-    - Column Y: Date Of Claim Paid
-    - Column AC: Amount of Claim Paid Before Net Off
-
-    The paid claim date determines the month, and every paid claim row adds to
-    the franchise claim count. Pivot tabs remain as fallback sources only.
+    This version avoids loading the full workbook into memory. The first claims
+    transaction tab is streamed row-by-row, and only small pivot fallback ranges
+    are converted to DataFrames.
     """
     claims_sum = pd.DataFrame()
     claims_count = pd.DataFrame()
     claims_status = pd.DataFrame()
 
-    raw_sheets = pd.read_excel(path, sheet_name=None, header=None)
-    first_sheet = next(iter(raw_sheets.keys()), None)
-    if first_sheet is not None:
-        claims_sum = parse_claims_tab1_paid_detail(raw_sheets[first_sheet])
+    # Preferred source: stream Tab 1 instead of pd.read_excel(sheet_name=None).
+    claims_sum = parse_claims_tab1_paid_detail_streaming(path)
 
-    # Prefer exact tabs by name as fallback, but tolerate small naming changes.
-    sum_sheet = next((name for name in raw_sheets if 'claims per branch' in name.lower() and 'sum' in name.lower()), None)
-    count_sheet = next((name for name in raw_sheets if 'claims per branch' in name.lower() and 'count' in name.lower()), None)
-    payable_sheet = next((name for name in raw_sheets if 'payable' in name.lower()), None)
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        sheet_names = list(wb.sheetnames)
+        sum_sheet = next((name for name in sheet_names if 'claims per branch' in name.lower() and 'sum' in name.lower()), None)
+        count_sheet = next((name for name in sheet_names if 'claims per branch' in name.lower() and 'count' in name.lower()), None)
+        payable_sheet = next((name for name in sheet_names if 'payable' in name.lower()), None)
 
-    if claims_sum.empty and sum_sheet:
-        claims_sum = parse_claims_named_pivot(raw_sheets[sum_sheet], value_name='claims', row_start=7, row_end=55, row_labels_col=1, year_row=4, month_row=5, first_value_col=2)
-    if claims_sum.empty and count_sheet:
-        claims_count = parse_claims_named_pivot(raw_sheets[count_sheet], value_name='claim_count', row_start=7, row_end=55, row_labels_col=1, year_row=4, month_row=5, first_value_col=2)
-    elif count_sheet:
-        # Optional validation/support data. Transaction-level count already exists.
-        fallback_count = parse_claims_named_pivot(raw_sheets[count_sheet], value_name='claim_count', row_start=7, row_end=55, row_labels_col=1, year_row=4, month_row=5, first_value_col=2)
-        if claims_sum.get('claim_count') is None and not fallback_count.empty:
-            claims_count = fallback_count
-    if payable_sheet:
-        claims_status = parse_payable_to_sheet(raw_sheets[payable_sheet])
+        if claims_sum.empty and sum_sheet:
+            df_sum = worksheet_to_dataframe_limited(wb[sum_sheet], max_rows=80)
+            claims_sum = parse_claims_named_pivot(df_sum, value_name='claims', row_start=7, row_end=55, row_labels_col=1, year_row=4, month_row=5, first_value_col=2)
+        if claims_sum.empty and count_sheet:
+            df_count = worksheet_to_dataframe_limited(wb[count_sheet], max_rows=80)
+            claims_count = parse_claims_named_pivot(df_count, value_name='claim_count', row_start=7, row_end=55, row_labels_col=1, year_row=4, month_row=5, first_value_col=2)
+        elif count_sheet:
+            df_count = worksheet_to_dataframe_limited(wb[count_sheet], max_rows=80)
+            fallback_count = parse_claims_named_pivot(df_count, value_name='claim_count', row_start=7, row_end=55, row_labels_col=1, year_row=4, month_row=5, first_value_col=2)
+            if claims_sum.get('claim_count') is None and not fallback_count.empty:
+                claims_count = fallback_count
+        if payable_sheet:
+            df_payable = worksheet_to_dataframe_limited(wb[payable_sheet], max_rows=60, max_cols=8)
+            claims_status = parse_payable_to_sheet(df_payable)
 
-    if claims_sum.empty:
-        frames = []
-        all_sheets = pd.read_excel(path, sheet_name=None)
-        for _, df in all_sheets.items():
-            parsed = parse_claims_detail_sheet(df)
-            if not parsed.empty:
-                frames.append(parsed)
-        if not frames:
-            for _, df in raw_sheets.items():
+        if claims_sum.empty:
+            frames = []
+            # Last-resort fallback: inspect sheets one at a time and keep memory bounded.
+            for name in sheet_names:
+                df = worksheet_to_dataframe_limited(wb[name], max_rows=5000)
                 parsed = parse_claims_pivot_sheet(df)
                 if not parsed.empty:
                     frames.append(parsed)
-        if frames:
-            claims_sum = pd.concat(frames, ignore_index=True)
-        else:
-            raise ValueError('No usable claims data found. Expected tabs Claims per Branch(sum), Claims per Branch(count), Payable To, or detailed claims columns such as Participating Group, Date Of Claim Paid and Final Amount.')
+            if frames:
+                claims_sum = pd.concat(frames, ignore_index=True)
+            else:
+                raise ValueError('No usable claims data found. Expected Tab 1 paid-claim columns E/Y/Z, Claims per Branch pivot tabs, Payable To, or a supported detailed claims layout.')
+    finally:
+        wb.close()
 
     # Normalize tabs 3, 4 and 5 with the same matching key before joining them.
     claims = claims_sum.copy()
@@ -2590,7 +2650,8 @@ def read_policydata_streaming(path):
         underwriter_fee = risk_after_r1_per_month * 0.021 * mpia if is_mem else 0.0
         risk_after_r1 = risk_after_r1_per_month * mpia if is_mem else 0.0
         net_risk = risk_after_r1 - underwriter_fee if is_mem else 0.0
-        raw_data = {str(header[i] or f'Column_{i+1}'): row[i] for i in range(min(len(header), len(row)))}
+        # Avoid storing a full copy of every Excel row in memory during large imports.
+        raw_data = {}
         client_address_o = _clean_map_value(row[address_o_i] if address_o_i < len(row) else '')
         id_number_f = _clean_id_number(row[id_number_i] if id_number_i < len(row) else '')
         if franchise and franchise.lower() not in {'nan', 'none'}:
