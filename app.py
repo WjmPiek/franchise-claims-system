@@ -2624,13 +2624,19 @@ def read_policydata_streaming(path):
     address_o_i = 14  # Excel column O, zero-based index 14
 
     agg = {}
+    # Keep row-level detail lightweight. The dashboard only needs MEM rows for
+    # client counts/map data, so we do not retain non-MEM rows in memory.
     detail_rows = []
     source_display = display_source_filename(path)
     month = month_from_filename(path)
     total_rows = 0
     mem_rows = 0
     skipped_rows = 0
-    for row_number, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+    # Limit OpenPyXL to the columns we actually use. Some PolicyData exports have
+    # many formatted/empty columns, and parsing every cell can exceed Render's
+    # Gunicorn timeout before our code gets control again.
+    max_needed_col = max(franchise_i, id_number_i, relation_i, risk_i, retail_i, mpia_i, address_o_i) + 1
+    for row_number, row in enumerate(ws.iter_rows(min_row=2, max_col=max_needed_col, values_only=True), start=2):
         total_rows += 1
         try:
             relation = str(row[relation_i] or '').strip().upper()
@@ -2654,7 +2660,7 @@ def read_policydata_streaming(path):
         raw_data = {}
         client_address_o = _clean_map_value(row[address_o_i] if address_o_i < len(row) else '')
         id_number_f = _clean_id_number(row[id_number_i] if id_number_i < len(row) else '')
-        if franchise and franchise.lower() not in {'nan', 'none'}:
+        if is_mem and franchise and franchise.lower() not in {'nan', 'none'}:
             detail_rows.append({
                 'source_file': source_display,
                 'import_month': month,
@@ -2719,6 +2725,10 @@ def read_policydata_streaming(path):
         })
     out = pd.DataFrame(rows)
     LAST_POLICY_DETAIL_DF = pd.DataFrame(detail_rows)
+    try:
+        wb.close()
+    except Exception:
+        pass
     LAST_POLICY_IMPORT_SUMMARY = {
         'file_name': display_source_filename(path),
         'month': month.strftime('%b %Y'),

@@ -34,7 +34,7 @@ pip install -r requirements.txt
 Start command:
 
 ```bash
-gunicorn app:app --workers 1 --threads 4 --timeout 300 --access-logfile - --error-logfile -
+gunicorn app:app --workers 1 --threads 4 --timeout 900 --access-logfile - --error-logfile -
 ```
 
 Health check path:
