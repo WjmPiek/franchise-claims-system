@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Franchise Claims Analytics System</title>
+  <title>Martins System · Claims</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='martins-theme.css', v='20260802') }}">
 </head>
@@ -121,8 +121,9 @@
       <div class="executive-shell">
         <aside class="executive-sidebar no-print">
           <div class="executive-brand">
-            <h1>Claims Command Centre</h1>
-            <p>Dashboard controls and reports</p>
+            <img class="martins-brand-logo" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
+            <h1>Martins System</h1>
+            <p>Claims</p>
           </div>
           <div class="side-tabs">
             <details class="side-group" open>
@@ -166,8 +167,8 @@
         <main class="executive-main">
           <div class="executive-topbar">
             <div>
-              <h1>Executive Summary</h1>
-              <p>{{ ed.get('period_label','') }} · {{ 'All franchises' if selected == 'All' else selected }}</p>
+              <h1>Martins System</h1>
+              <p>Claims · {{ ed.get('period_label','') }} · {{ 'All franchises' if selected == 'All' else selected }}</p>
             </div>
             <form method="get" action="{{ url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
               <input type="hidden" name="period_view" value="{{ period_view }}">
