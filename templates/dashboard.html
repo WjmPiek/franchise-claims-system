@@ -67,20 +67,24 @@
         .executive-sidebar::-webkit-scrollbar { width:8px; }
         .executive-sidebar::-webkit-scrollbar-track { background:#6B4AA0; }
         .executive-sidebar::-webkit-scrollbar-thumb { background:#8f73bd; border-radius:999px; }
-        .executive-brand { padding:20px; border-bottom:1px solid rgba(255,255,255,.22); display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; }
-        .sidebar-logo-frame { width:150px; max-width:100%; height:82px; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; overflow:hidden; }
+        .executive-brand { margin:12px; padding:18px 16px; border:1px solid rgba(255,255,255,.14); border-radius:12px; background:rgba(255,255,255,.16); display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; }
+        .sidebar-logo-frame { width:150px; max-width:100%; height:72px; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; overflow:hidden; }
         .sidebar-logo-frame .martins-brand-logo { display:block !important; width:100% !important; height:100% !important; max-width:150px !important; max-height:82px !important; object-fit:contain !important; object-position:center !important; margin:0 auto !important; border-radius:0 !important; }
-        .executive-brand h1 { font-size:18px; margin:0 0 6px; color:#fff; }
-        .executive-brand p { margin:0; color:rgba(255,255,255,.82); font-size:11px; }
-        .side-tabs { padding:12px; display:flex; flex-direction:column; gap:10px; }
-        .side-group { background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.18); border-radius:12px; overflow:hidden; }
-        .side-group summary { cursor:pointer; list-style:none; padding:13px 14px; font-weight:800; display:flex; justify-content:space-between; align-items:center; }
+        .executive-brand h1 { font-size:17px; line-height:1.15; margin:0; color:#fff; font-weight:700; }
+        .executive-brand p { margin:0; color:rgba(255,255,255,.78); font-size:13px; line-height:1.25; font-weight:400; }
+        .side-tabs { padding:8px 12px 14px; display:flex; flex-direction:column; gap:10px; }
+        .side-group { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.16); border-radius:12px; overflow:hidden; }
+        .side-group summary { cursor:pointer; list-style:none; min-height:54px; padding:13px 14px; color:#fff; font-size:16px; line-height:1.15; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
         .side-group summary::-webkit-details-marker { display:none; }
         .side-group summary:after { content:'›'; transform:rotate(90deg); color:rgba(255,255,255,.82); }
         .side-group[open] summary:after { transform:rotate(-90deg); }
-        .side-group a, .side-group span { display:block; padding:10px 14px; color:var(--md-ink); text-decoration:none; border-top:1px solid var(--md-line); font-size:13px; background:#fff; }
+        .side-group a, .side-group span { display:block; padding:13px 18px; color:var(--md-ink); text-decoration:none; border-top:1px solid var(--md-line); font-size:14px; line-height:1.25; font-weight:700; background:#fff; }
+        .side-group span { color:#64707d; font-size:13px; font-weight:400; }
         .side-group summary:hover { background:rgba(255,255,255,.18); }
         .side-group a:hover { background:#f3eff9; color:#583b88; }
+        .side-group[open] { background:#fff; }
+        .side-group[open] summary { background:#8f73bd; }
+        .side-group[open] a:last-child { border-bottom-left-radius:12px; border-bottom-right-radius:12px; }
         .executive-main { min-width:0; }
         .executive-topbar { background:var(--md-card); border:1px solid var(--md-line); border-radius:18px; padding:12px 16px; display:flex; justify-content:space-between; gap:12px; align-items:center; box-shadow:0 10px 20px rgba(25,36,71,.07); margin-bottom:14px; }
         .executive-topbar h1 { margin:0; color:var(--md-ink); font-size:20px; }
