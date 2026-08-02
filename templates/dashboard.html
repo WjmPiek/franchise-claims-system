@@ -62,7 +62,9 @@
         @media (max-width: 900px) { .container.compact { margin: 12px auto; padding: 0 12px 20px; } }
         .executive-shell { display:grid; grid-template-columns: 270px minmax(0, 1fr); gap:14px; align-items:start; }
         .executive-sidebar { position:sticky; top:10px; background:#6B4AA0; color:#fff; border:1px solid #6B4AA0; border-radius:12px; box-shadow:0 12px 28px rgba(24,32,42,.10); overflow:hidden; }
-        .executive-brand { padding:20px; border-bottom:1px solid rgba(255,255,255,.22); }
+        .executive-brand { padding:20px; border-bottom:1px solid rgba(255,255,255,.22); display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; }
+        .sidebar-logo-frame { width:150px; max-width:100%; height:82px; display:flex; align-items:center; justify-content:center; margin:0 auto 8px; overflow:hidden; }
+        .sidebar-logo-frame .martins-brand-logo { display:block !important; width:100% !important; height:100% !important; max-width:150px !important; max-height:82px !important; object-fit:contain !important; object-position:center !important; margin:0 auto !important; border-radius:0 !important; }
         .executive-brand h1 { font-size:18px; margin:0 0 6px; color:#fff; }
         .executive-brand p { margin:0; color:rgba(255,255,255,.82); font-size:11px; }
         .side-tabs { padding:12px; display:flex; flex-direction:column; gap:10px; }
@@ -133,7 +135,9 @@
       <div class="executive-shell">
         <aside class="executive-sidebar no-print">
           <div class="executive-brand">
-            <img class="martins-brand-logo" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
+            <div class="sidebar-logo-frame">
+              <img class="martins-brand-logo" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
+            </div>
             <h1>Martins System</h1>
             <p>Claims</p>
           </div>
