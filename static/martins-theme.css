@@ -1,0 +1,48 @@
+:root {
+  --martins-font: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  --martins-bg: #f4f6f8;
+  --martins-surface: #ffffff;
+  --martins-surface-soft: #f8fafc;
+  --martins-sidebar: #2f3640;
+  --martins-sidebar-strong: #242a32;
+  --martins-primary: #8b6f47;
+  --martins-primary-strong: #6f5737;
+  --martins-accent: #4f7f8f;
+  --martins-text: #18202a;
+  --martins-muted: #64707d;
+  --martins-border: #dce2e8;
+  --martins-radius: 8px;
+  --martins-shadow: 0 10px 26px rgba(24, 32, 42, 0.08);
+  --bg: var(--martins-bg);
+  --panel: var(--martins-surface);
+  --text: var(--martins-text);
+  --muted: var(--martins-muted);
+  --line: var(--martins-border);
+  --primary: var(--martins-primary);
+  --primary-strong: var(--martins-primary-strong);
+  --brand: var(--martins-primary);
+  --brand-dark: var(--martins-primary-strong);
+  --shadow: var(--martins-shadow);
+}
+
+html, body { font-family: var(--martins-font) !important; background: var(--martins-bg) !important; color: var(--martins-text); letter-spacing: 0; }
+body::before { display: none !important; }
+h1, h2, h3, h4, h5, h6 { color: var(--martins-text); letter-spacing: 0 !important; font-weight: 800; }
+a { color: var(--martins-primary-strong); }
+.sidebar, .app-sidebar, .executive-sidebar { background: var(--martins-sidebar) !important; color: #fff !important; border-radius: 0 !important; box-shadow: 4px 0 18px rgba(24,32,42,.16) !important; }
+.sidebar a, .app-sidebar a, .executive-sidebar a, .side-link, .side-toggle, .sidebar-brand, .sidebar-logo { color: #fff !important; border-radius: var(--martins-radius) !important; }
+.sidebar a:hover, .app-sidebar a:hover, .side-link:hover, .side-toggle:hover, .side-link.active, .tab-button.active { background: rgba(255,255,255,.14) !important; color: #fff !important; }
+.sidebar-subnav, .side-submenu { background: var(--martins-sidebar-strong) !important; border-radius: var(--martins-radius) !important; }
+.sidebar-subnav a, .side-submenu a { color: #eef2f6 !important; }
+.topbar, .mobile-topbar, .executive-topbar, .mobile-app-header, .user-session-bar { background: var(--martins-surface) !important; color: var(--martins-text) !important; border: 1px solid var(--martins-border) !important; border-radius: var(--martins-radius) !important; box-shadow: var(--martins-shadow) !important; }
+.card, .glass-card, .form-card, .panel, .hero-panel, .status-panel, .today-card, .metric, .workspace-card, .exec-card, .dashboard-kpi, .security-checklist, .stat-card, .pipeline-card, .pipeline-column { background: var(--martins-surface) !important; border: 1px solid var(--martins-border) !important; border-radius: var(--martins-radius) !important; box-shadow: var(--martins-shadow) !important; backdrop-filter: none !important; }
+button, .btn, .glass-button, .tab-button, .back-btn, .actions a, .top-toolbar a, .top-toolbar button, input[type="submit"], button[type="submit"] { border-radius: var(--martins-radius) !important; font-weight: 800; box-shadow: none !important; }
+button, .btn-primary, .glass-button, button[type="submit"], input[type="submit"], .actions a:first-child { background: var(--martins-primary) !important; border-color: var(--martins-primary) !important; color: #fff !important; }
+button:hover, .btn-primary:hover, .glass-button:hover { background: var(--martins-primary-strong) !important; border-color: var(--martins-primary-strong) !important; transform: none !important; }
+input, select, textarea, .form-control, .form-select { border: 1px solid var(--martins-border) !important; border-radius: var(--martins-radius) !important; background: #fff !important; color: var(--martins-text) !important; }
+input:focus, select:focus, textarea:focus, .form-control:focus, .form-select:focus { border-color: var(--martins-primary) !important; box-shadow: 0 0 0 3px rgba(139,111,71,.18) !important; outline: none !important; }
+.eyebrow, .nav-group-title, th, .muted, small { letter-spacing: 0 !important; }
+th { background: var(--martins-surface-soft) !important; color: var(--martins-muted) !important; }
+.alert, .flash { border-radius: var(--martins-radius) !important; border: 1px solid var(--martins-border) !important; }
+.login-card, .auth-card, .form-card { max-width: 560px; margin-inline: auto; }
+.login-logo, .sidebar-logo img, .sidebar-brand img { object-fit: contain; }
