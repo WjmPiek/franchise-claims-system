@@ -1,5 +1,5 @@
 :root {
-  --martins-font: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  --martins-font: Arial, Helvetica, sans-serif;
   --martins-bg: #f7f8fb;
   --martins-surface: #ffffff;
   --martins-surface-soft: #f8fafc;
@@ -265,4 +265,46 @@ body.auth-body,
 .sidebar-subnav a:hover {
   background: #f0eafa !important;
   color: #6B4AA0 !important;
+}
+
+html,
+body,
+input,
+select,
+textarea,
+button {
+  font-family: Arial, Helvetica, sans-serif !important;
+}
+
+body,
+p,
+td,
+input,
+select,
+textarea,
+.muted,
+.small {
+  font-weight: 400 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+strong,
+label,
+th,
+button,
+.btn,
+.sidebar-brand,
+.side-link,
+.side-toggle,
+.nav-link,
+.tab-button,
+.martins-login-header strong,
+.martins-auth-brand strong {
+  font-family: Arial, Helvetica, sans-serif !important;
+  font-weight: 700 !important;
 }
