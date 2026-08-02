@@ -4864,7 +4864,7 @@ def handle_unexpected_error(exc):
 
 AUTH_PAGE_CSS = """
 <style>
-body{font-family:Arial,sans-serif;background:#f7f8fb;margin:0;color:#101828;font-size:14px}.auth-wrap{width:min(1140px,calc(100vw - 32px));max-width:1140px;margin:56px auto;background:#fff;border:1px solid #dde3ea;border-radius:12px;box-shadow:0 14px 34px rgba(16,24,40,.14);overflow:hidden}.martins-login-header{min-height:58px;padding:14px 20px;background:#6B4AA0;color:#fff}.martins-login-header strong{display:block;font-size:18px;line-height:1.15}.martins-login-header span{display:block;color:rgba(255,255,255,.78);font-size:13px;margin-top:3px}.martins-auth-brand{display:grid;place-items:center;gap:8px;padding:34px 24px 10px;text-align:center}.martins-auth-brand img{width:220px;height:100px;object-fit:contain}.martins-auth-brand strong{font-size:24px;line-height:1.15;font-weight:800}.martins-auth-brand span{font-size:14px;color:#667085}.auth-body{padding:28px 32px}h1{margin:0 0 18px;color:#101828;font-size:26px}.muted{color:#667085}.field{margin:12px 0}.field label{display:block;font-weight:700;margin-bottom:6px;color:#101828}.field input,.field select,.field textarea{width:100%;box-sizing:border-box;min-height:42px;padding:9px 11px;border:1px solid #dde3ea;border-radius:6px;font-size:14px;background:#fff;color:#101828}.field input:focus,.field select:focus,.field textarea:focus{border-color:#6B4AA0;outline:0;box-shadow:0 0 0 3px rgba(107,74,160,.16)}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;background:#6B4AA0;color:#fff;border:1px solid #6B4AA0;border-radius:6px;padding:9px 16px;font-weight:700;text-decoration:none;cursor:pointer;font-size:14px}.btn:hover{background:#583b88}.btn-danger,.btn[style*="8b0000"]{background:#6B4AA0!important}.btn-muted{background:#8f73bd}.link{color:#6B4AA0;text-decoration:none;font-weight:700}.link:hover{text-decoration:underline}.flash{padding:9px 11px;border-radius:8px;margin:10px 32px;background:#f4f0fb;border:1px solid #d8c9ee}.flash.danger{background:#fff1f2}.flash.success{background:#f0fdf4}table{border-collapse:collapse;width:100%;background:#fff;font-size:12px}th,td{border-bottom:1px solid #d3d3d3;padding:7px;text-align:left;vertical-align:top}th{background:#6B4AA0;color:#fff;font-size:11px}.admin-wrap{max-width:1180px;margin:24px auto;background:#fff;border:1px solid #dde3ea;border-radius:12px;padding:20px;box-shadow:0 10px 24px rgba(16,24,40,.08)}.topnav{margin-bottom:14px}.small{font-size:11px;color:#667085}.inline-form{display:inline-block;margin:0 4px 4px 0}select,input,textarea,button{font-family:Arial,sans-serif}@media(max-width:820px){.auth-wrap{margin:18px auto}.auth-body{padding:22px 18px}}
+:root{--mt-bg:#f7f8fb;--mt-primary:#6B4AA0;--mt-dark:#583b88;--mt-accent:#8f73bd;--mt-text:#18202a;--mt-muted:#64707d;--mt-border:#dce2e8;--mt-shadow:0 12px 32px rgba(24,32,42,.10)}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;background:var(--mt-bg);margin:0;color:var(--mt-text);font-size:13px;font-weight:400}h1,h2,h3,label,button,.btn,.link,.topnav a,th{font-weight:700}.auth-page{padding:72px 16px 32px}.auth-wrap{max-width:1120px;margin:0 auto;background:#fff;border:1px solid var(--mt-border);border-radius:12px;box-shadow:var(--mt-shadow);overflow:hidden}.auth-header{background:var(--mt-primary);color:#fff;text-align:center;padding:22px 20px}.auth-header h1{margin:0 0 6px;color:#fff;font-size:24px}.auth-header p{margin:0;color:rgba(255,255,255,.88);font-weight:700}.auth-body{padding:24px;max-width:460px;margin:0 auto;text-align:center}.auth-logo{display:block;width:220px;height:100px;object-fit:contain;margin:0 auto 16px}.brand-name{margin:0 0 4px;color:var(--mt-text);font-size:22px;font-weight:700}.module-name{margin:0 0 20px;color:var(--mt-muted);font-weight:700}.muted{color:var(--mt-muted);margin:10px 0}.field{margin:12px 0;text-align:left}.field label{display:block;margin-bottom:5px;color:var(--mt-text)}.field input,.field select,.field textarea,select,input,textarea{width:100%;box-sizing:border-box;min-height:38px;padding:9px 10px;border:1px solid var(--mt-border);border-radius:6px;font-size:13px;background:#fff;color:var(--mt-text);font-family:Arial,Helvetica,sans-serif}.field input:focus,.field select:focus,.field textarea:focus,select:focus,input:focus,textarea:focus{outline:2px solid rgba(107,74,160,.24);border-color:var(--mt-primary)}.btn,button{display:inline-block;background:var(--mt-primary);color:#fff;border:0;border-radius:8px;min-height:38px;padding:9px 14px;font-weight:700;text-decoration:none;cursor:pointer;font-size:12px;font-family:Arial,Helvetica,sans-serif}.btn:hover,button:hover{background:var(--mt-dark)}.btn-danger,.btn[style*="8b0000"]{background:var(--mt-primary)!important}.btn-muted{background:var(--mt-accent)}.link{color:var(--mt-primary);text-decoration:none}.link:hover{text-decoration:underline}.flash{padding:9px 11px;border-radius:8px;margin:10px 0;background:#f3eff9;border:1px solid var(--mt-border);text-align:left}.flash.danger{background:#fff4f4}.flash.success{background:#f4fbf7}table{border-collapse:collapse;width:100%;background:#fff;font-size:12px}th,td{border-bottom:1px solid var(--mt-border);padding:7px;text-align:left;vertical-align:top}th{background:#f3eff9;color:var(--mt-text);font-size:11px}.admin-wrap{max-width:1180px;margin:24px auto;background:#fff;border:1px solid var(--mt-border);border-radius:12px;padding:20px;box-shadow:var(--mt-shadow)}.topnav{margin-bottom:14px}.small{font-size:11px;color:var(--mt-muted)}.inline-form{display:inline-block;margin:0 4px 4px 0}@media(max-width:760px){.auth-page{padding:16px}.auth-body{padding:20px}.auth-header{padding:18px 16px}.auth-header h1{font-size:21px}}
 </style>
 """
 
@@ -4875,8 +4875,10 @@ def get_flashed_messages_with_categories_safe():
 
 
 def render_auth_page(title, body_html):
-    flashes = ''
-    return f'''<!doctype html><html><head><title>{title}</title><meta name="viewport" content="width=device-width, initial-scale=1">{AUTH_PAGE_CSS}</head><body><div class="auth-wrap"><div class="martins-login-header"><strong>Martins Login</strong><span>Claims</span></div><div class="martins-auth-brand"><img src="/static/martins_logo.png" alt="Martins logo"><strong>Martins System</strong><span>Claims</span></div>{flashes}<div class="auth-body"><h1>{title}</h1>{body_html}</div></div></body></html>'''
+    flashes = ''.join([f'<div class="flash {cat}">{msg}</div>' for cat, msg in get_flashed_messages_with_categories_safe()])
+    module_name = 'Franchise Claims Analytics System'
+    favicon = url_for('static', filename='martins_logo.png')
+    return f'''<!doctype html><html><head><title>{title} - Martins System</title><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="{favicon}"><link rel="apple-touch-icon" href="{favicon}">{AUTH_PAGE_CSS}</head><body><main class="auth-page"><div class="auth-wrap"><div class="auth-header"><h1>Martins Login</h1><p>{module_name}</p></div><div class="auth-body"><img class="auth-logo" src="{favicon}" alt="Martins logo"><h2 class="brand-name">Martins System</h2><p class="module-name">{module_name}</p>{flashes}{body_html}</div></div></main></body></html>'''
 
 
 def build_external_url(endpoint, **values):
@@ -5013,7 +5015,6 @@ def login():
             flash('Logged in successfully.', 'success')
             return redirect(request.args.get('next') or url_for('dashboard'))
     body = """
-    <p class="muted">Sign in to the Martins System claims module.</p>
     <form method="post">
       <div class="field"><label>Email</label><input name="email" type="email" required autofocus></div>
       <div class="field"><label>Password</label><input name="password" type="password" required></div>
@@ -5022,7 +5023,7 @@ def login():
     <p class="muted"><a class="link" href="/forgot_password">Forgot password?</a></p>
     <p class="muted">No account yet? <a class="link" href="/register">Register here</a></p>
     """
-    return render_auth_page('Login', body)
+    return render_auth_page('Martins Login', body)
 
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
@@ -6472,7 +6473,7 @@ def admin_prepare_client_map_locations():
     <div class='card' style='padding:14px;margin:14px 0'>
       <b>Status:</b> <span id='prepStatus'>Ready</span><br>
       <b>Last batch:</b> <span id='lastBatch'>None yet</span>
-      <div style='height:14px;background:#d3d3d3;border-radius:8px;overflow:hidden;margin-top:10px'><div id='prepBar' style='height:14px;background:#696969;width:0%'></div></div>
+      <div style='height:14px;background:#f3eff9;border-radius:8px;overflow:hidden;margin-top:10px'><div id='prepBar' style='height:14px;background:#6B4AA0;width:0%'></div></div>
     </div>
     <table><tr><th>Metric</th><th>Value</th></tr>
       <tr><td>Selected</td><td id='mSelected'>{_esc(summary.get('selected'))}</td></tr>
@@ -7952,7 +7953,7 @@ def _format_excel_sheet(writer, sheet_name, df):
     """Autofit, freeze, filter and format exported sheets."""
     workbook = writer.book
     ws = writer.sheets[sheet_name]
-    header_fmt = workbook.add_format({'bold': True, 'bg_color': '#111827', 'font_color': '#FFFFFF', 'border': 1})
+    header_fmt = workbook.add_format({'bold': True, 'bg_color': '#6B4AA0', 'font_color': '#FFFFFF', 'border': 1})
     money_fmt = workbook.add_format({'num_format': 'R#,##0.00'})
     pct_fmt = workbook.add_format({'num_format': '0.00%'})
     int_fmt = workbook.add_format({'num_format': '#,##0'})
@@ -8038,7 +8039,7 @@ def _pdf_table(data, page_width, font_size=5.4, first_col_weight=1.35):
         font_size = min(font_size, 5.0)
     t = Table(data, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#111827')),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#6B4AA0')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
         ('GRID', (0,0), (-1,-1), 0.2, colors.lightgrey),
@@ -8107,7 +8108,7 @@ def _add_pdf_cover(story, styles, subtitle, period_text=''):
 def _add_excel_cover(writer, report_name, period_text=''):
     wb = writer.book
     cover = wb.add_worksheet('Cover')
-    title_fmt = wb.add_format({'bold': True, 'font_size': 22, 'font_color': '#111827'})
+    title_fmt = wb.add_format({'bold': True, 'font_size': 22, 'font_color': '#18202a'})
     sub_fmt = wb.add_format({'bold': True, 'font_size': 16, 'font_color': '#374151'})
     text_fmt = wb.add_format({'font_size': 11})
     cover.set_column('A:A', 24)

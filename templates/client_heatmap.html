@@ -4,23 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Client Heatmap</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='martins_logo.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='martins_logo.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='martins-20260802') }}">
   <style>
-    :root { --md-ink:#333333; --md-bg:#d3d3d3; --md-card:#f7f7f7; --md-line:#c0c0c0; --md-accent:#696969; --md-muted:#808080; }
+    :root { --md-ink:#18202a; --md-bg:#f7f8fb; --md-card:#ffffff; --md-line:#dce2e8; --md-accent:#6B4AA0; --md-muted:#64707d; }
     body { background:var(--md-bg); color:var(--md-ink); }
     .heatmap-page { max-width:1400px; margin:14px auto; padding:0 14px; }
-    .heatmap-header { background:#fff; border:1px solid var(--md-line); border-radius:18px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; box-shadow:0 10px 22px rgba(25,36,71,.07); }
+    .heatmap-header { background:#fff; border:1px solid var(--md-line); border-radius:12px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; box-shadow:0 10px 26px rgba(24,32,42,.08); }
     .heatmap-header h1 { margin:0; font-size:20px; }
-    .heatmap-header p { margin:4px 0 0; color:#696969; font-size:12px; }
+    .heatmap-header p { margin:4px 0 0; color:#64707d; font-size:12px; }
     .heatmap-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
-    .heatmap-actions a, .heatmap-actions button { background:#696969; color:#fff; border:0; border-radius:10px; padding:9px 12px; font-weight:800; text-decoration:none; cursor:pointer; }
-    .heatmap-actions button.secondary, .heatmap-actions a.secondary { background:#a9a9a9; color:#222; }
-    .heatmap-actions select { border:1px solid var(--md-line); border-radius:10px; padding:9px 10px; font-weight:800; background:#fff; min-width:320px; }
-    .heatmap-shell { background:#fff; border:1px solid var(--md-line); border-radius:18px; padding:12px; box-shadow:0 10px 22px rgba(25,36,71,.07); }
+    .heatmap-actions a, .heatmap-actions button { background:#6B4AA0; color:#fff; border:0; border-radius:10px; padding:9px 12px; font-weight:800; text-decoration:none; cursor:pointer; }
+    .heatmap-actions button.secondary, .heatmap-actions a.secondary { background:#8f73bd; color:#fff; }
+    .heatmap-actions select { border:1px solid var(--md-line); border-radius:6px; padding:9px 10px; font-weight:800; background:#fff; min-width:320px; }
+    .heatmap-shell { background:#fff; border:1px solid var(--md-line); border-radius:12px; padding:12px; box-shadow:0 10px 26px rgba(24,32,42,.08); }
     #clientHeatmap { width:100%; height:calc(100vh - 220px); min-height:530px; border-radius:14px; overflow:hidden; background:#eef2f7; }
     .heatmap-status { margin-top:8px; color:#333; font-size:12px; background:#fff; border:1px solid #d0d0d0; border-radius:10px; padding:8px 10px; }
-    .progress-wrap {height:14px;background:#d3d3d3;border-radius:99px;overflow:hidden;margin:8px 0 4px;border:1px solid #c0c0c0}
-    .progress-bar {height:100%;width:0%;background:#696969;transition:width .2s ease}
+    .progress-wrap {height:14px;background:#f3eff9;border-radius:99px;overflow:hidden;margin:8px 0 4px;border:1px solid #dce2e8}
+    .progress-bar {height:100%;width:0%;background:#6B4AA0;transition:width .2s ease}
     .map-debug { font-family:Arial,sans-serif; background:rgba(255,255,255,.96); padding:8px 10px; border-radius:8px; border:1px solid #ccc; font-size:12px; max-width:560px; margin:10px; }
     @media (max-width:800px){ .heatmap-header{align-items:flex-start; flex-direction:column;} #clientHeatmap{height:70vh; min-height:460px;} }
   </style>
