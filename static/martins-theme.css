@@ -308,3 +308,138 @@ button,
   font-family: Arial, Helvetica, sans-serif !important;
   font-weight: 700 !important;
 }
+
+/* Login pages: Claims-style canonical layout */
+.flash-stack.auth-flash-stack,
+.main--auth .flashwrap,
+.app-shell--auth .flashwrap,
+.main--auth .messages,
+.app-shell--auth .messages,
+.auth-shell .flashwrap,
+.auth-shell .messages,
+.martins-login-card .alert:not(.alert-danger):not(.danger),
+.martins-login-card .flash:not(.danger) {
+  display: none !important;
+}
+
+.auth-shell,
+.center-page,
+.main--auth,
+.app-shell--auth,
+body.bg-light {
+  min-height: 100vh !important;
+  display: grid !important;
+  align-items: start !important;
+  justify-items: center !important;
+  padding: 0 !important;
+  background: #f7f8fb !important;
+}
+
+.martins-login-card,
+.auth-wrap > .auth-card,
+.center-page .login-card,
+.main--auth .content > .card,
+.container .card.shadow {
+  width: min(1400px, calc(100vw - 32px)) !important;
+  max-width: 1400px !important;
+  min-height: 0 !important;
+  margin: 76px auto !important;
+  padding: 0 !important;
+  border: 1px solid #dde3ea !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: 0 14px 34px rgba(16,24,40,.14) !important;
+  overflow: hidden !important;
+}
+
+.martins-login-header,
+.card-header.martins-login-header {
+  width: 100% !important;
+  min-height: 74px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  gap: 3px !important;
+  padding: 16px 24px !important;
+  margin: 0 !important;
+  background: #6B4AA0 !important;
+  color: #fff !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  text-align: left !important;
+}
+
+.martins-login-header strong {
+  display: block !important;
+  color: #fff !important;
+  font-size: 20px !important;
+  line-height: 1.15 !important;
+  margin: 0 !important;
+}
+
+.martins-login-header span {
+  display: block !important;
+  color: rgba(255,255,255,.78) !important;
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+}
+
+.martins-auth-brand {
+  width: 100% !important;
+  display: grid !important;
+  place-items: center !important;
+  gap: 8px !important;
+  padding: 44px 24px 32px !important;
+  text-align: center !important;
+}
+
+.martins-auth-brand img,
+.login-logo,
+.auth-branding__logo {
+  width: 220px !important;
+  height: 100px !important;
+  max-width: 220px !important;
+  max-height: 100px !important;
+  object-fit: contain !important;
+  margin: 0 auto !important;
+}
+
+.martins-login-body,
+.card-body,
+.auth-panel,
+.login-card form,
+.main--auth .card form,
+.auth-body {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 34px 40px 44px !important;
+}
+
+.martins-login-body h1,
+.auth-body h1,
+.main--auth .card h1 {
+  margin: 0 0 24px !important;
+  font-size: 30px !important;
+}
+
+.martins-login-card input,
+.auth-panel input,
+.login-card input,
+.main--auth .card input,
+.card-body input,
+.auth-body input {
+  width: 100% !important;
+  min-height: 52px !important;
+}
+
+.martins-login-card button,
+.martins-login-card .btn,
+.auth-panel button,
+.login-card button,
+.main--auth .card button,
+.auth-body .btn {
+  min-height: 52px !important;
+}

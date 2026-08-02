@@ -3344,7 +3344,7 @@ def get_flashed_messages_with_categories_safe():
 
 
 def render_auth_page(title, body_html):
-    flashes = ''.join([f'<div class="flash {cat}">{msg}</div>' for cat, msg in get_flashed_messages_with_categories_safe()])
+    flashes = ''
     return f'''<!doctype html><html><head><title>{title}</title><meta name="viewport" content="width=device-width, initial-scale=1">{AUTH_PAGE_CSS}</head><body><div class="auth-wrap"><div class="martins-login-header"><strong>Martins Login</strong><span>Claims</span></div><div class="martins-auth-brand"><img src="/static/martins_logo.png" alt="Martins logo"><strong>Martins System</strong><span>Claims</span></div>{flashes}<div class="auth-body"><h1>{title}</h1>{body_html}</div></div></body></html>'''
 
 
