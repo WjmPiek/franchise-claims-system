@@ -31,6 +31,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from werkzeug.security import generate_password_hash, check_password_hash
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.utils import secure_filename
 
 try:
@@ -4544,7 +4545,45 @@ def pct(value):
 # -----------------------------------------------------------------------------
 # Authentication and user management
 # -----------------------------------------------------------------------------
-PUBLIC_ENDPOINTS = {'login', 'register', 'logout', 'forgot_password', 'reset_password', 'service_worker', 'static', 'healthz', 'cron_daily_backup'}
+
+
+CLAIMS_LAUNCH_SALT = "martins-claims-launch-v1"
+
+def _claims_launch_serializer():
+    secret = os.getenv("CLAIMS_LAUNCH_SECRET", "").strip()
+    if not secret:
+        raise RuntimeError("Claims launch is not configured.")
+    return URLSafeTimedSerializer(secret, salt=CLAIMS_LAUNCH_SALT)
+
+def _normalise_launch_franchises(value):
+    if not isinstance(value, list):
+        return []
+    return sorted({str(item).strip() for item in value if str(item).strip()})
+
+def _upsert_unified_launch_user(payload):
+    email = str(payload.get("email") or "").strip().lower()
+    name = str(payload.get("name") or email).strip()
+    if not email:
+        raise ValueError("Missing Martins account email.")
+    is_admin = bool(payload.get("is_admin"))
+    role = "admin" if is_admin else "franchise_user"
+    franchise_names = _normalise_launch_franchises(payload.get("franchises"))
+    engine = get_db_engine()
+    if engine is None:
+        raise RuntimeError("Claims database is unavailable.")
+    with engine.begin() as conn:
+        existing = conn.execute(text("SELECT id FROM app_users WHERE LOWER(TRIM(email)) = :email"), {"email": email}).mappings().first()
+        if existing:
+            user_id = existing["id"]
+            conn.execute(text("UPDATE app_users SET name=:name, role=:role, is_active=true, is_super_admin=:is_admin WHERE id=:id"), {"name": name, "role": role, "is_admin": is_admin, "id": user_id})
+        else:
+            user_id = conn.execute(text("INSERT INTO app_users (name, email, password_hash, role, is_active, is_super_admin) VALUES (:name, :email, :password_hash, :role, true, :is_admin) RETURNING id"), {"name": name, "email": email, "password_hash": generate_password_hash(os.urandom(24).hex()), "role": role, "is_admin": is_admin}).scalar_one()
+        conn.execute(text("DELETE FROM app_user_franchise_access WHERE user_id=:user_id"), {"user_id": user_id})
+        for franchise_name in franchise_names:
+            conn.execute(text("INSERT INTO app_user_franchise_access (user_id, franchise_name) VALUES (:user_id, :franchise_name) ON CONFLICT DO NOTHING"), {"user_id": user_id, "franchise_name": franchise_name})
+    return user_id
+
+PUBLIC_ENDPOINTS = {'login', 'register', 'logout', 'forgot_password', 'reset_password', 'service_worker', 'static', 'healthz', 'cron_daily_backup', 'unified_launch'}
 ADMIN_ENDPOINTS = {'database_health', 'repair_database', 'admin_users', 'admin_update_user', 'admin_delete_user', 'admin_audit_log', 'admin_backup_database', 'admin_backups', 'admin_create_backup', 'admin_download_backup', 'admin_system_health', 'admin_errors', 'admin_deployment_check', 'admin_launch_center', 'admin_cron_log', 'admin_prepare_client_map_locations', 'admin_prepare_client_map_batch', 'admin_claims_rules', 'admin_claims_rules_save', 'admin_claims_rules_seed', 'admin_map_cache_manager', 'admin_refresh_policy_age_notifications', 'admin_parlour_fee_settings'}
 
 
@@ -5185,11 +5224,49 @@ def register():
     return render_auth_page('Register', body)
 
 
+
+
+@app.route('/auth/launch')
+def unified_launch():
+    token = (request.args.get('token') or '').strip()
+    if not token:
+        flash('Open Claims from Martins System to continue.', 'danger')
+        return redirect(url_for('login'))
+    try:
+        max_age = int(os.getenv('CLAIMS_LAUNCH_TOKEN_MAX_AGE', '90'))
+        payload = _claims_launch_serializer().loads(token, max_age=max_age)
+    except SignatureExpired:
+        flash('The Martins launch link has expired. Please open Claims again.', 'warning')
+        return redirect(url_for('login'))
+    except (BadSignature, RuntimeError):
+        flash('The Martins launch link could not be verified.', 'danger')
+        return redirect(url_for('login'))
+    if not isinstance(payload, dict) or payload.get('module') != 'claims':
+        flash('The Martins launch link is invalid.', 'danger')
+        return redirect(url_for('login'))
+    try:
+        user_id = _upsert_unified_launch_user(payload)
+    except Exception:
+        app.logger.exception('Unable to create Claims launch session')
+        flash('Unable to open the Claims workspace. Please contact the administrator.', 'danger')
+        return redirect(url_for('login'))
+    session.clear()
+    session['user_id'] = user_id
+    session['martins_unified_launch'] = True
+    session.permanent = True
+    record_login_success(user_id)
+    return redirect(url_for('dashboard'))
+
 @app.route('/logout')
 def logout():
     if getattr(g, 'user', None):
         log_audit('logout', f"User logged out: {g.user.get('email')}")
+    return_to_main = bool(session.get('martins_unified_launch'))
     session.clear()
+    if return_to_main:
+        main_url = os.getenv('MARTINS_MAIN_APP_URL', '').strip().rstrip('/')
+        if main_url:
+            return redirect(main_url + '/')
     flash('Logged out.', 'success')
     return redirect(url_for('login'))
 
