@@ -6987,6 +6987,136 @@ def api_client_map_locations_page():
         'locations': locations,
     })
 
+def _client_map_grid_size(zoom):
+    """Return a latitude/longitude grid size suitable for the visible zoom."""
+    zoom = max(3, min(int(zoom or 5), 18))
+    if zoom <= 5:
+        return 0.50
+    if zoom == 6:
+        return 0.25
+    if zoom == 7:
+        return 0.12
+    if zoom == 8:
+        return 0.06
+    if zoom == 9:
+        return 0.03
+    if zoom == 10:
+        return 0.015
+    if zoom == 11:
+        return 0.008
+    return 0.004
+
+
+@app.route('/api/client-map-viewport')
+def api_client_map_viewport():
+    """Return weighted cells, or close-zoom pins, inside the visible map."""
+    engine = get_db_engine()
+    if engine is None:
+        return jsonify({'ok': False, 'error': 'Database not connected.'}), 500
+
+    selected = (request.args.get('franchise') or 'All').strip() or 'All'
+    zoom = max(3, min(int(safe_float(request.args.get('zoom'), 5)), 18))
+    south = max(-36.5, min(-20.0, safe_float(request.args.get('south'), -36.0)))
+    north = max(-36.5, min(-20.0, safe_float(request.args.get('north'), -21.0)))
+    west = max(15.0, min(34.5, safe_float(request.args.get('west'), 15.5)))
+    east = max(15.0, min(34.5, safe_float(request.args.get('east'), 34.0)))
+    if south > north:
+        south, north = north, south
+    if west > east:
+        west, east = east, west
+    max_items = max(100, min(int(safe_float(request.args.get('limit'), 1500)), 2500))
+    detail = selected != 'All' and zoom >= 12
+
+    params = {
+        'south': south, 'north': north, 'west': west, 'east': east,
+        'limit': max_items,
+    }
+    where = """
+        lat IS NOT NULL AND lng IS NOT NULL
+        AND lat BETWEEN :south AND :north
+        AND lng BETWEEN :west AND :east
+    """
+    if selected != 'All':
+        params['selected_key'] = _map_franchise_key(selected)
+        where += " AND franchise_key = :selected_key"
+
+    try:
+        with engine.begin() as conn:
+            if detail:
+                rows = conn.execute(text(f"""
+                    SELECT id, franchise_name AS franchise, display_address AS address,
+                           client_name AS client, policy_number, client_count AS count,
+                           lat, lng, COUNT(*) OVER() AS total_groups,
+                           COALESCE(SUM(client_count) OVER(), 0) AS clients_total
+                    FROM app_client_map_points
+                    WHERE {where}
+                    ORDER BY client_count DESC, id
+                    LIMIT :limit
+                """), params).mappings().all()
+                kind = 'points'
+                grid_size = 0
+            else:
+                grid_size = _client_map_grid_size(zoom)
+                params['grid'] = grid_size
+                rows = conn.execute(text(f"""
+                    WITH cells AS (
+                        SELECT
+                            FLOOR(lat / CAST(:grid AS NUMERIC)) AS grid_y,
+                            FLOOR(lng / CAST(:grid AS NUMERIC)) AS grid_x,
+                            SUM(COALESCE(client_count, 1))::BIGINT AS client_count,
+                            COUNT(*)::BIGINT AS location_count,
+                            SUM(lat * COALESCE(client_count, 1)) /
+                                NULLIF(SUM(COALESCE(client_count, 1)), 0) AS cell_lat,
+                            SUM(lng * COALESCE(client_count, 1)) /
+                                NULLIF(SUM(COALESCE(client_count, 1)), 0) AS cell_lng
+                        FROM app_client_map_points
+                        WHERE {where}
+                        GROUP BY grid_y, grid_x
+                    )
+                    SELECT cell_lat AS lat, cell_lng AS lng, client_count AS count,
+                           location_count, COUNT(*) OVER() AS total_groups,
+                           COALESCE(SUM(client_count) OVER(), 0) AS clients_total
+                    FROM cells
+                    ORDER BY client_count DESC, grid_y, grid_x
+                    LIMIT :limit
+                """), params).mappings().all()
+                kind = 'cells'
+    except Exception as exc:
+        print(f'Could not query client map viewport: {exc}')
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+    total_groups = int(rows[0].get('total_groups') or 0) if rows else 0
+    clients_total = int(rows[0].get('clients_total') or 0) if rows else 0
+    locations = []
+    for raw in rows:
+        row = dict(raw)
+        row.pop('total_groups', None)
+        row.pop('clients_total', None)
+        if row.get('lat') is not None:
+            row['lat'] = float(row['lat'])
+        if row.get('lng') is not None:
+            row['lng'] = float(row['lng'])
+        row['count'] = int(row.get('count') or 0)
+        if 'location_count' in row:
+            row['location_count'] = int(row.get('location_count') or 0)
+        locations.append(row)
+
+    response = jsonify({
+        'ok': True,
+        'selected': selected,
+        'kind': kind,
+        'zoom': zoom,
+        'grid_size': grid_size,
+        'total_groups': total_groups,
+        'clients_total': clients_total,
+        'truncated': total_groups > len(locations),
+        'count': len(locations),
+        'locations': locations,
+    })
+    response.headers['Cache-Control'] = 'private, max-age=30'
+    return response
+
+
 @app.route('/api/client-map-points-summary')
 def api_client_map_points_summary():
     selected = (request.args.get('franchise') or 'All').strip() or 'All'

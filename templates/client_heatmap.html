@@ -63,29 +63,14 @@
   <script>
     (function(){
       var map = null, infoWindow = null;
-      var heatCircles = [], pinMarkers = [], franchiseMarkers = [];
-      var currentMode = 'both';
+      var heatCircles = [], pinMarkers = [], visibleRows = [];
       var selected = window.MD_HEATMAP_SELECTED || 'All';
+      var currentMode = selected === 'All' ? 'heat' : 'pins';
       var SA_CENTER = {lat:-30.5595, lng:22.9375};
-      var totalGroups = 0, loadedGroups = 0, mappedGroups = 0, mappedClients = 0;
-      var prepStartTime = 0, prepLastCached = 0;
+      var requestSerial = 0, loadTimer = null, initialFitDone = false;
+      var lastPayload = {count:0, clients_total:0, total_groups:0, grid_size:0, kind:'cells'};
       function byId(id){ return document.getElementById(id); }
       function status(message){ var el = byId('clientHeatmapStatus'); if(el){ el.textContent = message; } }
-      function updateProgress(){
-        var pct = totalGroups ? Math.min(100, Math.round(loadedGroups / totalGroups * 100)) : 0;
-        if(byId('clientMapProgressBar')) byId('clientMapProgressBar').style.width = pct + '%';
-        if(byId('progressTitle')) byId('progressTitle').textContent = 'Loading client coordinates: ' + pct + '%';
-        status('Loaded address groups ' + loadedGroups.toLocaleString() + ' / ' + (totalGroups || 0).toLocaleString() + ' | Plotted groups ' + mappedGroups.toLocaleString() + ' | Clients represented ' + mappedClients.toLocaleString() + ' | Mode ' + currentMode.toUpperCase());
-      }
-      function setPrepProgress(summary, phase){
-        var total = Number(summary.groups_total || 0), cached = Number(summary.groups_cached || 0), missing = Number(summary.groups_missing || 0);
-        var pct = total ? Math.min(100, Math.round(cached / total * 100)) : 100;
-        if(byId('clientMapProgressBar')) byId('clientMapProgressBar').style.width = pct + '%';
-        if(byId('progressTitle')) byId('progressTitle').textContent = (phase || 'Preparing client coordinates') + ': ' + pct + '%';
-        var elapsed = prepStartTime ? Math.max(1, (Date.now() - prepStartTime) / 1000) : 1;
-        var speed = Math.max(0, Math.round((cached - prepLastCached) / elapsed));
-        status('Preparing coordinates ' + cached.toLocaleString() + ' / ' + total.toLocaleString() + ' address groups | Missing ' + missing.toLocaleString() + ' | Speed ' + speed.toLocaleString() + ' groups/sec | Clients represented ' + Number(summary.clients_total || 0).toLocaleString());
-      }
       function esc(v){ return String(v || '').replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]); }); }
       function setButtonClasses(mode){
         currentMode = mode || currentMode;
@@ -97,102 +82,111 @@
       window.MDSetClientMapMode = function(mode){
         if(!map){ return; }
         setButtonClasses(mode);
-        var showHeat = currentMode === 'heat' || currentMode === 'both';
-        var showPins = currentMode === 'pins' || currentMode === 'both';
-        heatCircles.forEach(function(c){ c.setMap(showHeat ? map : null); });
-        pinMarkers.forEach(function(m){ m.setMap(showPins ? map : null); });
-        updateProgress();
+        renderVisibleRows();
       };
-      function addDebug(){
+      function updateStatus(){
+        var represented = visibleRows.reduce(function(sum, row){ return sum + Math.max(0, Number(row.count || 0)); }, 0);
+        var truncated = lastPayload.truncated ? ' | Showing the busiest '+visibleRows.length.toLocaleString()+' cells' : '';
+        if(byId('clientMapProgressBar')) byId('clientMapProgressBar').style.width = '100%';
+        if(byId('progressTitle')) byId('progressTitle').textContent = 'Client map ready';
+        status('Visible map cells ' + visibleRows.length.toLocaleString() + ' | Clients represented ' + represented.toLocaleString() + ' | Mode ' + currentMode.toUpperCase() + truncated);
         var div = document.createElement('div');
         div.className = 'map-debug';
-        div.innerHTML = '<b>Map status</b><br>Selected: '+esc(selected)+'<br>Loaded groups: '+loadedGroups.toLocaleString()+' / '+(totalGroups||0).toLocaleString()+'<br>Plotted groups: '+mappedGroups.toLocaleString()+'<br>Clients represented: '+mappedClients.toLocaleString();
+        div.innerHTML = '<b>Map status</b><br>Selected: '+esc(selected)+'<br>Visible cells: '+visibleRows.length.toLocaleString()+'<br>Clients represented: '+represented.toLocaleString();
         map.controls[google.maps.ControlPosition.TOP_LEFT].clear();
         map.controls[google.maps.ControlPosition.TOP_LEFT].push(div);
       }
-      function makePoint(row, bounds){
-        var lat = Number(row.lat), lng = Number(row.lng);
-        if(!isFinite(lat) || !isFinite(lng)){ return false; }
-        if(lat < -35.8 || lat > -21 || lng < 16 || lng > 33.8){ return false; }
-        var count = Math.max(1, Number(row.count || 1));
-        var pos = {lat:lat, lng:lng};
-        var radius = Math.max(220, Math.min(6500, 240 + Math.sqrt(count) * 130));
-        var circle = new google.maps.Circle({center: pos, radius: radius, strokeColor:'#b00000', strokeOpacity:.45, strokeWeight:1, fillColor:'#ff2a00', fillOpacity:.35, clickable:true, map:(currentMode==='heat'||currentMode==='both')?map:null});
-        circle.addListener('click', function(){ infoWindow.setContent('<strong>'+esc(row.franchise)+'</strong><br>'+esc(row.client || 'Client density')+'<br>'+esc(row.address || row.locality_address)+'<br>Clients represented: '+count); infoWindow.setPosition(pos); infoWindow.open(map); });
-        var marker = new google.maps.Marker({position: pos, map:(currentMode==='pins'||currentMode==='both')?map:null, title:(row.client || row.franchise || 'Client') + ' - ' + (row.address || ''), label: count > 1 ? {text:String(Math.min(count,999)), color:'#fff', fontWeight:'700'} : undefined});
-        marker.addListener('click', function(){ infoWindow.setContent('<strong>'+esc(row.franchise)+'</strong><br>'+esc(row.client || 'Client location')+'<br>'+esc(row.address || row.locality_address)+'<br>Clients represented: '+count); infoWindow.open(map, marker); });
-        heatCircles.push(circle); pinMarkers.push(marker); bounds.extend(pos); return true;
+      function clearOverlays(){
+        heatCircles.forEach(function(c){ c.setMap(null); });
+        pinMarkers.forEach(function(m){ m.setMap(null); });
+        heatCircles = []; pinMarkers = [];
       }
-      async function prepareClientCoordinates(){
-        prepStartTime = Date.now();
-        prepLastCached = 0;
+      function pointContent(row){
+        var count = Math.max(1, Number(row.count || 1));
+        var heading = row.franchise || (lastPayload.kind === 'cells' ? 'Client density area' : selected);
+        var detail = row.address ? '<br>'+esc(row.address) : '';
+        var grouped = row.location_count ? '<br>Address groups: '+Number(row.location_count).toLocaleString() : '';
+        return '<strong>'+esc(heading)+'</strong>'+detail+grouped+'<br>Clients represented: '+count.toLocaleString();
+      }
+      function addCircle(row, pos){
+        var count = Math.max(1, Number(row.count || 1));
+        var gridRadius = Math.max(0, Number(lastPayload.grid_size || 0)) * 45000;
+        var radius = Math.max(300, Math.min(30000, gridRadius + Math.sqrt(count) * 80));
+        var circle = new google.maps.Circle({center:pos, radius:radius, strokeColor:'#b00000', strokeOpacity:.35, strokeWeight:1, fillColor:'#ff2a00', fillOpacity:.34, clickable:true, map:map});
+        circle.addListener('click', function(){ infoWindow.setContent(pointContent(row)); infoWindow.setPosition(pos); infoWindow.open(map); });
+        heatCircles.push(circle);
+      }
+      function addMarker(row, pos){
+        var count = Math.max(1, Number(row.count || 1));
+        var marker = new google.maps.Marker({position:pos, map:map, title:(row.client || row.franchise || 'Client location'), label:{text:String(Math.min(count,9999)), color:'#fff', fontWeight:'700'}});
+        marker.addListener('click', function(){ infoWindow.setContent(pointContent(row)); infoWindow.open(map, marker); });
+        pinMarkers.push(marker);
+      }
+      function renderVisibleRows(){
+        if(!map){ return; }
+        clearOverlays();
+        var showHeat = currentMode === 'heat' || currentMode === 'both';
+        var showPins = currentMode === 'pins' || currentMode === 'both';
+        visibleRows.forEach(function(row){
+          var lat = Number(row.lat), lng = Number(row.lng);
+          if(!isFinite(lat) || !isFinite(lng) || lat < -35.8 || lat > -21 || lng < 16 || lng > 33.8){ return; }
+          var pos = {lat:lat, lng:lng};
+          if(showHeat){ addCircle(row, pos); }
+          if(showPins){ addMarker(row, pos); }
+        });
+        updateStatus();
+      }
+      function fitSelectedOnce(){
+        if(initialFitDone || selected === 'All' || !visibleRows.length){ return; }
+        initialFitDone = true;
+        var bounds = new google.maps.LatLngBounds();
+        visibleRows.forEach(function(row){
+          var lat=Number(row.lat), lng=Number(row.lng);
+          if(isFinite(lat) && isFinite(lng)){ bounds.extend({lat:lat,lng:lng}); }
+        });
+        if(!bounds.isEmpty()){ map.fitBounds(bounds); if(map.getZoom() > 11){ map.setZoom(11); } }
+      }
+      async function loadViewport(){
+        if(!map || !map.getBounds()){ return; }
+        var serial = ++requestSerial;
+        var b = map.getBounds(), ne = b.getNorthEast(), sw = b.getSouthWest();
         var params = new URLSearchParams();
         params.set('franchise', selected || 'All');
-        var summaryResp = await fetch('/api/client-map-cache-summary?' + params.toString(), {cache:'no-store'});
-        var summaryPayload = await summaryResp.json();
-        if(!summaryPayload.ok){ throw new Error(summaryPayload.error || 'Could not read map preparation status'); }
-        var summary = summaryPayload.summary || summaryPayload;
-        prepLastCached = Number(summary.groups_cached || 0);
-        setPrepProgress(summary, 'Checking prepared coordinates');
-        var guard = 0;
-        while(Number(summary.groups_missing || 0) > 0 && guard < 5000){
-          guard += 1;
-          var beforeCached = Number(summary.groups_cached || 0);
-          var batchResp = await fetch('/admin/prepare_client_map_locations/batch', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({franchise:selected || 'All', batch_size:10})
-          });
-          var batchPayload = await batchResp.json();
-          if(!batchPayload.ok){ throw new Error(batchPayload.error || 'Coordinate preparation failed'); }
-          summary = batchPayload.summary || summary;
-          setPrepProgress(summary, 'Preparing client coordinates');
-          if(Number(summary.groups_missing || 0) <= 0){ break; }
-          if(Number(batchPayload.prepared || 0) === 0 && Number(batchPayload.skipped_cached || 0) === 0 && Number(batchPayload.failed || 0) === 0){ break; }
-          if(Number(summary.groups_cached || 0) === beforeCached && Number(batchPayload.failed || 0) > 0){ await new Promise(function(resolve){ setTimeout(resolve, 1200); }); }
-          else { await new Promise(function(resolve){ setTimeout(resolve, 250); }); }
-        }
-        return summary;
-      }
-      async function loadClientPages(){
-        var offset = 0, limit = 500, bounds = new google.maps.LatLngBounds();
-        loadedGroups = 0; mappedGroups = 0; mappedClients = 0; totalGroups = 0;
-        updateProgress();
-        while(true){
-          var params = new URLSearchParams();
-          params.set('franchise', selected || 'All');
-          params.set('mode', selected === 'All' ? 'heat' : 'pins');
-          params.set('offset', offset); params.set('limit', limit);
-          var resp = await fetch('/api/client-map-locations-page?' + params.toString(), {cache:'no-store'});
+        params.set('zoom', String(Math.round(map.getZoom() || 5)));
+        params.set('south', String(sw.lat())); params.set('north', String(ne.lat()));
+        params.set('west', String(sw.lng())); params.set('east', String(ne.lng()));
+        params.set('limit', '1500');
+        if(byId('progressTitle')) byId('progressTitle').textContent = 'Loading visible client density...';
+        status('Loading only the clients in the visible map area...');
+        try {
+          var resp = await fetch('/api/client-map-viewport?' + params.toString());
           var payload = await resp.json();
-          totalGroups = Number(payload.total_groups || totalGroups || 0);
-          loadedGroups = Math.min(totalGroups || (offset + Number(payload.raw_count || 0)), offset + Number(payload.raw_count || 0));
-          (payload.locations || []).forEach(function(row){ if(makePoint(row, bounds)){ mappedGroups += 1; mappedClients += Math.max(1, Number(row.count || 1)); }});
-          addDebug(); updateProgress(); window.MDSetClientMapMode(currentMode);
-          if(payload.done || payload.next_offset === null || payload.next_offset === undefined){ break; }
-          offset = Number(payload.next_offset || 0);
-          await new Promise(function(resolve){ setTimeout(resolve, 80); });
+          if(serial !== requestSerial){ return; }
+          if(!resp.ok || !payload.ok){ throw new Error(payload.error || 'Could not load client map'); }
+          lastPayload = payload;
+          visibleRows = payload.locations || [];
+          renderVisibleRows();
+          fitSelectedOnce();
+        } catch(err) {
+          if(serial === requestSerial){ status('Client map loading stopped: ' + err.message); }
         }
-        if(mappedGroups > 0 && !bounds.isEmpty()){ map.fitBounds(bounds); if(selected !== 'All' && map.getZoom() > 13){ map.setZoom(13); } }
-        else { map.setCenter(SA_CENTER); map.setZoom(selected === 'All' ? 5 : 8); }
-        if(byId('progressTitle')) byId('progressTitle').textContent = 'Client map loaded';
-        addDebug(); updateProgress();
+      }
+      function scheduleViewportLoad(){
+        if(loadTimer){ clearTimeout(loadTimer); }
+        loadTimer = setTimeout(loadViewport, 250);
       }
       window.initFullClientHeatmap = function(){
         var el = byId('clientHeatmap');
         if(!el || !window.google || !google.maps){ return; }
-        map = new google.maps.Map(el, {center:SA_CENTER, zoom:selected==='All'?5:8, mapTypeId:'roadmap', scrollwheel:true, gestureHandling:'greedy', fullscreenControl:true, streetViewControl:false, mapTypeControl:true});
+        map = new google.maps.Map(el, {center:SA_CENTER, zoom:5, mapTypeId:'roadmap', scrollwheel:true, gestureHandling:'greedy', fullscreenControl:true, streetViewControl:false, mapTypeControl:true});
         infoWindow = new google.maps.InfoWindow();
-        setButtonClasses('both');
-        status('Preparing saved client coordinates in batches...');
-        prepareClientCoordinates().then(function(){
-          status('Coordinates prepared. Loading saved client coordinates in batches...');
-          return loadClientPages();
-        }).catch(function(err){ status('Client map preparation/loading stopped: ' + err.message); });
+        setButtonClasses(currentMode);
+        status('Loading prepared client density for the visible area...');
+        map.addListener('idle', scheduleViewportLoad);
       };
     })();
   </script>
-  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=visualization&callback=initFullClientHeatmap"></script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initFullClientHeatmap"></script>
   {% else %}
   <script>document.getElementById('clientHeatmap').innerHTML='<iframe title="South Africa map" width="100%" height="100%" style="border:0" loading="lazy" src="https://www.google.com/maps?q=South%20Africa&output=embed"></iframe>'; document.getElementById('clientHeatmapStatus').textContent='GOOGLE_MAPS_API_KEY is not configured. Add it to .env and prepare client map locations.';</script>
   {% endif %}
