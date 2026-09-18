@@ -22,6 +22,7 @@
 <link rel="icon" type="image/x-icon" href="/static/brand/favicon.ico?v=20260918-brand" sizes="any">
 <link rel="icon" type="image/png" href="/static/brand/icon-192.png?v=20260918-brand" sizes="192x192">
 <link rel="apple-touch-icon" href="/static/brand/icon-180.png?v=20260918-brand" sizes="180x180">
+<link rel="stylesheet" href="/static/module-shell.css?v=20260918-shell">
 </head>
 <body class="claims-ui">
   <div class="container compact">
@@ -158,12 +159,11 @@
       {% set ek = ed.get('kpis', {}) %}
       <div class="claims-mobile-nav no-print"><strong>Claims</strong><button type="button" id="claims-menu" aria-controls="claims-sidebar" aria-expanded="false">Menu</button></div>
 <button type="button" class="claims-nav-backdrop no-print" aria-label="Close menu"></button>
-<div class="executive-shell">
-        <aside class="executive-sidebar no-print" id="claims-sidebar">
-          <div class="executive-brand">
+<div class="executive-shell ms-shell">
+        <aside class="executive-sidebar no-print ms-sidebar" id="claims-sidebar">
+          <div class="executive-brand ms-brand">
             <img class="martins-brand-logo" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
-            <h1>Martins System</h1>
-            <p>Claims</p>
+            <div class="ms-brand-copy"><strong class="ms-brand-title">Martin's Funerals</strong><span class="ms-brand-module">Claims</span></div>
           </div>
           <div class="side-tabs">
             <details class="side-group" open>
@@ -204,11 +204,11 @@
             </details>
           </div>
         </aside>
-        <main class="executive-main">
-          <header class="martins-module-topbar no-print">
-            <a class="martins-module-brand" href="https://martinssystem.co.za/">
+        <main class="executive-main ms-main">
+          <header class="martins-module-topbar no-print ms-topbar">
+            <a class="martins-module-brand ms-topbar-brand" href="https://martinssystem.co.za/">
               <img src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
-              <span>Martins System</span>
+              <span>Martin's Funerals System</span>
             </a>
             <div class="martins-module-account">
               <span>Logged in as</span>
