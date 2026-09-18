@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Martins System Â· Claims</title>
+  <title>Martins System · Claims</title>
   <meta name="description" content="Martins System claims module">
   <meta property="og:site_name" content="Martins System">
-  <meta property="og:title" content="Martins System Â· Claims">
+  <meta property="og:title" content="Martins System · Claims">
   <meta property="og:description" content="Martins System claims module">
   <meta property="og:type" content="website">
   <meta property="og:image" content="{{ url_for('static', filename='martins_logo.png', _external=True) }}">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Martins System Â· Claims">
+  <meta name="twitter:title" content="Martins System · Claims">
   <meta name="twitter:description" content="Martins System claims module">
   <meta name="twitter:image" content="{{ url_for('static', filename='martins_logo.png', _external=True) }}">
 
@@ -22,7 +22,7 @@
 <link rel="icon" type="image/x-icon" href="/static/brand/favicon.ico?v=20260918-brand" sizes="any">
 <link rel="icon" type="image/png" href="/static/brand/icon-192.png?v=20260918-brand" sizes="192x192">
 <link rel="apple-touch-icon" href="/static/brand/icon-180.png?v=20260918-brand" sizes="180x180">
-<link rel="stylesheet" href="/static/module-shell.css?v=20260918-stable-shell">
+<link rel="stylesheet" href="/static/module-shell.css?v=20260918-nav-parity">
 {% if workspace == 'home' %}
       <style>
         :root {
@@ -54,7 +54,7 @@
         .side-group { background:rgba(255,255,255,.17); border:1px solid rgba(255,255,255,.14); border-radius:12px; overflow:hidden; }
         .side-group summary { cursor:pointer; list-style:none; min-height:60px; padding:15px 16px; color:#fff; font-size:15px; line-height:1.15; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
         .side-group summary::-webkit-details-marker { display:none; }
-        .side-group summary:after { content:'â€º'; transform:rotate(90deg); color:rgba(255,255,255,.82); }
+        .side-group summary:after { content:'›'; transform:rotate(90deg); color:rgba(255,255,255,.82); }
         .side-group[open] summary:after { transform:rotate(-90deg); }
         .side-group a, .side-group span { display:block; padding:13px 20px; color:#101828; text-decoration:none; border-top:1px solid #e5e9f0; font-size:14px; line-height:1.25; background:#fff; }
         .side-group a { font-weight:700; }
@@ -170,41 +170,41 @@
           </div>
           <div class="side-tabs">
             <details class="side-group" open>
-              <summary>Executive Overview</summary>
-              <span>Premium, claims, loss ratio and status KPIs</span>
+              <summary><span class="ms-nav-icon" aria-hidden="true">O</span><span><strong>Executive Overview</strong><small>Premium, claims and status KPIs</small></span></summary><div class="ms-nav-submenu">
+
               <a href="{{ url_for('client_heatmap_page', franchise=selected) }}">Client heatmap</a>
               <a href="#topFranchises">Top franchise table</a>
-            </details>
+            </div></details>
             <details class="side-group">
-              <summary>Claims</summary>
+              <summary><span class="ms-nav-icon" aria-hidden="true">C</span><span><strong>Claims</strong><small>Claims workflow and reports</small></span></summary><div class="ms-nav-submenu">
               <a href="{{ url_for('claims_workflow') }}">Claims Workflow</a>
               <a href="{{ url_for('claims_workflow') }}">Claims Reports</a>
               <a href="{{ url_for('workspace_page', workspace='claims_reconciliation') }}">Claims Reconciliation</a>
               <a href="{{ url_for('workspace_page', workspace='claims_mapping') }}">Claims Mapping</a>
-            </details>
+            </div></details>
             <details class="side-group">
-              <summary>Analysis</summary>
+              <summary><span class="ms-nav-icon" aria-hidden="true">A</span><span><strong>Analysis</strong><small>Trends and comparisons</small></span></summary><div class="ms-nav-submenu">
               <a href="{{ url_for('workspace_page', workspace='claim_ratio') }}">Claim Ratio Analysis</a>
               <a href="{{ url_for('workspace_page', workspace='move_recommendations') }}">Move Recommendations</a>
               <a href="{{ url_for('workspace_page', workspace='franchise_money') }}">Franchise Money</a>
               <a href="{{ url_for('workspace_page', workspace='advanced_analytics') }}">Advanced Analytics</a>
-            </details>
+            </div></details>
             <details class="side-group">
-              <summary>Finance</summary>
+              <summary><span class="ms-nav-icon" aria-hidden="true">F</span><span><strong>Finance</strong><small>Commission and allocations</small></span></summary><div class="ms-nav-submenu">
               <a href="{{ url_for('workspace_page', workspace='commission_analysis') }}">Commission Analysis</a>
               <a href="{{ url_for('workspace_page', workspace='commission_business') }}">Commission Comparison</a>
               <a href="{{ url_for('workspace_page', workspace='underwriter_allocation') }}">Underwriter Allocation</a>
               <a href="{{ url_for('workspace_page', workspace='book_value') }}">Book Value Analysis</a>
               <a href="{{ url_for('workspace_page', workspace='scenario_comparison') }}">Scenario Comparison</a>
               <a href="#premiumParlourAnalysis">Premium / Parlour Fee Analysis</a>
-            </details>
+            </div></details>
             <details class="side-group">
-              <summary>Admin & Imports</summary>
+              <summary><span class="ms-nav-icon" aria-hidden="true">S</span><span><strong>Admin & Imports</strong><small>Settings and data imports</small></span></summary><div class="ms-nav-submenu">
               <a href="#importPanel">Import Excel</a>
               <a href="{{ url_for('workspace_page', workspace='franchise_configuration') }}">Franchise Configuration</a>
               {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_parlour_fee_settings') }}">Parlour Fee Settings</a>{% endif %}
               {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_users') }}">Manage Users</a><a href="{{ url_for('admin_claims_rules') }}">Claims Rules</a><a href="{{ url_for('admin_map_cache_manager') }}">Map Cache Manager</a><a href="{{ url_for('admin_prepare_client_map_locations') }}">Prepare Client Map</a><a href="{{ url_for('database_health') }}">Database Health</a>{% endif %}
-            </details>
+            </div></details>
           </div>
         </aside>
         <main class="executive-main ms-main">
@@ -224,7 +224,7 @@
           <div class="executive-topbar">
             <div>
               <h1>Martins System</h1>
-              <p>Claims Â· {{ ed.get('period_label','') }} Â· {{ 'All franchises' if selected == 'All' else selected }}</p>
+              <p>Claims · {{ ed.get('period_label','') }} · {{ 'All franchises' if selected == 'All' else selected }}</p>
             </div>
             <form method="get" action="{{ url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
               <input type="hidden" name="period_view" value="{{ period_view }}">
@@ -250,8 +250,8 @@
             <div class="exec-card span-3 hero-card"><span class="kpi-title">Premium Amount</span><strong class="kpi-value">{{ ek.get('premium_amount',0)|money }}</strong><div class="kpi-sub">Imported retail premium</div></div>
             <div class="exec-card span-3"><span class="kpi-title">Claim Amount</span><strong class="kpi-value">{{ ek.get('claim_amount',0)|money }}</strong><div class="kpi-sub">Paid/imported claims</div></div>
             <div class="exec-card span-3"><span class="kpi-title">No. of Claims</span><strong class="kpi-value">{{ ek.get('claim_count',0)|int }}</strong><div class="kpi-sub">From claims workbook/workflow</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Average Claim Value</span><strong class="kpi-value">{{ ek.get('average_claim_value',0)|money }}</strong><div class="kpi-sub">Claim amount Ã· claim count</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Loss Ratio</span><strong class="kpi-value">{{ ek.get('loss_ratio',0)|pct }}</strong><div class="kpi-sub">Claims Ã· risk premium</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Average Claim Value</span><strong class="kpi-value">{{ ek.get('average_claim_value',0)|money }}</strong><div class="kpi-sub">Claim amount ÷ claim count</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Loss Ratio</span><strong class="kpi-value">{{ ek.get('loss_ratio',0)|pct }}</strong><div class="kpi-sub">Claims ÷ risk premium</div></div>
             <div class="exec-card span-3"><span class="kpi-title">Policies / Clients</span><strong class="kpi-value">{{ ek.get('policy_count',0)|int }}</strong><div class="kpi-sub">Policy quantity imported</div><p style="margin:6px 0 0"><a class="btn" href="{{ url_for('client_heatmap_page', franchise=selected) }}">Open client heatmap</a></p></div>
             <div class="exec-card span-3"><span class="kpi-title">Franchise Admin Fee</span><strong class="kpi-value">{{ ek.get('franchise_admin_fee',0)|money }}</strong><div class="kpi-sub">Retail premiums - risk premiums</div></div>
             <div class="exec-card span-3"><span class="kpi-title">Franchise Money</span><strong class="kpi-value">{{ ek.get('franchise_money',0)|money }}</strong><div class="kpi-sub">Retail - claims - paid commissions</div></div>
@@ -1006,7 +1006,7 @@
                   <td><div class="scenario-rate-stack"><span>2.50%</span><strong>{{ compare_summary.get('current_mff_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><span>0.66%</span><strong>{{ compare_summary.get('current_r1_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><span>1.39%</span><strong>{{ compare_summary.get('current_adv_amount',0)|money }}</strong></div></td>
-                  <td><strong>{{ compare_summary.get('current_commission',0)|money }}</strong><br><small>Retail Premium Ã— current percentages</small></td>
+                  <td><strong>{{ compare_summary.get('current_commission',0)|money }}</strong><br><small>Retail Premium × current percentages</small></td>
                   <td><div class="scenario-rate-stack"><span>-</span><strong>{{ 0|money }}</strong></div></td>
                   <td><strong>{{ compare_summary.get('current_total',0)|money }}</strong><br><small>Same as current commission</small></td>
                 </tr>
@@ -1018,7 +1018,7 @@
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_mff" value="{{ compare_args.a_mff }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_mff_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_r1" value="{{ compare_args.a_r1 }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_r1_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_adv" value="{{ compare_args.a_adv }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_adv_amount',0)|money }}</strong></div></td>
-                  <td><strong>{{ compare_summary.get('scenario_a_commission',0)|money }}</strong><br><small>Retail Premium Ã— Scenario A percentages</small></td>
+                  <td><strong>{{ compare_summary.get('scenario_a_commission',0)|money }}</strong><br><small>Retail Premium × Scenario A percentages</small></td>
                   <td><div class="scenario-rate-stack"><span>{{ compare_args.book_value_rate }}%</span><strong>{{ compare_summary.get('scenario_a_book_value',0)|money }}</strong></div></td>
                   <td><strong>{{ compare_summary.get('scenario_a_total',0)|money }}</strong><br><small>Commission + MFF Book Value</small></td>
                 </tr>
@@ -1030,7 +1030,7 @@
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_mff" value="{{ compare_args.b_mff }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_mff_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_r1" value="{{ compare_args.b_r1 }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_r1_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_adv" value="{{ compare_args.b_adv }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_adv_amount',0)|money }}</strong></div></td>
-                  <td><strong>{{ compare_summary.get('scenario_b_commission',0)|money }}</strong><br><small>Retail Premium Ã— Scenario B percentages</small></td>
+                  <td><strong>{{ compare_summary.get('scenario_b_commission',0)|money }}</strong><br><small>Retail Premium × Scenario B percentages</small></td>
                   <td><div class="scenario-rate-stack"><span>{{ compare_args.book_value_rate }}%</span><strong>{{ compare_summary.get('scenario_b_book_value',0)|money }}</strong></div></td>
                   <td><strong>{{ compare_summary.get('scenario_b_total',0)|money }}</strong><br><small>Commission + MFF Book Value</small></td>
                 </tr>
