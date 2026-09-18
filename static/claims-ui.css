@@ -1,0 +1,75 @@
+/* Claims uses the same visual scale as Insurance Sales. */
+:root{--mt-primary:#6b4ba0 !important;--mt-bg:#f6f7fb !important;--mt-text:#211b30 !important;--mt-muted:#758195 !important;--mt-border:#e1e6ef !important}
+body.claims-ui{background:#f6f7fb !important;color:#211b30 !important;font:14px/1.5 Arial,Helvetica,sans-serif !important}
+.claims-ui h1,.claims-ui h2,.claims-ui h3{color:#211b30 !important;font-weight:800 !important;line-height:1.2 !important}
+.claims-ui h1{font-size:36px !important;letter-spacing:-.8px !important}
+.claims-ui h2{font-size:24px !important;letter-spacing:-.3px !important}
+.claims-ui h3{font-size:20px !important}
+.claims-ui p{font-size:14px !important;line-height:1.5 !important;color:#758195 !important}
+.claims-ui .executive-shell{grid-template-columns:280px minmax(0,1fr) !important;min-height:100vh !important}
+.claims-ui .executive-sidebar{background:#6b4ba0 !important;box-shadow:4px 0 18px rgba(24,32,42,.14) !important}
+.claims-ui .executive-brand{background:transparent !important;border:0 !important;margin:18px 16px 20px !important;padding:10px !important}
+.claims-ui .executive-brand .martins-brand-logo{width:150px !important;height:68px !important}
+.claims-ui .executive-brand h1{font-size:13px !important;color:#fff !important;letter-spacing:0 !important}
+.claims-ui .executive-brand p{font-size:11px !important;color:#e5dbee !important}
+.claims-ui .side-tabs{padding:0 16px 20px !important;gap:12px !important}
+.claims-ui .side-group{border:0 !important;border-radius:11px !important;background:rgba(255,255,255,.19) !important}
+.claims-ui .side-group summary{font-size:13px !important;min-height:58px !important;padding:12px 14px !important;gap:10px !important}
+.claims-ui .side-group[open] summary{background:#8b70b5 !important}
+.claims-ui .side-group a{font-size:12px !important;padding:12px 16px !important;border:0 !important;line-height:1.4 !important}
+.claims-ui .side-group span{font-size:11px !important;padding:10px 16px !important;border:0 !important;color:#758195 !important}
+.claims-ui .side-group a:hover{background:#f0ebf7 !important}
+.claims-ui .executive-main{padding:26px 28px !important;min-width:0 !important}
+.claims-ui .martins-module-topbar{margin:-26px -28px 26px !important;padding:12px 28px !important;min-height:82px !important;flex-wrap:wrap !important}
+.claims-ui .martins-module-brand{font-size:23px !important;font-weight:800 !important;gap:15px !important}
+.claims-ui .martins-module-account{background:#fbf9ff !important;border:1px solid #eadff3 !important;border-radius:14px !important;padding:7px 10px 7px 14px !important;font-size:12px !important;flex-wrap:wrap !important}
+.claims-ui .martins-module-account a{font-size:13px !important;padding:7px 13px !important;border-radius:10px !important}
+.claims-ui .executive-topbar{grid-template-columns:minmax(220px,1fr) minmax(320px,1fr) !important;gap:24px !important}
+.claims-ui .executive-topbar h1{font-size:36px !important;font-weight:800 !important;letter-spacing:-.8px !important}
+.claims-ui .card,.claims-ui .exec-card,.claims-ui .metric,.claims-ui .workspace-card,.claims-ui .executive-filter,.admin-wrap{border:1px solid #e1e6ef !important;border-radius:17px !important;box-shadow:0 14px 36px rgba(25,31,47,.065) !important;background:#fff !important;padding:22px !important}
+.claims-ui .exec-grid,.claims-ui .summary-grid{gap:18px !important}
+.claims-ui .exec-card h2{font-size:20px !important}
+.claims-ui .kpi-title,.claims-ui .metric span{font-size:11px !important;text-transform:uppercase !important;letter-spacing:.35px !important;font-weight:700 !important}
+.claims-ui .kpi-value,.claims-ui .metric strong{font-size:25px !important;font-weight:800 !important;color:#211b30 !important}
+.claims-ui .kpi-sub{font-size:12px !important;color:#758195 !important}
+.claims-ui button,.claims-ui .btn,.claims-ui .executive-filter button{min-height:44px !important;border-radius:10px !important;padding:10px 17px !important;font-size:12px !important;font-weight:700 !important}
+.claims-ui button[type=submit],.claims-ui .btn-primary{background:linear-gradient(90deg,#7d3f97,#5f2e74) !important;color:#fff !important;box-shadow:0 7px 18px rgba(91,47,116,.14) !important}
+.claims-ui input:not([type=checkbox]):not([type=radio]):not([type=hidden]),.claims-ui select,.claims-ui textarea{font:14px Arial,Helvetica,sans-serif !important;min-height:46px !important;padding:11px 14px !important;border:1px solid #e1e6ef !important;border-radius:8px !important;background:#fff !important;color:#211b30 !important;max-width:100% !important}
+.claims-ui label{font-size:12px !important;font-weight:700 !important;color:#535366 !important}
+.claims-ui table{font-size:12px !important}
+.claims-ui th{font-size:10px !important;letter-spacing:.35px !important;text-transform:uppercase !important;color:#687187 !important;background:#eff2f7 !important;padding:13px 12px !important}
+.claims-ui td{padding:13px 12px !important;border-color:#e5e9f1 !important}
+.claims-ui .table-wrap,.claims-ui .table-responsive{overflow-x:auto !important;border:1px solid #e1e6ef !important;border-radius:15px !important}
+.claims-ui .workspace-header,.claims-ui .home-header{flex-wrap:wrap !important;gap:16px !important}
+.claims-ui .container.compact{max-width:none !important}
+.claims-ui :is(a,button,summary):focus-visible{outline:3px solid #b6a0d6 !important;outline-offset:3px !important}
+.claims-mobile-nav,.claims-nav-backdrop{display:none !important}
+@media(max-width:1100px){
+ .claims-ui .executive-shell{grid-template-columns:1fr !important}
+ .claims-ui .executive-main{padding:20px 16px !important}
+ .claims-ui .martins-module-topbar{margin:-20px -16px 22px !important;padding:12px 16px !important}
+ .claims-ui .martins-module-account{width:auto !important;justify-content:flex-start !important}
+ .claims-ui .executive-topbar{grid-template-columns:1fr !important}
+ .claims-ui .executive-filter{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
+ .claims-ui .executive-sidebar{position:fixed !important;inset:0 auto 0 0 !important;width:min(280px,85vw) !important;height:100dvh !important;max-height:100dvh !important;z-index:1001 !important;transform:translateX(-100%) !important;visibility:hidden !important}
+ .claims-ui.claims-nav-open .executive-sidebar{transform:translateX(0) !important;visibility:visible !important}
+ .claims-mobile-nav{display:flex !important;justify-content:space-between !important;align-items:center !important;padding:10px 16px !important;background:#6b4ba0 !important;color:#fff !important;min-height:58px !important}
+ .claims-mobile-nav button{width:auto !important;background:#fff !important;color:#583b88 !important;min-height:38px !important}
+ .claims-nav-open .claims-nav-backdrop{display:block !important;position:fixed !important;inset:0 !important;width:100% !important;height:100% !important;z-index:1000 !important;background:rgba(24,32,42,.4) !important;border:0 !important;border-radius:0 !important}
+ .claims-ui h1,.claims-ui .executive-topbar h1{font-size:28px !important}
+ .claims-ui .bar-row{grid-template-columns:minmax(0,1fr) !important;gap:6px !important}
+}
+@media(max-width:550px){
+ .claims-ui .executive-filter{grid-template-columns:1fr !important}
+ .claims-ui .exec-card,.claims-ui .card,.claims-ui .metric{padding:16px !important}
+ .claims-ui input:not([type=checkbox]):not([type=radio]),.claims-ui select,.claims-ui textarea{font-size:16px !important}
+ .claims-ui .martins-module-brand{font-size:20px !important}
+ .claims-ui .martins-module-brand img{width:95px !important}
+ .claims-ui .martins-module-account{gap:7px !important}
+}
+@media print{.claims-mobile-nav,.claims-nav-backdrop{display:none !important}.claims-ui .executive-shell{display:block !important}.claims-ui .executive-main{padding:0 !important}}
+
+/* Keep wide reports inside their cards on small screens. */
+.claims-ui .exec-card,.claims-ui .workspace-card{min-width:0 !important;overflow-x:auto !important}
+.claims-ui input,.claims-ui select{box-sizing:border-box !important;max-width:100% !important;min-width:0 !important}
+.claims-ui .executive-filter{min-width:0 !important}

@@ -5330,7 +5330,7 @@ def admin_users():
           </td>
         </tr>
         ''')
-    body = f'''<!doctype html><html><head><title>User Management</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f'''<!doctype html><html><head><title>User Management</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/dashboard">Back to dashboard</a> &nbsp; | &nbsp; <a class="link" href="/admin/system_health">System Health</a> &nbsp; | &nbsp; <a class="link" href="/admin/claims_rules">Claims Rules</a> &nbsp; | &nbsp; <a class="link" href="/admin/audit_log">Audit Log</a> &nbsp; | &nbsp; <a class="link" href="/admin/backups">Backups</a> &nbsp; | &nbsp; <a class="link" href="/logout">Logout</a></div>
     <h1>User Management</h1><p class="muted">Admin users can approve pending accounts, change roles, assign franchise access, disable accounts, delete users, or reset passwords.</p>
     <table><tr><th>Name</th><th>Email</th><th>Created</th><th>Last Login</th><th>Failed Logins</th><th colspan="2">Manage</th></tr>{''.join(rows) or '<tr><td colspan="7">No users found.</td></tr>'}</table>
@@ -5634,7 +5634,7 @@ def admin_cron_log():
         rows.append(f"""
         <tr><td>{row.get('created_at','')}</td><td>{row.get('job_name','')}</td><td style="font-weight:700;color:{color}">{status}</td><td>{row.get('details','')}</td><td>{row.get('ip_address','')}</td></tr>
         """)
-    body = f'''<!doctype html><html><head><title>Cron Log</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f'''<!doctype html><html><head><title>Cron Log</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/admin/launch_center">Launch Center</a> &nbsp; | &nbsp; <a class="link" href="/admin/system_health">System Health</a> &nbsp; | &nbsp; <a class="link" href="/admin/claims_rules">Claims Rules</a> &nbsp; | &nbsp; <a class="link" href="/dashboard">Back to dashboard</a></div>
     <h1>Cron Log</h1><p class="muted">Scheduled backup and maintenance job activity.</p>
     <table><tr><th>Date</th><th>Job</th><th>Status</th><th>Details</th><th>IP</th></tr>{''.join(rows) or '<tr><td colspan="5">No cron activity yet.</td></tr>'}</table>
@@ -5657,7 +5657,7 @@ def admin_launch_center():
     ready = all(ok for _, ok in checks)
     check_rows = ''.join([f'<tr><td>{name}</td><td>{_fmt_status(ok)}</td></tr>' for name, ok in checks])
     summary = '<div class="flash success">Ready for Render production launch.</div>' if ready else '<div class="flash danger">Complete the items below before inviting live users.</div>'
-    body = f'''<!doctype html><html><head><title>Production Launch Center</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f'''<!doctype html><html><head><title>Production Launch Center</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/dashboard">Back to dashboard</a> &nbsp; | &nbsp; <a class="link" href="/admin/launch_center">Launch Center</a> &nbsp; | &nbsp; <a class="link" href="/admin/deployment_check">Deployment Check</a> &nbsp; | &nbsp; <a class="link" href="/admin/system_health">System Health</a> &nbsp; | &nbsp; <a class="link" href="/admin/claims_rules">Claims Rules</a> &nbsp; | &nbsp; <a class="link" href="/admin/cron_log">Cron Log</a></div>
     <h1>Production Launch Center</h1>{summary}
     <h2>Launch readiness</h2><table><tr><th>Item</th><th>Status</th></tr>{check_rows}</table>
@@ -5731,7 +5731,7 @@ def admin_system_health():
         ('Disk usage', disk_html),
     ]
     row_html = ''.join([f'<tr><td>{name}</td><td>{value}</td></tr>' for name, value in rows])
-    body = f"""<!doctype html><html><head><title>System Health</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f"""<!doctype html><html><head><title>System Health</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/dashboard">Back to dashboard</a> &nbsp; | &nbsp; <a class="link" href="/admin/launch_center">Launch Center</a> &nbsp; | &nbsp; <a class="link" href="/admin/deployment_check">Deployment Check</a> &nbsp; | &nbsp; <a class="link" href="/admin/errors">Errors</a> &nbsp; | &nbsp; <a class="link" href="/admin/prepare_client_map_locations">Prepare Client Map</a> &nbsp; | &nbsp; <a class="link" href="/admin/backups">Backups</a> &nbsp; | &nbsp; <a class="link" href="/admin/users">User Management</a></div>
     <h1>System Health</h1><p class="muted">Operational monitoring for the live Martins Direct analytics system.</p>
     <table><tr><th>Check</th><th>Status</th></tr>{row_html}</table>
@@ -5756,7 +5756,7 @@ def admin_deployment_check():
     rows = ''.join([f'<tr><td>{name}</td><td>{_fmt_status(ok)}</td></tr>' for name, ok in checks])
     ready = all(ok for _, ok in checks)
     summary = '<div class="flash success">Deployment checklist passed.</div>' if ready else '<div class="flash danger">Some deployment checks still need attention before going live.</div>'
-    body = f"""<!doctype html><html><head><title>Deployment Check</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f"""<!doctype html><html><head><title>Deployment Check</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/admin/system_health">System Health</a> &nbsp; | &nbsp; <a class="link" href="/admin/claims_rules">Claims Rules</a> &nbsp; | &nbsp; <a class="link" href="/dashboard">Back to dashboard</a></div>
     <h1>Deployment Check</h1>{summary}
     <table><tr><th>Requirement</th><th>Status</th></tr>{rows}</table>
@@ -5790,7 +5790,7 @@ def admin_errors():
           <td>{e.get('ip_address') or '-'}</td>
         </tr>
         """)
-    body = f"""<!doctype html><html><head><title>Error Log</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f"""<!doctype html><html><head><title>Error Log</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/admin/system_health">System Health</a> &nbsp; | &nbsp; <a class="link" href="/admin/claims_rules">Claims Rules</a> &nbsp; | &nbsp; <a class="link" href="/dashboard">Back to dashboard</a></div>
     <h1>Error Log</h1><p class="muted">Latest unexpected application errors. 404/favicon errors are not logged here.</p>
     <table><tr><th>Date</th><th>User</th><th>Route</th><th>Error</th><th>IP</th></tr>{''.join(rows) or '<tr><td colspan="5">No application errors logged.</td></tr>'}</table>
@@ -5827,7 +5827,7 @@ def admin_backups():
           <td><a class="link" href="/admin/backups/download/{filename}">Download</a></td>
         </tr>
         ''')
-    body = f'''<!doctype html><html><head><title>Database Backups</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f'''<!doctype html><html><head><title>Database Backups</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/dashboard">Back to dashboard</a> &nbsp; | &nbsp; <a class="link" href="/admin/system_health">System Health</a> &nbsp; | &nbsp; <a class="link" href="/admin/claims_rules">Claims Rules</a> &nbsp; | &nbsp; <a class="link" href="/admin/users">User Management</a> &nbsp; | &nbsp; <a class="link" href="/admin/audit_log">Audit Log</a> &nbsp; | &nbsp; <a class="link" href="/logout">Logout</a></div>
     <h1>Database Backups</h1>
     <p class="muted">Create and download full database backups before imports, repairs, or production changes.</p>
@@ -5900,7 +5900,7 @@ def admin_audit_log():
         rows.append(f"""
         <tr><td>{row.get('created_at','')}</td><td>{row.get('user_email') or '-'}</td><td>{row.get('action','')}</td><td>{row.get('details','')}</td><td>{row.get('ip_address','')}</td></tr>
         """)
-    body = f'''<!doctype html><html><head><title>Audit Log</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f'''<!doctype html><html><head><title>Audit Log</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/dashboard">Back to dashboard</a> &nbsp; | &nbsp; <a class="link" href="/admin/users">User Management</a> &nbsp; | &nbsp; <a class="link" href="/logout">Logout</a></div>
     <h1>Audit Log</h1><p class="muted">Latest user login, registration, and admin-management activity.</p>
     <table><tr><th>Date</th><th>User</th><th>Action</th><th>Details</th><th>IP Address</th></tr>{''.join(rows) or '<tr><td colspan="5">No audit activity yet.</td></tr>'}</table>
@@ -6213,7 +6213,7 @@ def admin_map_cache_manager():
         </tr>
         """)
     rows_html = ''.join(row_html) or '<tr><td colspan="8">No imported franchise/client data found yet.</td></tr>'
-    body = f"""<!doctype html><html><head><title>Map Cache Manager</title>{AUTH_PAGE_CSS}</head><body><div class='admin-wrap'>
+    body = f"""<!doctype html><html><head><title>Map Cache Manager</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class='admin-wrap'>
     <div class='topnav'><a class='link' href='/dashboard'>Back to dashboard</a> &nbsp; | &nbsp; <a class='link' href='/admin/prepare_client_map_locations'>Prepare Map Locations</a> &nbsp; | &nbsp; <a class='link' href='/admin/claims_rules'>Claims Rules</a> &nbsp; | &nbsp; <a class='link' href='/admin/system_health'>System Health</a></div>
     <h1>Map Cache Manager</h1>
     <p class='muted'>Admin overview of prepared franchise and client map coordinates. Counts are policy rows versus unique mapped address groups, so this is safe for 2.5M+ policy rows.</p>
@@ -6540,7 +6540,7 @@ def admin_prepare_client_map_locations():
     summary.setdefault('groups_missing', 0)
     summary.setdefault('clients_cached', summary.get('clients_total', 0))
     options = ''.join([f'<option value="{_esc(f)}" {"selected" if f == selected else ""}>{_esc(f)}</option>' for f in franchises])
-    body = f"""<!doctype html><html><head><title>Prepare Client Map Locations</title>{AUTH_PAGE_CSS}</head><body><div class='admin-wrap'>
+    body = f"""<!doctype html><html><head><title>Prepare Client Map Locations</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class='admin-wrap'>
     <div class='topnav'><a class='link' href='/admin/system_health'>System Health</a> &nbsp; | &nbsp; <a class='link' href='/admin/claims_rules'>Claims Rules</a> &nbsp; | &nbsp; <a class='link' href='/dashboard'>Back to dashboard</a></div>
     <h1>Prepare Client Map Locations</h1>
     <p class='muted'>This page prepares member/client map coordinates in small background batches. PolicyData client addresses are read from Excel column O. Keep it open until completed. The map pages will then load instantly because they only read saved latitude/longitude.</p>
@@ -6817,7 +6817,7 @@ def admin_claims_rules():
           <h4 style='margin:12px 0 4px'>Validation Checklist</h4>
           {''.join(rule_boxes)}
         </div>""")
-    body = f"""<!doctype html><html><head><title>Claims Rules</title>{AUTH_PAGE_CSS}</head><body><div class='admin-wrap'>
+    body = f"""<!doctype html><html><head><title>Claims Rules</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class='admin-wrap'>
     <div class='topnav'><a class='link' href='/dashboard'>Back to dashboard</a> &nbsp; | &nbsp; <a class='link' href='/admin/system_health'>System Health</a> &nbsp; | &nbsp; <a class='link' href='/admin/claims_rules'>Claims Rules</a> &nbsp; | &nbsp; <a class='link' href='/claims'>Claims</a></div>
     <h1>Phase 10 - Claims Rules & Document Validation</h1>
     <p class='muted'>Admin-only checklist rules. These rules decide which uploaded claim documents are required and what each document must contain before a claim becomes Approved.</p>
@@ -9033,7 +9033,7 @@ def claims_workflow():
         </tr>
         """)
     status_links = ' | '.join([f'<a class="link" href="/claims?status={_esc(x)}">{_esc(x)}</a>' for x in CLAIM_STATUSES])
-    body = f"""<!doctype html><html><head><title>Claims Workflow</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f"""<!doctype html><html><head><title>Claims Workflow</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/dashboard">Back to dashboard</a> &nbsp; | &nbsp; <a class="link" href="/claims/new">New Claim</a> &nbsp; | &nbsp; <a class="link" href="/claims">All Claims</a></div>
     <h1>Claims Workflow</h1><p class="muted">Capture, track and manage claim cases. Franchise users only see assigned franchises.</p>
     <p class="small">Filter: {status_links}</p>
@@ -9104,7 +9104,7 @@ def new_claim_case():
             log_audit('claim_created', f'Claim case {claim_id} created for {franchise_name}')
             flash('Claim case created.', 'success')
             return redirect(url_for('claim_case_detail', claim_id=claim_id))
-    body = f"""<!doctype html><html><head><title>New Claim</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f"""<!doctype html><html><head><title>New Claim</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/claims">Back to claims</a> &nbsp; | &nbsp; <a class="link" href="/dashboard">Back to dashboard</a></div>
     <h1>New Claim</h1><p class="muted">Create a claim case for tracking and follow-up.</p>
     <form method="post">
@@ -9190,7 +9190,7 @@ def claim_case_detail(claim_id):
     doc_status = _claim_document_status(claim_id)
     checklist_rows = ''.join([f'<tr><td>{_esc(i.get("type"))}</td><td><strong>{_esc(i.get("status"))}</strong></td><td>{_esc(i.get("details"))}</td></tr>' for i in doc_status.get('items', [])]) or '<tr><td colspan="3">No checklist items.</td></tr>'
     attachment_rows = ''.join([f'<tr><td><a class="link" href="/claims/{claim_id}/attachments/{int(a.get("id"))}/download">{_esc(a.get("filename"))}</a></td><td>{_esc(a.get("document_type") or "")}</td><td><strong>{_esc(a.get("verification_status") or "Pending")}</strong><br><span class="small">{_esc(a.get("verification_details") or "")}</span></td><td>{"Yes" if a.get("has_id_number") else "No"}</td><td>{"Yes" if a.get("is_certified") else "No"}</td><td>{int(a.get("file_size") or 0)}</td><td>{_esc(a.get("uploaded_by_email"))}</td><td>{_esc(a.get("created_at"))}</td></tr>' for a in attachments]) or '<tr><td colspan="8">No attachments yet.</td></tr>'
-    body = f"""<!doctype html><html><head><title>Claim {_esc(claim.get('claim_ref'))}</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    body = f"""<!doctype html><html><head><title>Claim {_esc(claim.get('claim_ref'))}</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/claims">Back to claims</a> &nbsp; | &nbsp; <a class="link" href="/dashboard">Back to dashboard</a></div>
     <h1>Claim {_esc(claim.get('claim_ref') or claim_id)}</h1>
     <table><tr><th>Field</th><th>Value</th></tr>
@@ -9588,7 +9588,7 @@ def admin_age_notifications_franchise(franchise_name):
           <td>{g.get('next_due_date') or '-'}</td>
         </tr>
         """)
-    return f"""<!doctype html><html><head><title>Age Notifications - {html.escape(selected)}</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    return f"""<!doctype html><html><head><title>Age Notifications - {html.escape(selected)}</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/dashboard?franchise={quote_plus(selected)}">Back to dashboard</a> &nbsp; | &nbsp; <a class="link" href="/admin/map_cache_manager">Map Cache Manager</a> &nbsp; | &nbsp; <a class="link" href="/admin/system_health">System Health</a></div>
     <h1>Age Limit Notifications</h1>
     <p class="muted"><strong>{html.escape(selected)}</strong> - {total} active age-limit notices. Click an age band to list affected members.</p>
@@ -9621,7 +9621,7 @@ def admin_age_notifications_franchise_band(franchise_name, age_band):
           <td>{html.escape(str(r.get('message') or '-'))}</td>
         </tr>
         """)
-    return f"""<!doctype html><html><head><title>{html.escape(band)} - {html.escape(selected)}</title>{AUTH_PAGE_CSS}</head><body><div class="admin-wrap">
+    return f"""<!doctype html><html><head><title>{html.escape(band)} - {html.escape(selected)}</title>{AUTH_PAGE_CSS}<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/claims-ui.css?v=20260918"></head><body class="claims-ui"><div class="admin-wrap">
     <div class="topnav"><a class="link" href="/admin/age_notifications/franchise/{quote(selected, safe='')}">Back to age groups</a> &nbsp; | &nbsp; <a class="link" href="/dashboard?franchise={quote_plus(selected)}">Back to dashboard</a></div>
     <h1>{html.escape(band)}</h1>
     <p class="muted"><strong>{html.escape(selected)}</strong> - {len(rows)} affected members in this age band.</p>
