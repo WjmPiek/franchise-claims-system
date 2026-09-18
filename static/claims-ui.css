@@ -73,3 +73,41 @@ body.claims-ui{background:#f6f7fb !important;color:#211b30 !important;font:14px/
 .claims-ui .exec-card,.claims-ui .workspace-card{min-width:0 !important;overflow-x:auto !important}
 .claims-ui input,.claims-ui select{box-sizing:border-box !important;max-width:100% !important;min-width:0 !important}
 .claims-ui .executive-filter{min-width:0 !important}
+
+/* Typography contract measured against martinssystem.co.za (13px desktop root). */
+html{font-size:13px!important}
+body .app-shell,body.claims-ui{font-family:Arial,Helvetica,sans-serif!important;font-size:15px!important;line-height:1.55!important}
+body .app-shell h1,body.claims-ui h1{font-size:clamp(1.75rem,2.25vw,2.25rem)!important}
+body .app-shell h2,body.claims-ui h2{font-size:1.14rem!important}
+body .app-shell h3,body.claims-ui h3{font-size:1.15rem!important}
+body .app-shell h4,body.claims-ui h4{font-size:1rem!important}
+body .app-shell h5,body.claims-ui h5,body .app-shell h6,body.claims-ui h6{font-size:.92rem!important}
+body .app-shell :is(h1,h2,h3,h4,h5,h6),body.claims-ui :is(h1,h2,h3,h4,h5,h6){font-weight:700!important;letter-spacing:0!important;line-height:1.15!important}
+body .app-shell p,body.claims-ui p{font-size:.92rem!important;line-height:1.45!important}
+body .app-shell :is(label,.form-label,button,.btn),body.claims-ui :is(label,button,.btn){font-size:.92rem!important}
+body .app-shell :is(small,.small,.help-text),body.claims-ui :is(small,.small,.help-text){font-size:11.5px!important}
+body .app-shell :is(input,select,textarea,.form-control,.form-select),body.claims-ui :is(input,select,textarea){font-size:15px!important}
+body .app-shell :is(table,.table) td,body.claims-ui table td{font-size:.76rem!important;line-height:1.25!important;padding:6px 7px!important}
+body .app-shell :is(table,.table) th,body.claims-ui table th{font-size:.72rem!important;line-height:1.25!important;padding:6px 7px!important}
+body .app-shell :is(table,.table) :is(button,.btn),body.claims-ui table :is(button,.btn){font-size:.72rem!important}
+body .app-shell .card-header,body.claims-ui .card-header{font-size:1.14rem!important}
+body .app-shell :is(.stat-card,.metric-card,.portal-stat-card) strong,body.claims-ui .kpi-value{font-size:1.7rem!important;line-height:1.15!important}
+body .app-shell :is(.stat-card,.metric-card) > span,body.claims-ui .kpi-title{font-size:.72rem!important}
+body .app-shell :is(.topbar-brand,.martins-app-topbar-brand),body.claims-ui .martins-module-brand{font-size:20px!important}
+body .app-shell :is(.topbar-account,.martins-app-topbar-account),body.claims-ui .martins-module-account{font-size:13px!important}
+body .app-shell .side-toggle > span:first-child,body .app-shell .side-link > span:first-child,body .app-shell .sidebar .tab-button,body.claims-ui .side-group summary{font-size:.9rem!important}
+body .app-shell .side-submenu a,body.claims-ui .side-group a{font-size:.82rem!important}
+body .app-shell .sidebar-brand-text > span:first-child,body .app-shell .sidebar .brand-block strong,body.claims-ui .executive-brand h1{font-size:.9rem!important}
+body .app-shell .sidebar-brand-module,body .app-shell .sidebar .brand-block span,body.claims-ui .executive-brand p{font-size:.7rem!important}
+body .app-shell .side-submenu small,body.claims-ui .side-group > span{font-size:.7rem!important}
+body .app-shell .content-wrap > h2,body .app-shell .content-wrap > h3,body .app-shell .content-wrap > .d-flex h2,body .app-shell .content-wrap > .d-flex h3,body .app-shell .overview-hero-copy h2,body.claims-ui .executive-topbar h1{
+ font-size:clamp(1.8rem,2.3vw,2.7rem)!important;line-height:1.1!important;font-weight:750!important
+}
+body .app-shell :is(.page-header,.overview-hero-copy) p,body.claims-ui .executive-topbar p{font-size:.96rem!important;line-height:1.62!important}
+@media(max-width:899px){
+ html{font-size:12.5px!important}
+ /* Keep phone fields readable and avoid automatic keyboard zoom. */
+ body .app-shell :is(input,select,textarea,.form-control,.form-select),body.claims-ui :is(input,select,textarea){font-size:16px!important}
+}
+
+body.claims-ui .exec-card h2{font-size:1.14rem!important;line-height:1.15!important}
