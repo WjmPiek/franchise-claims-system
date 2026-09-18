@@ -23,3 +23,8 @@ html body .ms-sidebar.ms-sidebar{scrollbar-gutter:stable}html body .ms-sidebar>.
 @media(min-width:981px){html body .ms-topbar #sidebarToggle,html body .ms-main .mobile-app-header{display:none!important}}
 
 html body .ms-sidebar.ms-sidebar{scrollbar-width:thin!important;scrollbar-color:#a68ac8 #6b4ba0!important}html body .ms-sidebar.ms-sidebar::-webkit-scrollbar{width:8px!important}
+
+/* Paint the navigation as one stable region; never defer individual logos/items. */
+html body .ms-sidebar,html body .ms-sidebar *{content-visibility:visible!important;animation:none!important;transition:none!important}
+html body .ms-sidebar .ms-brand img{contain:none!important}
+@media(min-width:981px){html body .ms-sidebar.ms-sidebar{max-width:260px!important;flex:0 0 260px!important}}

@@ -6,13 +6,13 @@ body.claims-ui{background:#f6f7fb !important;color:#211b30 !important;font:14px/
 .claims-ui h2{font-size:24px !important;letter-spacing:-.3px !important}
 .claims-ui h3{font-size:20px !important}
 .claims-ui p{font-size:14px !important;line-height:1.5 !important;color:#758195 !important}
-.claims-ui .executive-shell{grid-template-columns:280px minmax(0,1fr) !important;min-height:100vh !important}
+.claims-ui .executive-shell{grid-template-columns:260px minmax(0,1fr) !important;min-height:100vh !important}
 .claims-ui .executive-sidebar{background:#6b4ba0 !important;box-shadow:4px 0 18px rgba(24,32,42,.14) !important}
 .claims-ui .executive-brand{background:transparent !important;border:0 !important;margin:18px 16px 20px !important;padding:10px !important}
 .claims-ui .executive-brand .martins-brand-logo{width:150px !important;height:68px !important}
 .claims-ui .executive-brand h1{font-size:13px !important;color:#fff !important;letter-spacing:0 !important}
 .claims-ui .executive-brand p{font-size:11px !important;color:#e5dbee !important}
-.claims-ui .side-tabs{padding:0 16px 20px !important;gap:12px !important}
+.claims-ui .side-tabs{padding:0 !important;gap:8px !important}
 .claims-ui .side-group{border:0 !important;border-radius:11px !important;background:rgba(255,255,255,.19) !important}
 .claims-ui .side-group summary{font-size:13px !important;min-height:58px !important;padding:12px 14px !important;gap:10px !important}
 .claims-ui .side-group[open] summary{background:#8b70b5 !important}
@@ -51,7 +51,7 @@ body.claims-ui{background:#f6f7fb !important;color:#211b30 !important;font:14px/
  .claims-ui .martins-module-account{width:auto !important;justify-content:flex-start !important}
  .claims-ui .executive-topbar{grid-template-columns:1fr !important}
  .claims-ui .executive-filter{grid-template-columns:repeat(2,minmax(0,1fr)) !important}
- .claims-ui .executive-sidebar{position:fixed !important;inset:0 auto 0 0 !important;width:min(280px,85vw) !important;height:100dvh !important;max-height:100dvh !important;z-index:1001 !important;transform:translateX(-100%) !important;visibility:hidden !important}
+ .claims-ui .executive-sidebar{position:fixed !important;inset:0 auto 0 0 !important;width:min(260px,85vw) !important;height:100dvh !important;max-height:100dvh !important;z-index:1001 !important;transform:translateX(-100%) !important;visibility:hidden !important}
  .claims-ui.claims-nav-open .executive-sidebar{transform:translateX(0) !important;visibility:visible !important}
  .claims-mobile-nav{display:flex !important;justify-content:space-between !important;align-items:center !important;padding:10px 16px !important;background:#6b4ba0 !important;color:#fff !important;min-height:58px !important}
  .claims-mobile-nav button{width:auto !important;background:#fff !important;color:#583b88 !important;min-height:38px !important}

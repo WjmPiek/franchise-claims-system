@@ -3,55 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Martins System · Claims</title>
+  <title>Martins System Â· Claims</title>
   <meta name="description" content="Martins System claims module">
   <meta property="og:site_name" content="Martins System">
-  <meta property="og:title" content="Martins System · Claims">
+  <meta property="og:title" content="Martins System Â· Claims">
   <meta property="og:description" content="Martins System claims module">
   <meta property="og:type" content="website">
   <meta property="og:image" content="{{ url_for('static', filename='martins_logo.png', _external=True) }}">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Martins System · Claims">
+  <meta name="twitter:title" content="Martins System Â· Claims">
   <meta name="twitter:description" content="Martins System claims module">
   <meta name="twitter:image" content="{{ url_for('static', filename='martins_logo.png', _external=True) }}">
 
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='martins-20260802') }}">
   <link rel="stylesheet" href="https://martinssystem.co.za/platform/theme.css">
-<link rel="stylesheet" href="{{ url_for('static', filename='claims-ui.css', v='20260918-compact') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='claims-ui.css', v='20260918-stable-shell') }}">
 <link rel="icon" type="image/x-icon" href="/static/brand/favicon.ico?v=20260918-brand" sizes="any">
 <link rel="icon" type="image/png" href="/static/brand/icon-192.png?v=20260918-brand" sizes="192x192">
 <link rel="apple-touch-icon" href="/static/brand/icon-180.png?v=20260918-brand" sizes="180x180">
-<link rel="stylesheet" href="/static/module-shell.css?v=20260918-shell">
-</head>
-<body class="claims-ui">
-  <div class="container compact">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    {% if current_user and workspace != 'home' %}
-      <div class="user-session-bar no-print">
-        <span>Logged in as <strong>{{ current_user.name or current_user.email }}</strong> ({{ current_user.role }})</span>
-        <span class="session-links">
-          {% if current_user.role == 'admin' %}
-            <a href="{{ url_for('admin_users') }}">Manage Users</a>
-            <a href="{{ url_for('admin_claims_rules') }}">Claims Rules</a>
-            <a href="{{ url_for('admin_map_cache_manager') }}">Map Cache Manager</a>
-            <a href="{{ url_for('database_health') }}">Database Health</a>
-          {% endif %}
-          <a href="{{ url_for('claims_workflow') }}">Claims Workflow</a>
-          <a href="{{ url_for('change_password') }}">Change Password</a>
-          <a href="{{ url_for('logout') }}">Logout</a>
-        </span>
-      </div>
-    {% endif %}
-
-    {% if workspace == 'home' %}
+<link rel="stylesheet" href="/static/module-shell.css?v=20260918-stable-shell">
+{% if workspace == 'home' %}
       <style>
         :root {
           --md-ink: #18202a;
@@ -69,7 +41,7 @@
         .user-session-bar strong { color:#101828; font-size:16px; font-weight:700; }
         .user-session-bar a { color:#6B4AA0 !important; font-size:13px; font-weight:700; }
         @media (max-width: 900px) { .container.compact { margin: 0; padding: 0; } }
-        .executive-shell { display:grid; grid-template-columns: 320px minmax(0, 1fr); gap:0; align-items:start; min-height:calc(100vh - 64px); }
+        .executive-shell { display:grid; grid-template-columns: 260px minmax(0, 1fr); gap:0; align-items:start; min-height:calc(100vh - 64px); }
         .executive-sidebar { position:sticky; top:0; height:100vh; max-height:100vh; background:#6B4AA0; color:#fff; border:0; border-radius:0; box-shadow:4px 0 18px rgba(24,32,42,.16); overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; scrollbar-color:#a88bd0 #6B4AA0; }
         .executive-sidebar::-webkit-scrollbar { width:7px; }
         .executive-sidebar::-webkit-scrollbar-track { background:#6B4AA0; }
@@ -82,7 +54,7 @@
         .side-group { background:rgba(255,255,255,.17); border:1px solid rgba(255,255,255,.14); border-radius:12px; overflow:hidden; }
         .side-group summary { cursor:pointer; list-style:none; min-height:60px; padding:15px 16px; color:#fff; font-size:15px; line-height:1.15; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
         .side-group summary::-webkit-details-marker { display:none; }
-        .side-group summary:after { content:'›'; transform:rotate(90deg); color:rgba(255,255,255,.82); }
+        .side-group summary:after { content:'â€º'; transform:rotate(90deg); color:rgba(255,255,255,.82); }
         .side-group[open] summary:after { transform:rotate(-90deg); }
         .side-group a, .side-group span { display:block; padding:13px 20px; color:#101828; text-decoration:none; border-top:1px solid #e5e9f0; font-size:14px; line-height:1.25; background:#fff; }
         .side-group a { font-weight:700; }
@@ -155,6 +127,37 @@
     .premium-analysis-table .highlight-row{background:#f7f7f7}
 
 </style>
+{% endif %}
+</head>
+<body class="claims-ui">
+  <div class="container compact">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% if current_user and workspace != 'home' %}
+      <div class="user-session-bar no-print">
+        <span>Logged in as <strong>{{ current_user.name or current_user.email }}</strong> ({{ current_user.role }})</span>
+        <span class="session-links">
+          {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('admin_users') }}">Manage Users</a>
+            <a href="{{ url_for('admin_claims_rules') }}">Claims Rules</a>
+            <a href="{{ url_for('admin_map_cache_manager') }}">Map Cache Manager</a>
+            <a href="{{ url_for('database_health') }}">Database Health</a>
+          {% endif %}
+          <a href="{{ url_for('claims_workflow') }}">Claims Workflow</a>
+          <a href="{{ url_for('change_password') }}">Change Password</a>
+          <a href="{{ url_for('logout') }}">Logout</a>
+        </span>
+      </div>
+    {% endif %}
+
+    {% if workspace == 'home' %}
+
       {% set ed = executive_dashboard or {} %}
       {% set ek = ed.get('kpis', {}) %}
       <div class="claims-mobile-nav no-print"><strong>Claims</strong><button type="button" id="claims-menu" aria-controls="claims-sidebar" aria-expanded="false">Menu</button></div>
@@ -162,7 +165,7 @@
 <div class="executive-shell ms-shell">
         <aside class="executive-sidebar no-print ms-sidebar" id="claims-sidebar">
           <div class="executive-brand ms-brand">
-            <img class="martins-brand-logo" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
+            <img class="martins-brand-logo" width="150" height="68" loading="eager" fetchpriority="high" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
             <div class="ms-brand-copy"><strong class="ms-brand-title">Martin's Funerals</strong><span class="ms-brand-module">Claims</span></div>
           </div>
           <div class="side-tabs">
@@ -221,7 +224,7 @@
           <div class="executive-topbar">
             <div>
               <h1>Martins System</h1>
-              <p>Claims · {{ ed.get('period_label','') }} · {{ 'All franchises' if selected == 'All' else selected }}</p>
+              <p>Claims Â· {{ ed.get('period_label','') }} Â· {{ 'All franchises' if selected == 'All' else selected }}</p>
             </div>
             <form method="get" action="{{ url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
               <input type="hidden" name="period_view" value="{{ period_view }}">
@@ -247,8 +250,8 @@
             <div class="exec-card span-3 hero-card"><span class="kpi-title">Premium Amount</span><strong class="kpi-value">{{ ek.get('premium_amount',0)|money }}</strong><div class="kpi-sub">Imported retail premium</div></div>
             <div class="exec-card span-3"><span class="kpi-title">Claim Amount</span><strong class="kpi-value">{{ ek.get('claim_amount',0)|money }}</strong><div class="kpi-sub">Paid/imported claims</div></div>
             <div class="exec-card span-3"><span class="kpi-title">No. of Claims</span><strong class="kpi-value">{{ ek.get('claim_count',0)|int }}</strong><div class="kpi-sub">From claims workbook/workflow</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Average Claim Value</span><strong class="kpi-value">{{ ek.get('average_claim_value',0)|money }}</strong><div class="kpi-sub">Claim amount ÷ claim count</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Loss Ratio</span><strong class="kpi-value">{{ ek.get('loss_ratio',0)|pct }}</strong><div class="kpi-sub">Claims ÷ risk premium</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Average Claim Value</span><strong class="kpi-value">{{ ek.get('average_claim_value',0)|money }}</strong><div class="kpi-sub">Claim amount Ã· claim count</div></div>
+            <div class="exec-card span-3"><span class="kpi-title">Loss Ratio</span><strong class="kpi-value">{{ ek.get('loss_ratio',0)|pct }}</strong><div class="kpi-sub">Claims Ã· risk premium</div></div>
             <div class="exec-card span-3"><span class="kpi-title">Policies / Clients</span><strong class="kpi-value">{{ ek.get('policy_count',0)|int }}</strong><div class="kpi-sub">Policy quantity imported</div><p style="margin:6px 0 0"><a class="btn" href="{{ url_for('client_heatmap_page', franchise=selected) }}">Open client heatmap</a></p></div>
             <div class="exec-card span-3"><span class="kpi-title">Franchise Admin Fee</span><strong class="kpi-value">{{ ek.get('franchise_admin_fee',0)|money }}</strong><div class="kpi-sub">Retail premiums - risk premiums</div></div>
             <div class="exec-card span-3"><span class="kpi-title">Franchise Money</span><strong class="kpi-value">{{ ek.get('franchise_money',0)|money }}</strong><div class="kpi-sub">Retail - claims - paid commissions</div></div>
@@ -1003,7 +1006,7 @@
                   <td><div class="scenario-rate-stack"><span>2.50%</span><strong>{{ compare_summary.get('current_mff_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><span>0.66%</span><strong>{{ compare_summary.get('current_r1_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><span>1.39%</span><strong>{{ compare_summary.get('current_adv_amount',0)|money }}</strong></div></td>
-                  <td><strong>{{ compare_summary.get('current_commission',0)|money }}</strong><br><small>Retail Premium × current percentages</small></td>
+                  <td><strong>{{ compare_summary.get('current_commission',0)|money }}</strong><br><small>Retail Premium Ã— current percentages</small></td>
                   <td><div class="scenario-rate-stack"><span>-</span><strong>{{ 0|money }}</strong></div></td>
                   <td><strong>{{ compare_summary.get('current_total',0)|money }}</strong><br><small>Same as current commission</small></td>
                 </tr>
@@ -1015,7 +1018,7 @@
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_mff" value="{{ compare_args.a_mff }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_mff_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_r1" value="{{ compare_args.a_r1 }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_r1_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="a_adv" value="{{ compare_args.a_adv }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_a_adv_amount',0)|money }}</strong></div></td>
-                  <td><strong>{{ compare_summary.get('scenario_a_commission',0)|money }}</strong><br><small>Retail Premium × Scenario A percentages</small></td>
+                  <td><strong>{{ compare_summary.get('scenario_a_commission',0)|money }}</strong><br><small>Retail Premium Ã— Scenario A percentages</small></td>
                   <td><div class="scenario-rate-stack"><span>{{ compare_args.book_value_rate }}%</span><strong>{{ compare_summary.get('scenario_a_book_value',0)|money }}</strong></div></td>
                   <td><strong>{{ compare_summary.get('scenario_a_total',0)|money }}</strong><br><small>Commission + MFF Book Value</small></td>
                 </tr>
@@ -1027,7 +1030,7 @@
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_mff" value="{{ compare_args.b_mff }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_mff_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_r1" value="{{ compare_args.b_r1 }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_r1_amount',0)|money }}</strong></div></td>
                   <td><div class="scenario-rate-stack"><div class="percent-input"><input form="scenarioCalcForm" type="number" step="0.01" name="b_adv" value="{{ compare_args.b_adv }}"><span>%</span></div><strong>{{ compare_summary.get('scenario_b_adv_amount',0)|money }}</strong></div></td>
-                  <td><strong>{{ compare_summary.get('scenario_b_commission',0)|money }}</strong><br><small>Retail Premium × Scenario B percentages</small></td>
+                  <td><strong>{{ compare_summary.get('scenario_b_commission',0)|money }}</strong><br><small>Retail Premium Ã— Scenario B percentages</small></td>
                   <td><div class="scenario-rate-stack"><span>{{ compare_args.book_value_rate }}%</span><strong>{{ compare_summary.get('scenario_b_book_value',0)|money }}</strong></div></td>
                   <td><strong>{{ compare_summary.get('scenario_b_total',0)|money }}</strong><br><small>Commission + MFF Book Value</small></td>
                 </tr>
