@@ -18,8 +18,9 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='martins_logo.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='martins-20260802') }}">
   <link rel="stylesheet" href="https://martinssystem.co.za/platform/theme.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='claims-ui.css', v='20260918') }}">
 </head>
-<body>
+<body class="claims-ui">
   <div class="container compact">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -152,8 +153,10 @@
 </style>
       {% set ed = executive_dashboard or {} %}
       {% set ek = ed.get('kpis', {}) %}
-      <div class="executive-shell">
-        <aside class="executive-sidebar no-print">
+      <div class="claims-mobile-nav no-print"><strong>Claims</strong><button type="button" id="claims-menu" aria-controls="claims-sidebar" aria-expanded="false">Menu</button></div>
+<button type="button" class="claims-nav-backdrop no-print" aria-label="Close menu"></button>
+<div class="executive-shell">
+        <aside class="executive-sidebar no-print" id="claims-sidebar">
           <div class="executive-brand">
             <img class="martins-brand-logo" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
             <h1>Martins System</h1>
@@ -1311,5 +1314,13 @@
   })();
 
 </script>
-</body>
+<script>
+(function(){const button=document.getElementById('claims-menu');if(!button)return;
+function toggle(open){document.body.classList.toggle('claims-nav-open',open);button.setAttribute('aria-expanded',String(open));if(!open)button.focus();}
+button.addEventListener('click',()=>toggle(!document.body.classList.contains('claims-nav-open')));
+document.querySelector('.claims-nav-backdrop').addEventListener('click',()=>toggle(false));
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('claims-nav-open'))toggle(false);});
+document.getElementById('claims-sidebar').addEventListener('click',event=>{if(event.target.closest('a'))toggle(false);});
+})();
+</script></body>
 </html>
