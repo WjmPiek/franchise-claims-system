@@ -14,11 +14,14 @@
   <meta name="twitter:title" content="Martins System · Claims">
   <meta name="twitter:description" content="Martins System claims module">
   <meta name="twitter:image" content="{{ url_for('static', filename='martins_logo.png', _external=True) }}">
-  <link rel="icon" href="{{ url_for('static', filename='martins_logo.png') }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='martins_logo.png') }}">
+
+
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='martins-20260802') }}">
   <link rel="stylesheet" href="https://martinssystem.co.za/platform/theme.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='claims-ui.css', v='20260918-compact') }}">
+<link rel="icon" type="image/x-icon" href="/static/brand/favicon.ico?v=20260918-brand" sizes="any">
+<link rel="icon" type="image/png" href="/static/brand/icon-192.png?v=20260918-brand" sizes="192x192">
+<link rel="apple-touch-icon" href="/static/brand/icon-180.png?v=20260918-brand" sizes="180x180">
 </head>
 <body class="claims-ui">
   <div class="container compact">
@@ -136,7 +139,7 @@
         .legend span:nth-child(2):before { background:#64748b; } .legend span:nth-child(3):before { background:#94a3b8; } .legend span:nth-child(4):before { background:#cbd5e1; } .legend span:nth-child(5):before { background:var(--md-green); }
         .heatmap-card { min-height:300px; }
         .heatmap-map { position:relative; height:300px; border-radius:18px; overflow:hidden; background:#eef2f7; border:1px solid #dce2ef; }
-        
+
         .heat-dot { position:absolute; transform:translate(-50%,-50%); border-radius:50%; background:rgba(51,65,85,.24); border:2px solid rgba(51,65,85,.55); box-shadow:0 0 0 8px rgba(51,65,85,.08); display:flex; align-items:center; justify-content:center; color:#fff; font-size:9px; font-weight:800; }
         .heat-dot:hover { z-index:10; background:#6B4AA0; color:#fff; border-color:#583b88; }
         .heat-tooltip { position:absolute; left:12px; bottom:12px; right:12px; background:rgba(255,255,255,.92); border:1px solid var(--md-line); border-radius:12px; padding:10px; font-size:12px; color:#3f4860; }
@@ -145,7 +148,7 @@
         .exec-table th { color:#101828; background:#f2eef8; font-size:11px; text-transform:uppercase; font-weight:700; }
         .client-map-list { max-height:180px; overflow:auto; margin-top:10px; font-size:10.5px; } .client-map-list a { color:var(--md-accent); }
         @media (max-width:1100px){ .executive-shell{grid-template-columns:1fr}.executive-sidebar{position:relative;height:auto;max-height:none}.executive-main{padding:18px 14px 28px}.martins-module-topbar{margin:-18px -14px 20px;padding:12px 14px;flex-wrap:wrap}.martins-module-account{width:100%;justify-content:flex-start;flex-wrap:wrap}.span-3,.span-4,.span-5,.span-6,.span-7,.span-8{grid-column:span 12}.executive-topbar{grid-template-columns:1fr}.dashboard-period-form.executive-filter{grid-template-columns:1fr}.status-mini-grid{grid-template-columns:repeat(2,1fr)} }
-      
+
     .premium-analysis-table th:first-child, .premium-analysis-table td:first-child{width:55%;font-weight:700;letter-spacing:.04em}
     .premium-analysis-table td:last-child{font-weight:800;text-align:right;font-size:1.05rem}
     .premium-analysis-table .highlight-row{background:#f7f7f7}
@@ -659,7 +662,7 @@
             <label>BrightRock %<input type="number" min="0" max="100" step="0.01" name="brightrock_rate" value="{{ rates['BrightRock'] }}"></label>
             <label>Mkhulu %<input type="number" min="0" max="100" step="0.01" name="inkulu_rate" value="{{ rates['Inkulu'] }}"></label>
             <label>MFF %<input type="number" min="0" max="100" step="0.01" name="mff_rate" value="{{ rates['MFF'] }}"></label>
-            
+
             <label>MFF Book Value %<input type="number" min="0" max="100" step="0.01" name="mff_book_rate" value="{{ book_rates['MFF Book Value'] }}"></label>
             <label>Franchise Book Value %<input type="number" min="0" max="100" step="0.01" name="franchise_book_rate" value="{{ book_rates['Franchise Book Value'] }}"></label>
             <button type="submit">Recalculate</button>
