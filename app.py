@@ -678,11 +678,13 @@ def save_claims_raw_to_postgres(df, source_file=''):
     return True
 
 
-def load_raw_from_postgres():
+def load_raw_from_postgres(strict=False):
     """Load persisted policy and claims summaries from PostgreSQL for dashboard startup/reload."""
     global LAST_CLAIMS_DF, LAST_POLICY_IMPORT_SUMMARY
     engine = get_db_engine()
     if engine is None:
+        if strict:
+            raise RuntimeError('PostgreSQL is unavailable. Check the Render database connection and server logs.')
         return pd.DataFrame()
     try:
         policy = pd.read_sql("""
@@ -694,8 +696,6 @@ def load_raw_from_postgres():
             FROM policy_monthly_raw
             ORDER BY franchise_name, import_month
         """, engine)
-        if policy.empty:
-            return pd.DataFrame()
         policy['month'] = pd.to_datetime(policy['month'], errors='coerce')
         claims = pd.read_sql("""
             SELECT claims_franchise_name AS franchise, claim_key, claim_month AS month,
@@ -704,6 +704,7 @@ def load_raw_from_postgres():
             FROM claims_monthly_raw
             ORDER BY claims_franchise_name, claim_month
         """, engine)
+        LAST_CLAIMS_DF = claims.copy()
         if not claims.empty:
             claims['month'] = pd.to_datetime(claims['month'], errors='coerce')
             LAST_CLAIMS_DF = claims.copy()
@@ -714,6 +715,8 @@ def load_raw_from_postgres():
         return raw
     except Exception as exc:
         print(f'Could not load PostgreSQL data: {exc}')
+        if strict:
+            raise RuntimeError('Could not refresh PostgreSQL reporting data. Check server logs.') from exc
         return pd.DataFrame()
 
 
@@ -734,13 +737,16 @@ def get_import_history_summary():
         return {}
 
 
-def reload_dashboard_from_postgres():
+def reload_dashboard_from_postgres(strict=False):
     global LAST_RESULT
-    raw = load_raw_from_postgres()
+    raw = load_raw_from_postgres(strict=strict)
     if raw is not None and not raw.empty:
         monthly, periods, portfolio = analyse(raw, LAST_RESULT.get('rates', DEFAULT_RATES.copy()), LAST_RESULT.get('book_rates', DEFAULT_BOOK_VALUE.copy()))
         LAST_RESULT = {'raw': raw, 'monthly': monthly, 'periods': periods, 'portfolio': portfolio, 'rates': LAST_RESULT.get('rates', DEFAULT_RATES.copy()), 'book_rates': LAST_RESULT.get('book_rates', DEFAULT_BOOK_VALUE.copy())}
         return True
+    if strict:
+        LAST_RESULT = {**LAST_RESULT, 'raw': pd.DataFrame(), 'monthly': pd.DataFrame(),
+                       'periods': pd.DataFrame(), 'portfolio': {}}
     return False
 
 
@@ -1139,15 +1145,24 @@ def build_claims_import_summary(claims_before_resolution, claims_after_resolutio
         return {}
 
 def month_from_filename(path):
-    """Return first YYYYMMDD/YYYMM date found in filename as month start."""
-    name = os.path.basename(path)
-    m = re.search(r'(20\d{2})(\d{2})(\d{2})', name)
+    """Use the report month in the original filename; never guess today's month."""
+    name = display_source_filename(path)
+    m = re.search(r'(?<!\d)(20\d{2})[-_ ]?(0[1-9]|1[0-2])(?:[-_ ]?[0-3]\d)?(?!\d)', name)
     if m:
         return pd.Timestamp(year=int(m.group(1)), month=int(m.group(2)), day=1)
-    m = re.search(r'(20\d{2})[-_ ]?(\d{2})', name)
+    month_names = {name.lower(): i for i in range(1, 13)
+                   for name in (pd.Timestamp(2000, i, 1).strftime('%B'),
+                                pd.Timestamp(2000, i, 1).strftime('%b'))}
+    pattern = '|'.join(sorted(month_names, key=len, reverse=True))
+    m = re.search(rf'(?<![A-Za-z])({pattern})[-_ ]+(20\d{{2}})(?!\d)', name, re.I)
     if m:
-        return pd.Timestamp(year=int(m.group(1)), month=int(m.group(2)), day=1)
-    return pd.Timestamp(datetime.today().replace(day=1))
+        return pd.Timestamp(year=int(m.group(2)), month=month_names[m.group(1).lower()], day=1)
+    m = re.search(rf'(?<!\d)(20\d{{2}})[-_ ]+({pattern})(?![A-Za-z])', name, re.I)
+    if m:
+        return pd.Timestamp(year=int(m.group(1)), month=month_names[m.group(2).lower()], day=1)
+    raise ValueError('Cannot determine the policy report month from the filename. '
+                     'Use a filename such as PolicyData_20260901_to_20260930.xlsx '
+                     'or PolicyData_September_2026.xlsx. No month was guessed.')
 
 
 def parse_policy_transaction_sheet(df, source_path=''):
@@ -4859,6 +4874,17 @@ def load_logged_in_user():
         flash('View-only users cannot make changes.', 'danger')
         return redirect(url_for('dashboard'))
     record_user_activity(g.user.get('id'))
+    # Reports must reflect committed imports even when another worker or instance
+    # handled the upload. A non-empty process cache is not evidence of freshness.
+    reporting_endpoints = {'dashboard', 'workspace_page', 'export', 'export_payover',
+                           'board_report', 'client_heatmap_page'}
+    if DATABASE_URL and request.endpoint in reporting_endpoints:
+        try:
+            reload_dashboard_from_postgres(strict=True)
+        except Exception as exc:
+            print(f'Reporting refresh failed: {exc}', flush=True)
+            return ('Reporting data could not be refreshed from PostgreSQL. '
+                    'Please retry or ask the administrator to check the Render logs.', 503)
     return None
 
 
@@ -5971,12 +5997,14 @@ def dashboard():
 
             if incoming_policy_frames:
                 imported_policy_all = pd.concat(incoming_policy_frames, ignore_index=True)
-                save_policy_raw_to_postgres(imported_policy_all, source_file=', '.join([x.get('file_name','') for x in policy_summaries if x.get('file_name')]))
+                policy_saved = save_policy_raw_to_postgres(imported_policy_all, source_file=', '.join([x.get('file_name','') for x in policy_summaries if x.get('file_name')]))
+                if DATABASE_URL and not policy_saved:
+                    raise RuntimeError('Policy import was not saved to PostgreSQL. Check the database connection and retry.')
                 try:
                     recalculate_claims_summary_from_postgres()
                 except Exception as exc:
                     print(f'Could not rebuild PostgreSQL summary after policy import: {exc}')
-                db_raw = load_raw_from_postgres()
+                db_raw = load_raw_from_postgres(strict=bool(DATABASE_URL))
                 raw = db_raw if db_raw is not None and not db_raw.empty else merge_policy_months(raw, imported_policy_all)
                 # If claims were already imported, re-apply them after all policy months are added/replaced.
                 if LAST_CLAIMS_DF is not None and not LAST_CLAIMS_DF.empty:
@@ -6003,12 +6031,14 @@ def dashboard():
             if claims_frames:
                 combined_claims = pd.concat(claims_frames, ignore_index=True)
                 LAST_CLAIMS_DF = combined_claims.copy()
-                save_claims_raw_to_postgres(combined_claims, source_file=', '.join([x.get('file_name','') for x in claims_summaries if x.get('file_name')]))
+                claims_saved = save_claims_raw_to_postgres(combined_claims, source_file=', '.join([x.get('file_name','') for x in claims_summaries if x.get('file_name')]))
+                if DATABASE_URL and not claims_saved:
+                    raise RuntimeError('Claims import was not saved to PostgreSQL. Check the database connection and retry.')
                 try:
                     recalculate_claims_summary_from_postgres()
                 except Exception as exc:
                     print(f'Could not rebuild PostgreSQL summary after claims import: {exc}')
-                db_raw = load_raw_from_postgres()
+                db_raw = load_raw_from_postgres(strict=bool(DATABASE_URL))
                 raw = db_raw if db_raw is not None and not db_raw.empty else merge_claims_into_raw(raw, combined_claims)
                 total_matched = sum(float(x.get('matched_claims', 0) or 0) for x in claims_summaries)
                 total_unmatched = sum(float(x.get('unmatched_claims', 0) or 0) for x in claims_summaries)
@@ -9514,7 +9544,7 @@ def load_default_import_file():
 
 
 # Load PostgreSQL data first; fall back to bundled sample only when DB is empty/unavailable.
-if not reload_dashboard_from_postgres():
+if not reload_dashboard_from_postgres() and not DATABASE_URL:
     load_default_import_file()
 
 
