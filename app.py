@@ -535,7 +535,7 @@ def save_policy_detail_to_postgres(df, source_file=''):
                 :retail_premium, :original_risk_premium, :mpia, :single_premium,
                 :r1_policy_fee, :adv_fund_2_1_fee, :risk_after_r1, :new_risk_premium, CAST(:raw_data AS jsonb)
             )
-            ON CONFLICT (source_row_key) DO UPDATE SET
+            ON CONFLICT (source_row_key) WHERE source_row_key IS NOT NULL DO UPDATE SET
                 source_file = EXCLUDED.source_file,
                 import_month = EXCLUDED.import_month,
                 row_number = EXCLUDED.row_number,
