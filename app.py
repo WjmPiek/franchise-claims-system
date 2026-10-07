@@ -8389,6 +8389,14 @@ def _page_footer(canvas, doc):
 
 
 
+from report_summary import reconciliation, add_pdf_summary, add_excel_summary
+
+
+def _import_report_summary(monthly, config=None):
+    return reconciliation(monthly, get_db_engine() if DATABASE_URL else None,
+                          text, LAST_POLICY_DETAIL_DF, config)
+
+
 def _report_subtitle(name='Board Report'):
     return name or 'Report'
 
@@ -8444,7 +8452,8 @@ def export_payover():
         return redirect(url_for('dashboard'))
     insurer = request.args.get('insurer', 'All') or 'All'
     config = load_franchise_config()
-    monthly, periods, _ = apply_franchise_config(apply_user_franchise_scope(LAST_RESULT['monthly']), config)
+    source_monthly = apply_user_franchise_scope(LAST_RESULT['monthly'])
+    monthly, periods, _ = apply_franchise_config(source_monthly, config)
     period_view = request.args.get('period_view', 'six_months')
     if period_view == 'month':
         base = monthly.copy()
@@ -8462,6 +8471,10 @@ def export_payover():
     selected = request.args.get('franchise', 'All') or 'All'
     if selected != 'All' and 'Franchise' in base.columns:
         base = base[base['Franchise'] == selected]
+    if selected != 'All':
+        groups = config.get('groups', {}) if config.get('use_groups', True) else {}
+        source_monthly = source_monthly[source_monthly['Franchise'].eq(selected) | source_monthly['Franchise'].map(groups).eq(selected)]
+    import_summary = _import_report_summary(source_monthly, config)
     view = _underwriter_allocation_view(base)
     if view.empty:
         flash('No payover data available for export.', 'warning')
@@ -8489,6 +8502,8 @@ def export_payover():
     safe_insurer = re.sub(r'[^A-Za-z0-9]+', '_', insurer).strip('_') or 'All'
     path = os.path.join(EXPORT_DIR, f'{safe_insurer}_payover_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
     with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
+        _add_excel_cover(writer, 'Insurer Payover', 'All imported months in selected scope')
+        add_excel_summary(writer, import_summary)
         export_df.to_excel(writer, index=False, sheet_name='Payover Export')
         workbook = writer.book
         ws = writer.sheets['Payover Export']
@@ -8515,7 +8530,9 @@ def _select_report_months(monthly, args, default_period='all'):
     work = monthly.copy()
     franchise = args.get('franchise', 'All')
     if franchise and franchise != 'All':
-        work = work[work['Franchise'].eq(franchise)].copy()
+        config = load_franchise_config()
+        groups = config.get('groups', {}) if config.get('use_groups', True) else {}
+        work = work[work['Franchise'].eq(franchise) | work['Franchise'].map(groups).eq(franchise)].copy()
     if work.empty:
         raise ValueError('No report data is available for this franchise.')
     mode = args.get('report_period') or default_period
@@ -8585,6 +8602,7 @@ def _financial_download(output_format):
         flash(str(exc), 'warning')
         return redirect(url_for('dashboard'))
     frames = _financial_report_frames(monthly, report_type)
+    import_summary = _import_report_summary(monthly, load_franchise_config())
     if output_format == 'view':
         params = request.args.to_dict()
         params.pop('report_format', None)
@@ -8604,6 +8622,7 @@ def _financial_download(output_format):
     if output_format == 'xlsx':
         with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
             _add_excel_cover(writer, title, label)
+            add_excel_summary(writer, import_summary)
             for name, frame in zip(['Monthly Detail', 'Six Month Periods', 'Portfolio Summary'], frames):
                 frame.to_excel(writer, index=False, sheet_name=name)
                 _format_excel_sheet(writer, name, frame)
@@ -8614,6 +8633,7 @@ def _financial_download(output_format):
         styles = getSampleStyleSheet()
         story = []
         _add_pdf_cover(story, styles, title, label)
+        add_pdf_summary(story, styles, import_summary, doc.width)
         for index, (name, frame) in enumerate(zip(['Monthly Detail', 'Period Summary'], frames)):
             if index:
                 story.append(PageBreak())
@@ -8652,6 +8672,7 @@ def export():
     portfolio_export = portfolio_export.loc[:, ~portfolio_export.columns.duplicated()]
     with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
         _add_excel_cover(writer, 'Commissions' if commissions else 'Franchise Claims Analytics Export', report_label)
+        add_excel_summary(writer, _import_report_summary(monthly_scoped))
         monthly_export.to_excel(writer, index=False, sheet_name='Monthly Detail')
         periods_export.to_excel(writer, index=False, sheet_name='Six Month Periods')
         portfolio_export.to_excel(writer, index=False, sheet_name='Portfolio Summary')
@@ -8687,6 +8708,7 @@ def board_report():
     styles = getSampleStyleSheet()
     story = []
     _add_pdf_cover(story, styles, 'Commissions' if commissions else 'Executive Board Report', report_label)
+    add_pdf_summary(story, styles, _import_report_summary(report_monthly, config), doc.width)
     summary_data = [
         ['Metric', 'Value'],
         ['Total Franchises', portfolio.get('total_franchises', 0)],
