@@ -8523,8 +8523,90 @@ def _select_report_months(monthly, args, default_period='all'):
     return work, label
 
 
+FINANCIAL_REPORT_COLUMNS = {
+    'commissions': ['Franchise', 'Month', 'Period', 'Retail Premium', 'Risk Premium',
+                    'Claims', 'Policy Qty', 'R1 Policy Fee', 'ADV Fee 2.1%',
+                    'Underwriter 2.1% Fee', 'BrightRock Amount', 'Inkulu Amount',
+                    'MFF Amount', 'Total Commission', 'Total Paid Commissions',
+                    'Franchise Money', 'Franchise Money Running Balance'],
+    'book_value': ['Franchise', 'Month', 'Period', 'Retail Premium',
+                   'MFF Book Value 2.5%', 'Franchise Book Value 2.5%', 'Total Book Value'],
+}
+
+
+def _financial_report_frames(monthly, report_type):
+    configured, periods, portfolio = apply_franchise_config(monthly, load_franchise_config())
+    columns = FINANCIAL_REPORT_COLUMNS[report_type]
+    frames = []
+    for source in (configured, periods):
+        friendly = _friendly_export_df(source)
+        frames.append(friendly[[c for c in columns if c in friendly.columns]].copy())
+    metrics = (['total_franchises', 'total_retail', 'total_policy_qty',
+                'total_brightrock_commission', 'total_mkhulu_commission',
+                'total_inkulu_commission', 'total_mff_commission', 'total_r1_policy_fee',
+                'total_underwriter_2_1_fee', 'total_commission', 'total_paid_commissions']
+               if report_type == 'commissions' else
+               ['total_franchises', 'total_retail', 'total_mff_book_value',
+                'total_franchise_book_value', 'total_book_value'])
+    frames.append(pd.DataFrame([{key: portfolio[key] for key in metrics if key in portfolio}]))
+    return frames
+
+
+def _financial_download(output_format):
+    report_type = request.args.get('report_type')
+    title = 'Commissions' if report_type == 'commissions' else 'Book Value'
+    try:
+        monthly, label = _select_report_months(
+            apply_user_franchise_scope(LAST_RESULT['monthly']), request.args)
+    except ValueError as exc:
+        flash(str(exc), 'warning')
+        return redirect(url_for('dashboard'))
+    frames = _financial_report_frames(monthly, report_type)
+    if output_format == 'view':
+        params = request.args.to_dict()
+        params.pop('report_format', None)
+        tables = []
+        for frame in frames[:2]:
+            display = frame.copy()
+            for column in display.columns:
+                if column == 'Month':
+                    display[column] = pd.to_datetime(display[column]).dt.strftime('%b %Y')
+                elif pd.api.types.is_numeric_dtype(display[column]) and column != 'Policy Qty':
+                    display[column] = display[column].map(money)
+            tables.append(display.to_html(index=False, classes='report-table', escape=True))
+        return render_template('financial_report.html', title=title, period=label,
+                               tables=tables, excel_url=url_for('export', **params),
+                               pdf_url=url_for('board_report', **params))
+    path = os.path.join(EXPORT_DIR, f'{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.{output_format}')
+    if output_format == 'xlsx':
+        with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
+            _add_excel_cover(writer, title, label)
+            for name, frame in zip(['Monthly Detail', 'Six Month Periods', 'Portfolio Summary'], frames):
+                frame.to_excel(writer, index=False, sheet_name=name)
+                _format_excel_sheet(writer, name, frame)
+    else:
+        page_size = landscape(A4)
+        doc = SimpleDocTemplate(path, pagesize=page_size, rightMargin=.45*cm,
+                                leftMargin=.45*cm, topMargin=.55*cm, bottomMargin=.55*cm)
+        styles = getSampleStyleSheet()
+        story = []
+        _add_pdf_cover(story, styles, title, label)
+        for index, (name, frame) in enumerate(zip(['Monthly Detail', 'Period Summary'], frames)):
+            if index:
+                story.append(PageBreak())
+            story.append(Paragraph(f'{title} - {name}', styles['Heading2']))
+            pdf_frame = frame.copy()
+            if "Month" in pdf_frame:
+                pdf_frame["Month"] = pd.to_datetime(pdf_frame["Month"]).dt.strftime("%b %Y")
+            story.append(_pdf_table(_rows_for_pdf(pdf_frame, list(pdf_frame.columns), limit=None), page_size[0]))
+        doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
+    return send_file(path, as_attachment=True)
+
+
 @app.route('/export')
 def export():
+    if request.args.get('report_type') in FINANCIAL_REPORT_COLUMNS:
+        return _financial_download('view' if request.args.get('report_format') == 'view' else 'xlsx')
     if LAST_RESULT['monthly'].empty:
         flash('No data to export.', 'warning')
         return redirect(url_for('dashboard'))
@@ -8558,6 +8640,8 @@ def export():
 
 @app.route('/board_report')
 def board_report():
+    if request.args.get('report_type') in FINANCIAL_REPORT_COLUMNS:
+        return _financial_download('pdf')
     if LAST_RESULT['periods'].empty:
         flash('No data to report.', 'warning')
         return redirect(url_for('dashboard'))

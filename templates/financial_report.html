@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title }} | Martin's Funerals</title>
+<style>body{font-family:Arial,sans-serif;margin:0;background:#f6f5f9;color:#202030}main{margin:24px;padding:24px;background:white;border-radius:12px}nav{display:flex;gap:12px;flex-wrap:wrap}a{color:#6b4aa0}nav a{padding:10px;border:1px solid #6b4aa0;border-radius:6px}.table-scroll{overflow-x:auto}.report-table{border-collapse:collapse;width:100%;font-size:13px}.report-table th{background:#6b4aa0;color:white}.report-table td,.report-table th{padding:10px;border:1px solid #ddd;white-space:nowrap}.report-table th{text-align:left}@media(max-width:600px){main{margin:8px;padding:12px}}</style>
+</head><body><main>
+<h1>{{ title }}</h1><p>{{ period }}</p>
+<nav><a href="{{ url_for('dashboard') }}#downloadReports">Back to dashboard</a><a href="{{ excel_url }}">Download {{ title }} Excel</a><a href="{{ pdf_url }}">Download {{ title }} PDF</a></nav>
+<h2>Monthly Detail</h2><div class="table-scroll">{{ tables[0]|safe }}</div>
+<h2>Period Summary</h2><div class="table-scroll">{{ tables[1]|safe }}</div>
+</main></body></html>
+

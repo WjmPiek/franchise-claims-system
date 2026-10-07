@@ -577,11 +577,19 @@
               {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.last %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
             </select>
           </label>
+          <style>.report-download-group{border:1px solid #ddd;border-radius:8px;padding:12px;display:flex;flex-wrap:wrap;gap:8px;flex:1 1 300px}.report-download-group legend{font-weight:700;padding:0 6px}</style>
+          <input type="hidden" id="reportFormat" name="report_format" value="download">
           <div class="actions compact-actions report-download-actions">
-            <button type="submit" {% if not report_month_options %}disabled{% endif %}>Download Excel</button>
-            <button type="submit" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Download PDF</button>
-            <button type="submit" name="report_type" value="commissions" {% if not report_month_options %}disabled{% endif %}>Commissions Excel</button>
-            <button type="submit" name="report_type" value="commissions" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Commissions PDF</button>
+            <fieldset class="report-download-group"><legend>Commissions</legend>
+              <button type="submit" name="report_type" value="commissions" formaction="{{ url_for('export') }}" onclick="document.getElementById('reportFormat').value='view'" {% if not report_month_options %}disabled{% endif %}>View Commissions</button>
+              <button type="submit" name="report_type" value="commissions" {% if not report_month_options %}disabled{% endif %}>Commissions Excel</button>
+              <button type="submit" name="report_type" value="commissions" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Commissions PDF</button>
+            </fieldset>
+            <fieldset class="report-download-group"><legend>Book Value</legend>
+              <button type="submit" name="report_type" value="book_value" formaction="{{ url_for('export') }}" onclick="document.getElementById('reportFormat').value='view'" {% if not report_month_options %}disabled{% endif %}>View Book Value</button>
+              <button type="submit" name="report_type" value="book_value" {% if not report_month_options %}disabled{% endif %}>Book Value Excel</button>
+              <button type="submit" name="report_type" value="book_value" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Book Value PDF</button>
+            </fieldset>
           </div>
         </form>
       </section>
@@ -589,6 +597,9 @@
         (function(){
           const form = document.getElementById('reportDownloadForm');
           const mode = document.getElementById('reportPeriod');
+          form.addEventListener('submit', function(event){
+            document.getElementById('reportFormat').value = event.submitter && event.submitter.textContent.trim().startsWith('View ') ? 'view' : 'download';
+          });
           function updateFields(){
             form.querySelectorAll('[data-report-field]').forEach(label => {
               label.hidden = label.dataset.reportField !== mode.value;
