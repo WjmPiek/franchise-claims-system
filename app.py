@@ -8303,6 +8303,8 @@ def _pdf_table(data, page_width, font_size=5.4, first_col_weight=1.35):
             weights[i] = 1.25
         elif str(header) == 'Policies':
             weights[i] = 0.65
+        elif str(header) == 'Run Balance':
+            weights[i] = 1.45
     col_widths = [available * w / sum(weights) for w in weights]
     font_size = max(font_size, 6.0 if col_count > 10 else 7.0)
     body = ParagraphStyle('ReportCell', fontName='Helvetica', fontSize=font_size,
