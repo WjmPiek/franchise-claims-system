@@ -488,6 +488,8 @@ def save_policy_detail_to_postgres(df, source_file=''):
     underlying PolicyData rows allocated to Column A franchise names so every import
     can be audited later in DBeaver.
     """
+    from import_progress import report
+    report('Preparing policy rows')
     engine = get_db_engine()
     if engine is None or df is None or df.empty:
         return False
@@ -500,6 +502,8 @@ def save_policy_detail_to_postgres(df, source_file=''):
     months = sorted({_db_date(x) for x in work['import_month'].dropna().unique() if _db_date(x) is not None})
     rows = []
     for _, r in work.iterrows():
+        if len(rows) % 2000 == 0:
+            report('Preparing policy rows', len(rows), len(work))
         rows.append({
             'source_file': src or str(r.get('source_file','')),
             'import_month': _db_date(r.get('import_month')),
@@ -524,39 +528,15 @@ def save_policy_detail_to_postgres(df, source_file=''):
     if not rows:
         return False
     with engine.begin() as conn:
+        report('Replacing this month in the database')
         for m in months:
             conn.execute(text('DELETE FROM policydata_detail_raw WHERE import_month = :m'), {'m': m, 'src': src})
-        insert_sql = text("""
-            INSERT INTO policydata_detail_raw (
-                source_file, import_month, row_number, source_row_key, client_address_o, id_number_f, franchise_name, relation, is_mem,
-                retail_premium, original_risk_premium, mpia, single_premium,
-                r1_policy_fee, adv_fund_2_1_fee, risk_after_r1, new_risk_premium, raw_data
-            ) VALUES (
-                :source_file, :import_month, :row_number, :source_row_key, :client_address_o, :id_number_f, :franchise_name, :relation, :is_mem,
-                :retail_premium, :original_risk_premium, :mpia, :single_premium,
-                :r1_policy_fee, :adv_fund_2_1_fee, :risk_after_r1, :new_risk_premium, CAST(:raw_data AS jsonb)
-            )
-            ON CONFLICT (source_row_key) WHERE source_row_key IS NOT NULL DO UPDATE SET
-                source_file = EXCLUDED.source_file,
-                import_month = EXCLUDED.import_month,
-                row_number = EXCLUDED.row_number,
-                client_address_o = EXCLUDED.client_address_o,
-                id_number_f = EXCLUDED.id_number_f,
-                franchise_name = EXCLUDED.franchise_name,
-                relation = EXCLUDED.relation,
-                is_mem = EXCLUDED.is_mem,
-                retail_premium = EXCLUDED.retail_premium,
-                original_risk_premium = EXCLUDED.original_risk_premium,
-                mpia = EXCLUDED.mpia,
-                single_premium = EXCLUDED.single_premium,
-                r1_policy_fee = EXCLUDED.r1_policy_fee,
-                adv_fund_2_1_fee = EXCLUDED.adv_fund_2_1_fee,
-                risk_after_r1 = EXCLUDED.risk_after_r1,
-                new_risk_premium = EXCLUDED.new_risk_premium,
-                raw_data = EXCLUDED.raw_data
-        """)
+        from import_bulk import DETAIL_INSERT_SQL
+        insert_sql = text(DETAIL_INSERT_SQL)
         from import_bulk import insert_detail_rows
         insert_detail_rows(conn, insert_sql, rows)
+        report('Committing policy rows', len(rows), len(rows))
+    report('Policy rows committed', len(rows), len(rows))
     return True
 
 
@@ -2612,13 +2592,15 @@ def get_policy_age_notification_age_bands(selected='All'):
         print(f'Could not load age notification age-band totals: {exc}')
         return out
 
-def read_policydata_streaming(path):
+def read_policydata_streaming(path, persist_detail=False):
     """Fast streaming import for large PolicyData_YYYYMMDD_to_YYYYMMDD files.
 
     Allocates rows to franchise from the Franchise column, includes all relation rows,
     and calculates R1 and the 2.1% underwriter fee using the MPIA months paid.
     """
     global LAST_POLICY_IMPORT_SUMMARY, LAST_POLICY_DETAIL_DF
+    from import_progress import report
+    report('Opening Excel workbook')
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
     header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
@@ -2642,6 +2624,7 @@ def read_policydata_streaming(path):
     agg = {}
     # Keep all relation types, including blanks, for premium reconciliation and reports.
     detail_rows = []
+    detail_count = 0
     source_display = display_source_filename(path)
     month = month_from_filename(path)
     total_rows = 0
@@ -2651,77 +2634,95 @@ def read_policydata_streaming(path):
     # many formatted/empty columns, and parsing every cell can exceed Render's
     # Gunicorn timeout before our code gets control again.
     max_needed_col = max(franchise_i, id_number_i, relation_i, risk_i, retail_i, mpia_i, address_o_i) + 1
-    for row_number, row in enumerate(ws.iter_rows(min_row=2, max_col=max_needed_col, values_only=True), start=2):
-        total_rows += 1
-        try:
-            relation = str(row[relation_i] or '').strip().upper()
-        except Exception:
-            skipped_rows += 1
-            continue
-        franchise = str(row[franchise_i] or '').strip() if franchise_i < len(row) else ''
-        risk = float(Decimal(str(clean_money(row[risk_i] if risk_i < len(row) else 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-        retail = float(Decimal(str(clean_money(row[retail_i] if retail_i < len(row) else 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-        mpia = clean_money(row[mpia_i] if mpia_i < len(row) else 1)
-        if mpia <= 0:
-            mpia = 1
-        single_premium = risk / mpia if mpia else risk
-        is_mem = relation == 'MEM'
-        r1_fee = mpia * 1.0 if is_mem else 0.0
-        risk_after_r1_per_month = max(single_premium - 1.0, 0) if is_mem else 0.0
-        after_decimal = max(Decimal(str(risk)) - Decimal(str(r1_fee)), Decimal('0')) if is_mem else Decimal(str(risk))
-        underwriter_fee = float((after_decimal * Decimal('0.021')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)) if is_mem else 0.0
-        risk_after_r1 = max(risk - r1_fee, 0) if is_mem else risk
-        net_risk = round(risk_after_r1 - underwriter_fee, 2)
-        # Avoid storing a full copy of every Excel row in memory during large imports.
-        raw_data = {str(header[i]): row[i] for i in (2, 3, 4, 6, 8, 12, 13, 14, 17) if i < len(row) and i < len(header)}
-        client_address_o = _clean_map_value(row[address_o_i] if address_o_i < len(row) else '')
-        id_number_f = _clean_id_number(row[id_number_i] if id_number_i < len(row) else '')
-        if franchise and franchise.lower() not in {'nan', 'none', 'total', 'grand total'}:
-            detail_rows.append({
-                'source_file': source_display,
-                'import_month': month,
-                'row_number': row_number,
-                'source_row_key': f'{source_display}|{month}|{row_number}',
-                'client_address_o': client_address_o,
-                'id_number_f': id_number_f,
-                'franchise': franchise,
-                'relation': relation,
-                'is_mem': is_mem,
-                'retail_premium': retail,
-                'original_risk_premium': risk,
-                'mpia': mpia,
-                'single_premium': single_premium,
-                'r1_policy_fee': r1_fee,
-                'adv_fund_2_1_fee': underwriter_fee,
-                'risk_after_r1': risk_after_r1,
-                'new_risk_premium': net_risk,
-                'raw_data': raw_data,
-            })
-        if is_mem:
-            mem_rows += 1
-        if not franchise or franchise.lower() in {'nan', 'none', 'total', 'grand total'}:
-            skipped_rows += 1
-            continue
-        rec = agg.setdefault(franchise, {
-            'retail_premium': 0.0,
-            'risk_premium': 0.0,
-            'claims': 0.0,
-            'policy_qty': 0.0,
-            'original_risk_premium': 0.0,
-            'r1_policy_fee_imported': 0.0,
-            'underwriter_2_1_fee': 0.0,
-            'risk_after_r1': 0.0,
-            'single_monthly_premium_total': 0.0,
-        })
-        rec['retail_premium'] += retail
-        rec['risk_premium'] += net_risk
-        rec['policy_qty'] += mpia if is_mem else 0
-        rec['original_risk_premium'] += risk
-        rec['r1_policy_fee_imported'] += r1_fee
-        rec['underwriter_2_1_fee'] += underwriter_fee
-        rec['risk_after_r1'] += risk_after_r1
-        rec['single_monthly_premium_total'] += single_premium if is_mem else 0
+    from import_bulk import policy_detail_batches
+    from contextlib import nullcontext
+    sink = policy_detail_batches(get_db_engine(), source_display, month.date()) if persist_detail else nullcontext(None)
+    try:
+        with sink as write_batch:
+            for row_number, row in enumerate(ws.iter_rows(min_row=2, max_col=max_needed_col, values_only=True), start=2):
+                total_rows += 1
+                if total_rows % 1000 == 0:
+                    report('Reading Excel rows', total_rows, max((getattr(ws, 'max_row', 0) or 0) - 1, total_rows))
+                try:
+                    relation = str(row[relation_i] or '').strip().upper()
+                except Exception:
+                    skipped_rows += 1
+                    continue
+                franchise = str(row[franchise_i] or '').strip() if franchise_i < len(row) else ''
+                risk = float(Decimal(str(clean_money(row[risk_i] if risk_i < len(row) else 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                retail = float(Decimal(str(clean_money(row[retail_i] if retail_i < len(row) else 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                mpia = clean_money(row[mpia_i] if mpia_i < len(row) else 1)
+                if mpia <= 0:
+                    mpia = 1
+                single_premium = risk / mpia if mpia else risk
+                is_mem = relation == 'MEM'
+                r1_fee = mpia * 1.0 if is_mem else 0.0
+                risk_after_r1_per_month = max(single_premium - 1.0, 0) if is_mem else 0.0
+                after_decimal = max(Decimal(str(risk)) - Decimal(str(r1_fee)), Decimal('0')) if is_mem else Decimal(str(risk))
+                underwriter_fee = float((after_decimal * Decimal('0.021')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)) if is_mem else 0.0
+                risk_after_r1 = max(risk - r1_fee, 0) if is_mem else risk
+                net_risk = round(risk_after_r1 - underwriter_fee, 2)
+                # Avoid storing a full copy of every Excel row in memory during large imports.
+                raw_data = {str(header[i]): row[i] for i in (2, 3, 4, 6, 8, 12, 13, 14, 17) if i < len(row) and i < len(header)}
+                client_address_o = _clean_map_value(row[address_o_i] if address_o_i < len(row) else '')
+                id_number_f = _clean_id_number(row[id_number_i] if id_number_i < len(row) else '')
+                if franchise and franchise.lower() not in {'nan', 'none', 'total', 'grand total'}:
+                    detail_count += 1
+                    detail_rows.append({
+                        'source_file': source_display,
+                        'import_month': month,
+                        'row_number': row_number,
+                        'source_row_key': f'{source_display}|{month}|{row_number}',
+                        'client_address_o': client_address_o,
+                        'id_number_f': id_number_f,
+                        'franchise': franchise,
+                        'relation': relation,
+                        'is_mem': is_mem,
+                        'retail_premium': retail,
+                        'original_risk_premium': risk,
+                        'mpia': mpia,
+                        'single_premium': single_premium,
+                        'r1_policy_fee': r1_fee,
+                        'adv_fund_2_1_fee': underwriter_fee,
+                        'risk_after_r1': risk_after_r1,
+                        'new_risk_premium': net_risk,
+                        'raw_data': raw_data,
+                    })
+                    if write_batch and len(detail_rows) >= 2000:
+                        write_batch(detail_rows)
+                        detail_rows.clear()
+                if is_mem:
+                    mem_rows += 1
+                if not franchise or franchise.lower() in {'nan', 'none', 'total', 'grand total'}:
+                    skipped_rows += 1
+                    continue
+                rec = agg.setdefault(franchise, {
+                    'retail_premium': 0.0,
+                    'risk_premium': 0.0,
+                    'claims': 0.0,
+                    'policy_qty': 0.0,
+                    'original_risk_premium': 0.0,
+                    'r1_policy_fee_imported': 0.0,
+                    'underwriter_2_1_fee': 0.0,
+                    'risk_after_r1': 0.0,
+                    'single_monthly_premium_total': 0.0,
+                })
+                rec['retail_premium'] += retail
+                rec['risk_premium'] += net_risk
+                rec['policy_qty'] += mpia if is_mem else 0
+                rec['original_risk_premium'] += risk
+                rec['r1_policy_fee_imported'] += r1_fee
+                rec['underwriter_2_1_fee'] += underwriter_fee
+                rec['risk_after_r1'] += risk_after_r1
+                rec['single_monthly_premium_total'] += single_premium if is_mem else 0
 
+            if write_batch and detail_rows:
+                write_batch(detail_rows)
+                detail_rows.clear()
+    finally:
+        wb.close()
+
+    report('Excel rows read', total_rows, total_rows)
     rows = []
     for franchise, rec in agg.items():
         rows.append({
@@ -2748,7 +2749,7 @@ def read_policydata_streaming(path):
         'file_name': display_source_filename(path),
         'month': month.strftime('%b %Y'),
         'total_rows': int(total_rows),
-        'detail_rows_stored': int(len(detail_rows)),
+        'detail_rows_stored': int(detail_count),
         'mem_rows': int(mem_rows),
         'skipped_rows': int(skipped_rows),
         'franchises_found': int(out['franchise'].nunique()) if not out.empty else 0,
@@ -2766,6 +2767,7 @@ def looks_like_policydata_file(path):
     name = os.path.basename(path).lower()
     if name.startswith('policydata'):
         return True
+    wb = None
     try:
         wb = load_workbook(path, read_only=True, data_only=True)
         ws = wb[wb.sheetnames[0]]
@@ -2774,6 +2776,9 @@ def looks_like_policydata_file(path):
         return {'franchise', 'relation', 'mpia'}.issubset(keys) and ('aul risk' in keys or 'risk' in keys) and 'retail' in keys
     except Exception:
         return False
+    finally:
+        if wb is not None:
+            wb.close()
 
 
 
@@ -2807,7 +2812,7 @@ def read_excel_file(path):
     # Large Martins PolicyData exports are transaction-level files. Use a streaming parser
     # so big monthly files load reliably and allocate MEM rows to franchises.
     if looks_like_policydata_file(path):
-        streamed = read_policydata_streaming(path)
+        streamed = read_policydata_streaming(path, persist_detail=bool(DATABASE_URL))
         if not streamed.empty:
             df = streamed.copy()
             df['franchise'] = df['franchise'].astype(str).str.strip()
@@ -5962,6 +5967,9 @@ def index():
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
     global LAST_RESULT, LAST_CLAIMS_DF, LAST_POLICY_IMPORT_SUMMARY
+    from import_progress import active, report, stream_import
+    if request.method == 'POST' and request.headers.get('X-Import-Progress') == 'stream' and not active():
+        return stream_import(dashboard)
     if request.method == 'POST':
         rates = {
             'BrightRock': safe_float(request.form.get('brightrock_rate'), DEFAULT_RATES['BrightRock']),
@@ -5998,6 +6006,7 @@ def dashboard():
                 imported_any = True
 
             if incoming_policy_frames:
+                report('Saving monthly totals and recalculating reports')
                 imported_policy_all = pd.concat(incoming_policy_frames, ignore_index=True)
                 policy_saved = save_policy_raw_to_postgres(imported_policy_all, source_file=', '.join([x.get('file_name','') for x in policy_summaries if x.get('file_name')]))
                 if DATABASE_URL and not policy_saved:
@@ -6021,6 +6030,7 @@ def dashboard():
             claims_frames = []
             claims_summaries = []
             for claims_file in claims_files:
+                report('Reading claims workbook')
                 claims_filename = f'{uuid.uuid4()}_{claims_file.filename}'
                 claims_path = os.path.join(UPLOAD_DIR, claims_filename)
                 claims_file.save(claims_path)
@@ -6031,6 +6041,7 @@ def dashboard():
                 imported_any = True
 
             if claims_frames:
+                report('Saving claims and recalculating reports')
                 combined_claims = pd.concat(claims_frames, ignore_index=True)
                 LAST_CLAIMS_DF = combined_claims.copy()
                 claims_saved = save_claims_raw_to_postgres(combined_claims, source_file=', '.join([x.get('file_name','') for x in claims_summaries if x.get('file_name')]))

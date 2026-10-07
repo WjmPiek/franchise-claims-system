@@ -9,7 +9,7 @@ const script = html.slice(start, end);
 
 function run(failAt){
   const requests = [];
-  const files = Array.from({length:22}, (_, i) => ({name:`month-${i+1}.xlsx`}));
+  const files = Array.from({length:22}, (_, i) => ({name:`month-${i+1}.xlsx`,size:1000}));
   const nodes = new Map();
   const node = id => {
     if(!nodes.has(id)) nodes.set(id, {style:{}, classList:{add(){},remove(){}}, textContent:''});
@@ -40,6 +40,10 @@ function run(failAt){
     req.upload.onprogress({lengthComputable:true,loaded:100,total:100});
     assert.equal(node('importProgressPct').textContent,'Processing');
     req.upload.onload();
+    req.responseText='{"type":"progress","stage":"Reading Excel rows","current":500,"total":1000}\n';
+    req.onprogress();
+    assert(node('importStepRows').textContent.includes('50% of this stage'));
+    assert.equal(node('importProgressPct').textContent,'50% of stage');
     if(i===failAt){
       req.status=500; req.responseText='server timeout'; req.onload();
       assert.equal(requests.length,i+1, 'failure stops queue');
@@ -48,7 +52,8 @@ function run(failAt){
       assert(node('importProgressText').textContent.includes(`Completed: ${i} of 22`));
       return;
     }
-    req.status=200; req.responseText='{"ok":true}'; req.onload();
+    req.status=200; req.responseText+='{"type":"done","ok":'; req.onprogress();
+    req.responseText+='true}\n'; req.onload();
   }
   assert.equal(node('importProgressPct').textContent,'100%');
   assert(location.href.includes('dashboard'));

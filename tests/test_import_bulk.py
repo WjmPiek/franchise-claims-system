@@ -4,7 +4,7 @@ from pathlib import Path
 from contextlib import nullcontext
 from types import SimpleNamespace
 from psycopg2.extensions import adapt
-from import_bulk import insert_detail_rows
+from import_bulk import insert_detail_rows, DETAIL_INSERT_SQL
 
 
 class Cursor:
@@ -24,7 +24,7 @@ class BulkImportTest(unittest.TestCase):
         source = Path(__file__).resolve().parents[1].joinpath('app.py').read_text(encoding='utf-8')
         fn = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == 'save_policy_detail_to_postgres')
         assignment = next(n for n in ast.walk(fn) if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'insert_sql' for t in n.targets))
-        sql = assignment.value.args[0].value
+        sql = DETAIL_INSERT_SQL
         import re
         keys = re.findall(r':(\w+)', re.search(r'VALUES\s*\((.*?)\)\s*ON CONFLICT', sql, re.S).group(1))
         row = dict.fromkeys(keys, 1)

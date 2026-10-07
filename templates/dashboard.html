@@ -1338,6 +1338,8 @@
       const queue = Array.from(policyFiles).map(file => [{field: 'excel_file', file}]);
       if(claimsFiles.length) queue.push(Array.from(claimsFiles).map(file => ({field: 'claims_file', file})));
       let completedFiles = 0;
+      let completedBytes = 0;
+      const totalBytes = Array.from(policyFiles).concat(Array.from(claimsFiles)).reduce((sum, file) => sum + (file.size || 0), 0);
       let index = 0;
       let elapsedTimer;
 
@@ -1364,7 +1366,37 @@
         selected.forEach(item => data.append(item.field, item.file, item.file.name));
         xhr.open('POST', importUrl, true);
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-        if(stepFiles) stepFiles.textContent = 'Completed: ' + completedFiles + ' of ' + totalFiles + ' files';
+        xhr.setRequestHeader('X-Import-Progress', 'stream');
+        let responseOffset = 0;
+        let pending = '';
+        let serverResult = null;
+        function receiveProgress(){
+          pending += xhr.responseText.slice(responseOffset);
+          responseOffset = xhr.responseText.length;
+          const lines = pending.split('\n');
+          pending = lines.pop();
+          for(const line of lines){
+            let update;
+            try { update = JSON.parse(line); } catch(e) { continue; }
+            if(update.type === 'done') serverResult = update;
+            if(update.type === 'progress'){
+              const counted = update.total > 0 && update.current != null;
+              const counts = counted ? ': ' + Number(update.current).toLocaleString() + ' / ' + Number(update.total).toLocaleString() + ' rows (' + Math.round(update.current / update.total * 100) + '% of this stage)' : '';
+              if(counted){
+                showProgress(update.current / update.total * 100, update.stage);
+                if(pct) pct.textContent += ' of stage';
+                if(inlinePct) inlinePct.textContent += ' of stage';
+                if(bar) bar.classList.remove('progress-bar-striped');
+                if(inlineBar) inlineBar.classList.remove('progress-bar-striped');
+              } else {
+                setProcessingMode(update.stage);
+              }
+              if(stepRows) stepRows.textContent = update.stage + counts;
+            }
+          }
+        }
+        xhr.onprogress = receiveProgress;
+        if(stepFiles) stepFiles.textContent = 'Completed: ' + completedFiles + ' of ' + totalFiles + ' files (' + Math.round(completedFiles / totalFiles * 100) + '% overall)';
         if(modalFile) modalFile.textContent = 'Current file: ' + label;
         showProgress(completedFiles / totalFiles * 100, 'Uploading current file...');
         xhr.upload.onprogress = function(event){
@@ -1378,18 +1410,21 @@
         };
         const fileStarted = Date.now();
         elapsedTimer = setInterval(() => {
-          if(stepStatus) stepStatus.textContent = 'Current file elapsed time: ' + Math.floor((Date.now() - fileStarted) / 1000) + ' seconds. Completed: ' + completedFiles + '/' + totalFiles + '.';
+          const elapsed = Math.floor((Date.now() - started) / 1000);
+          const remaining = completedBytes > 0 ? Math.ceil(elapsed * (totalBytes - completedBytes) / completedBytes / 60) : null;
+          const estimate = remaining == null ? 'Estimated time remaining: calculating after the first file.' : 'Estimated time remaining: about ' + remaining + ' minutes (based on completed file sizes).';
+          if(stepStatus) stepStatus.textContent = 'Total elapsed: ' + Math.floor(elapsed / 60) + 'm ' + (elapsed % 60) + 's. Current file: ' + Math.floor((Date.now() - fileStarted) / 1000) + 's. ' + estimate;
         }, 1000);
         xhr.onload = function(){
           clearInterval(elapsedTimer);
-          let result;
-          try { result = JSON.parse(xhr.responseText); } catch(e) {}
-          if(xhr.status >= 200 && xhr.status < 300 && result && result.ok){
+          receiveProgress();
+          if(xhr.status >= 200 && xhr.status < 300 && serverResult && serverResult.ok){
             completedFiles += selected.length;
+            completedBytes += selected.reduce((sum, item) => sum + (item.file.size || 0), 0);
             index += 1;
             nextFile();
           } else {
-            fail('Stopped at ' + label + '. ' + (result?.error || 'The server did not confirm a successful import.'));
+            fail('Stopped at ' + label + '. ' + (serverResult?.error || 'The server did not confirm a successful import.'));
           }
         };
         xhr.onerror = function(){ fail('Connection lost while importing ' + label + '. Check this month before retrying.'); };

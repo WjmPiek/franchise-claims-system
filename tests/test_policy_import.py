@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
+from contextlib import nullcontext
+from unittest.mock import patch
 import pandas as pd
 from flask import Flask
 from policy_reports import register_policy_reports
@@ -47,6 +49,31 @@ class ImportAndReportsTest(unittest.TestCase):
         self.assertEqual(len(self.detail),5)
         self.assertFalse(self.detail[~self.detail.is_mem].adv_fund_2_1_fee.any())
         self.assertAlmostEqual(self.detail.new_risk_premium.sum(),self.total.risk_premium)
+
+    def test_database_stream_keeps_bounded_batches_and_identical_totals(self):
+        header, data = self.headers, self.rows * 501
+        class Sheet:
+            max_row = len(data) + 1
+            def iter_rows(self, max_row=None, **kwargs): return iter([header] if max_row == 1 else data)
+        class Book:
+            sheetnames = ['Sheet1']
+            def __getitem__(self, name): return Sheet()
+            def close(self): pass
+        class Connection:
+            def execute(self, *args): pass
+        class Engine:
+            def begin(self): return nullcontext(Connection())
+        batches = []
+        def insert(conn, sql, rows):
+            batches.append((len(rows), sum(row['retail_premium'] for row in rows), sum(row['new_risk_premium'] for row in rows)))
+        self.env.update(load_workbook=lambda *a, **k: Book(), get_db_engine=lambda: Engine())
+        with patch('import_bulk.insert_detail_rows', insert):
+            total = self.env['read_policydata_streaming']('PolicyData_20260901_to_20260930.xlsx', persist_detail=True).iloc[0]
+        self.assertEqual([batch[0] for batch in batches], [2000, 505])
+        self.assertTrue(self.env['LAST_POLICY_DETAIL_DF'].empty)
+        self.assertEqual(self.env['LAST_POLICY_IMPORT_SUMMARY']['detail_rows_stored'], 2505)
+        self.assertAlmostEqual(sum(batch[1] for batch in batches), total.retail_premium)
+        self.assertAlmostEqual(sum(batch[2] for batch in batches), total.risk_premium)
 
     def test_blank_relation_export_and_controls(self):
         response=self.client.get('/policy_reports?relation=(Blanks)&download=detail')
