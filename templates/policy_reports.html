@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Policy relation reports</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head><body><div class="container">
+<a href="{{ url_for('dashboard') }}">Back to dashboard</a><h1>Policy relation reports and reconciliation</h1>
+<p>All relation types contribute to premiums. R1 and ADV fees apply to MEM only. Fees are rounded to cents per row. Re-import historical months to include previously excluded rows.</p>
+<form method="get">
+<label>Month <select name="month">{% for m in months %}<option {% if m==month %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
+<label>Franchise <select name="franchise"><option>All</option>{% for f in franchises %}<option {% if f==franchise %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></label>
+<label>Relation <select name="relation"><option>All</option>{% for r in relations %}<option {% if r==relation %}selected{% endif %}>{{ r }}</option>{% endfor %}{% for g in groups %}{% if g.relation not in relations %}<option {% if g.relation==relation %}selected{% endif %}>{{ g.relation }}</option>{% endif %}{% endfor %}</select></label>
+<p>Enter the other system's raw premium totals for the same month, franchise and relation selection. Controls are used for this report only.</p>
+<label>Other system risk before fees <input name="external_risk" inputmode="decimal" value="{{ args.get('external_risk','') }}"></label>
+<label>Other system retail <input name="external_retail" inputmode="decimal" value="{{ args.get('external_retail','') }}"></label>
+<button type="submit">View report</button><button name="download" value="summary">Download summary CSV</button><button name="download" value="detail">Download row detail CSV</button></form>
+<p>{{ month }} · {{ franchise }} · {{ relation }}</p>
+<table><thead><tr><th>Relation</th><th>Rows</th><th>Risk before fees</th><th>Retail</th><th>R1</th><th>ADV</th><th>Net risk</th></tr></thead><tbody>
+{% for g in groups %}<tr><td>{{ g.relation }}</td><td>{{ g.rows }}</td>{% for key in ['original_risk_premium','retail_premium','r1_policy_fee','adv_fund_2_1_fee','new_risk_premium'] %}<td>{{ '{:,.2f}'.format(g[key]) }}</td>{% endfor %}</tr>{% endfor %}
+<tr><th>Total</th><th>{{ totals.rows }}</th>{% for key in ['original_risk_premium','retail_premium','r1_policy_fee','adv_fund_2_1_fee','new_risk_premium'] %}<th>{{ '{:,.2f}'.format(totals[key]) }}</th>{% endfor %}</tr></tbody></table>
+{% if not groups %}<p>No imported rows for this selection.</p>{% endif %}
+{% for key,v in controls.items() %}<p><strong>{{ 'Risk before fees' if key=='external_risk' else 'Retail' }}: {{ v.status }}</strong>. Other system {{ '{:,.2f}'.format(v.value) }}. Difference (other system minus imported): {{ '{:,.2f}'.format(v.difference) if v.difference is not none else 'Unavailable' }}.</p>{% endfor %}
+</div></body></html>

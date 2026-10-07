@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 from functools import wraps
 
+from decimal import Decimal, ROUND_HALF_UP
 import pandas as pd
 try:
     from sqlalchemy import create_engine, text
@@ -524,7 +525,7 @@ def save_policy_detail_to_postgres(df, source_file=''):
         return False
     with engine.begin() as conn:
         for m in months:
-            conn.execute(text('DELETE FROM policydata_detail_raw WHERE import_month = :m AND source_file = :src'), {'m': m, 'src': src})
+            conn.execute(text('DELETE FROM policydata_detail_raw WHERE import_month = :m'), {'m': m, 'src': src})
         insert_sql = text("""
             INSERT INTO policydata_detail_raw (
                 source_file, import_month, row_number, source_row_key, client_address_o, id_number_f, franchise_name, relation, is_mem,
@@ -1219,19 +1220,18 @@ def parse_policy_transaction_sheet(df, source_path=''):
     work['__retail'] = work[retail_col].apply(clean_money)
     work['__mpia'] = work[mpia_col].apply(clean_money).replace(0, 1)
     work.loc[work['__mpia'] < 1, '__mpia'] = 1
-    mem = work[work['__relation'] == 'MEM'].copy()
+    mem = work.copy()
+    mem['__is_mem'] = mem['__relation'] == 'MEM'
     if mem.empty:
         return pd.DataFrame()
-    mem['__single_monthly_premium'] = mem['__risk'] / mem['__mpia'].replace(0, 1)
+    mem['__single_monthly_premium'] = (mem['__risk'] / mem['__mpia'].replace(0, 1)).where(mem['__is_mem'], 0)
     # Martins Direct R1/ADV rule, calculated per paid month and multiplied back by MPIA.
-    mem['__r1_policy_fee'] = mem['__mpia'] * 1.0
-    mem['__risk_after_r1_per_month'] = mem['__single_monthly_premium'] - 1.0
-    mem.loc[mem['__risk_after_r1_per_month'] < 0, '__risk_after_r1_per_month'] = 0
-    mem['__underwriter_2_1_fee'] = mem['__risk_after_r1_per_month'] * 0.021 * mem['__mpia']
-    mem['__risk_after_r1'] = mem['__risk_after_r1_per_month'] * mem['__mpia']
-    # This is the net premium payable after R1 and 2.1% are deducted.
-    mem['__net_risk'] = mem['__risk_after_r1'] - mem['__underwriter_2_1_fee']
-    # Retail is usually only populated on MEM rows in this export, but use MEM to keep commission base consistent.
+    mem['__r1_policy_fee'] = mem['__mpia'].where(mem['__is_mem'], 0)
+    mem['__risk_after_r1'] = (mem['__risk'] - mem['__r1_policy_fee']).clip(lower=0).where(mem['__is_mem'], mem['__risk'])
+    mem['__underwriter_2_1_fee'] = mem.apply(lambda r: float((Decimal(str(r['__risk_after_r1'])) * Decimal('0.021')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)) if r['__is_mem'] else 0, axis=1)
+    mem['__net_risk'] = (mem['__risk_after_r1'] - mem['__underwriter_2_1_fee']).round(2)
+    mem['__mpia'] = mem['__mpia'].where(mem['__is_mem'], 0)
+    # Include premium amounts from all relation types; apply fees and policy quantity to MEM only.
     month = month_from_filename(source_path)
     grouped = mem.groupby('__franchise', as_index=False).agg({
         '__retail':'sum',
@@ -2615,7 +2615,7 @@ def get_policy_age_notification_age_bands(selected='All'):
 def read_policydata_streaming(path):
     """Fast streaming import for large PolicyData_YYYYMMDD_to_YYYYMMDD files.
 
-    Allocates rows to franchise from the Franchise column, processes only MEM rows,
+    Allocates rows to franchise from the Franchise column, includes all relation rows,
     and calculates R1 and the 2.1% underwriter fee using the MPIA months paid.
     """
     global LAST_POLICY_IMPORT_SUMMARY, LAST_POLICY_DETAIL_DF
@@ -2640,8 +2640,7 @@ def read_policydata_streaming(path):
     address_o_i = 14  # Excel column O, zero-based index 14
 
     agg = {}
-    # Keep row-level detail lightweight. The dashboard only needs MEM rows for
-    # client counts/map data, so we do not retain non-MEM rows in memory.
+    # Keep all relation types, including blanks, for premium reconciliation and reports.
     detail_rows = []
     source_display = display_source_filename(path)
     month = month_from_filename(path)
@@ -2660,8 +2659,8 @@ def read_policydata_streaming(path):
             skipped_rows += 1
             continue
         franchise = str(row[franchise_i] or '').strip() if franchise_i < len(row) else ''
-        risk = clean_money(row[risk_i] if risk_i < len(row) else 0)
-        retail = clean_money(row[retail_i] if retail_i < len(row) else 0)
+        risk = float(Decimal(str(clean_money(row[risk_i] if risk_i < len(row) else 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        retail = float(Decimal(str(clean_money(row[retail_i] if retail_i < len(row) else 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
         mpia = clean_money(row[mpia_i] if mpia_i < len(row) else 1)
         if mpia <= 0:
             mpia = 1
@@ -2669,14 +2668,15 @@ def read_policydata_streaming(path):
         is_mem = relation == 'MEM'
         r1_fee = mpia * 1.0 if is_mem else 0.0
         risk_after_r1_per_month = max(single_premium - 1.0, 0) if is_mem else 0.0
-        underwriter_fee = risk_after_r1_per_month * 0.021 * mpia if is_mem else 0.0
-        risk_after_r1 = risk_after_r1_per_month * mpia if is_mem else 0.0
-        net_risk = risk_after_r1 - underwriter_fee if is_mem else 0.0
+        after_decimal = max(Decimal(str(risk)) - Decimal(str(r1_fee)), Decimal('0')) if is_mem else Decimal(str(risk))
+        underwriter_fee = float((after_decimal * Decimal('0.021')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)) if is_mem else 0.0
+        risk_after_r1 = max(risk - r1_fee, 0) if is_mem else risk
+        net_risk = round(risk_after_r1 - underwriter_fee, 2)
         # Avoid storing a full copy of every Excel row in memory during large imports.
-        raw_data = {}
+        raw_data = {str(header[i]): row[i] for i in (2, 3, 4, 6, 8, 12, 13, 14, 17) if i < len(row) and i < len(header)}
         client_address_o = _clean_map_value(row[address_o_i] if address_o_i < len(row) else '')
         id_number_f = _clean_id_number(row[id_number_i] if id_number_i < len(row) else '')
-        if is_mem and franchise and franchise.lower() not in {'nan', 'none'}:
+        if franchise and franchise.lower() not in {'nan', 'none', 'total', 'grand total'}:
             detail_rows.append({
                 'source_file': source_display,
                 'import_month': month,
@@ -2697,10 +2697,9 @@ def read_policydata_streaming(path):
                 'new_risk_premium': net_risk,
                 'raw_data': raw_data,
             })
-        if not is_mem:
-            continue
-        mem_rows += 1
-        if not franchise or franchise.lower() in {'nan', 'none'}:
+        if is_mem:
+            mem_rows += 1
+        if not franchise or franchise.lower() in {'nan', 'none', 'total', 'grand total'}:
             skipped_rows += 1
             continue
         rec = agg.setdefault(franchise, {
@@ -2716,12 +2715,12 @@ def read_policydata_streaming(path):
         })
         rec['retail_premium'] += retail
         rec['risk_premium'] += net_risk
-        rec['policy_qty'] += mpia
+        rec['policy_qty'] += mpia if is_mem else 0
         rec['original_risk_premium'] += risk
         rec['r1_policy_fee_imported'] += r1_fee
         rec['underwriter_2_1_fee'] += underwriter_fee
         rec['risk_after_r1'] += risk_after_r1
-        rec['single_monthly_premium_total'] += single_premium
+        rec['single_monthly_premium_total'] += single_premium if is_mem else 0
 
     rows = []
     for franchise, rec in agg.items():
@@ -2800,6 +2799,9 @@ def merge_policy_months(existing, incoming):
 
 def read_excel_file(path):
     global LAST_POLICY_IMPORT_SUMMARY
+    global LAST_POLICY_DETAIL_DF
+    LAST_POLICY_DETAIL_DF = pd.DataFrame()
+    LAST_POLICY_IMPORT_SUMMARY = {}
     frames = []
 
     # Large Martins PolicyData exports are transaction-level files. Use a streaming parser
@@ -3404,7 +3406,7 @@ def _get_client_map_locations(selected='All', limit=250000, density_mode='auto')
     rows_out = []
     try:
         params = {'limit': int(limit)}
-        where = "franchise_name IS NOT NULL AND TRIM(franchise_name) <> ''"
+        where = "franchise_name IS NOT NULL AND TRIM(franchise_name) <> '' AND UPPER(TRIM(COALESCE(relation,''))) = 'MEM'"
         # For one franchise, filter in SQL with the same punctuation/spacing tolerant
         # key used in Python. This prevents the selected franchise from being missed
         # when old imports are beyond the general dashboard limit.
@@ -6146,6 +6148,7 @@ def _map_cache_manager_rows(selected='All'):
                 SELECT franchise_name, COUNT(*) AS imported_clients
                 FROM policydata_detail_raw
                 WHERE franchise_name IS NOT NULL AND TRIM(franchise_name) <> ''
+                  AND UPPER(TRIM(COALESCE(relation,''))) = 'MEM'
             """
             params = {}
             if selected_key:
@@ -7469,10 +7472,9 @@ def _underwriter_allocation_view(base):
     out.loc[out['Risk After R1'] < 0, 'Risk After R1'] = 0
     if 'ADV Fee 2.1%' not in out.columns:
         out['ADV Fee 2.1%'] = out.get('Underwriter 2.1% Fee', out['Risk After R1'] * 0.021)
-    out['Calculated ADV Check'] = out['Risk After R1'] * 0.021
-    out['Underwriter Premium Payable'] = out['Original Risk Premium'] - out['R1 Policy Fee'] - out['ADV Fee 2.1%']
+    out['Underwriter Premium Payable'] = out.get('Risk Premium', out['Original Risk Premium'] - out['R1 Policy Fee'] - out['ADV Fee 2.1%'])
     out['Retail Less Payover'] = out.get('Retail Premium', 0) - out['Underwriter Premium Payable']
-    return out[[c for c in ['Franchise','Period View','Retail Premium','Original Risk Premium','Policy Qty','R1 Policy Fee','Risk After R1','ADV Fee 2.1%','Calculated ADV Check','Underwriter Premium Payable','Retail Less Payover','Risk Premium','Claims','Claim Ratio'] if c in out.columns]]
+    return out[[c for c in ['Franchise','Period View','Retail Premium','Original Risk Premium','Policy Qty','R1 Policy Fee','Risk After R1','ADV Fee 2.1%','Underwriter Premium Payable','Retail Less Payover','Risk Premium','Claims','Claim Ratio'] if c in out.columns]]
 
 
 
@@ -8414,7 +8416,7 @@ def _add_excel_cover(writer, report_name, period_text=''):
 def export_payover():
     """Export monthly/period underwriter payover sheet for insurers.
 
-    Source: PolicyData transaction import, MEM rows only.
+    Source: PolicyData transaction import, all relation premiums; fees on MEM only.
     Payover Premium = Original Risk Premium - R1 Policy Fee - ADV Fee 2.1%.
     Retail Less Payover is included for reconciliation against all retail premiums paid.
     """
@@ -9975,6 +9977,9 @@ def admin_policydata_current_members_status():
 
 # Start daily background scheduler only when the Flask server actually starts.
 # This avoids silent startup hangs during import/module loading.
+from policy_reports import register_policy_reports
+register_policy_reports(app, get_db_engine, text, lambda: LAST_POLICY_DETAIL_DF, apply_user_franchise_scope)
+
 if __name__ == '__main__':
     print('Starting Franchise Claims Analytics System...', flush=True)
     print('Loading web server...', flush=True)

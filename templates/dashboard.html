@@ -626,6 +626,7 @@
         <button onclick="window.print()">Print</button>
         <a href="{{ url_for('board_report', period_view=period_view, franchise=selected) }}">Export PDF</a>
         <a href="{{ url_for('export') }}">Export Excel</a>
+        <a href="{{ url_for('policy_reports', franchise=selected) }}">Policy relation reports / Reconciliation</a>
       </div>
 
       <section class="print-cover">
