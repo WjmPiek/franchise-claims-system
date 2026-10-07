@@ -5,6 +5,10 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from psycopg2.extensions import adapt
 from import_bulk import insert_detail_rows, DETAIL_INSERT_SQL
+from import_bulk import copy_detail_rows, DETAIL_COLUMNS
+import csv
+import io
+import json
 
 
 class Cursor:
@@ -19,6 +23,28 @@ class Cursor:
 
 
 class BulkImportTest(unittest.TestCase):
+    def test_copy_preserves_quotes_unicode_newlines_blanks_and_amounts(self):
+        row = dict.fromkeys(DETAIL_COLUMNS, 1)
+        row.update(source_file='File, "quoted".xlsx', franchise_name="O'Brien\nMüller",
+                   relation='', id_number_f=None, raw_data=json.dumps({'name':'a\nb\\c"d'}),
+                   original_risk_premium=-319.69, retail_premium=162198.00, is_mem=False)
+        class CopyCursor(Cursor):
+            def copy_expert(self, sql, data):
+                self.sql, self.data = sql, data.read()
+        cursor = CopyCursor()
+        conn = SimpleNamespace(connection=SimpleNamespace(cursor=lambda: cursor))
+        copy_detail_rows(conn, [row])
+        values = next(csv.reader(io.StringIO(cursor.data)))
+        actual = dict(zip(DETAIL_COLUMNS, values))
+        self.assertEqual(actual['source_file'], row['source_file'])
+        self.assertEqual(actual['franchise_name'], row['franchise_name'])
+        self.assertEqual(json.loads(actual['raw_data']), json.loads(row['raw_data']))
+        self.assertEqual(float(actual['original_risk_premium']), -319.69)
+        self.assertEqual(actual['is_mem'], 'False')
+        self.assertIn(',"","False"', cursor.data)
+        self.assertIn(',"1",,', cursor.data) # NULL ID is unquoted; blank relation is quoted
+        self.assertNotIn(row['franchise_name'], cursor.sql)
+        self.assertIn('FROM STDIN WITH (FORMAT CSV)', cursor.sql)
     def test_actual_insert_batches_and_quotes_values(self):
         # Extract the production INSERT so this tests the actual columns/casts/upsert.
         source = Path(__file__).resolve().parents[1].joinpath('app.py').read_text(encoding='utf-8')

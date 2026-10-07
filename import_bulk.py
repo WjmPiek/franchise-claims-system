@@ -1,6 +1,7 @@
 """Fast, parameterized PostgreSQL writes using the caller's transaction."""
 import re
 import json
+import io
 from contextlib import contextmanager
 from sqlalchemy import text
 from psycopg2.extras import execute_values
@@ -8,7 +9,7 @@ from import_progress import report
 
 
 @contextmanager
-def policy_detail_batches(engine, source_file, month):
+def policy_detail_batches(engine, source_file, month, total_rows=None):
     if engine is None:
         raise RuntimeError('PostgreSQL is unavailable; policy details were not saved')
     written = 0
@@ -25,14 +26,34 @@ def policy_detail_batches(engine, source_file, month):
                 row['import_month'] = month
                 row['raw_data'] = json.dumps(row['raw_data'], default=str)
                 converted.append(row)
-            insert_detail_rows(connection, DETAIL_INSERT_SQL, converted)
+            copy_detail_rows(connection, converted)
             written += len(converted)
-            report('Excel rows written (awaiting commit)', written)
+            report('Reading and storing Excel rows (awaiting commit)', written, total_rows)
         yield write_batch
         if written == 0:
             raise RuntimeError('No applicable policy rows found; existing month was preserved')
         report('Committing policy rows', written, written)
     report('Policy rows committed', written, written)
+
+
+DETAIL_COLUMNS = (
+    'source_file', 'import_month', 'row_number', 'source_row_key', 'client_address_o',
+    'id_number_f', 'franchise_name', 'relation', 'is_mem', 'retail_premium',
+    'original_risk_premium', 'mpia', 'single_premium', 'r1_policy_fee',
+    'adv_fund_2_1_fee', 'risk_after_r1', 'new_risk_premium', 'raw_data')
+
+
+def copy_detail_rows(connection, rows):
+    """COPY unique Excel row keys into the month already cleared in this transaction."""
+    # Fixed identifiers; all workbook content is sent as data, never SQL.
+    # Quote every non-null CSV field so empty strings remain empty, not NULL.
+    data = io.StringIO()
+    for row in rows:
+        data.write(','.join('' if row[key] is None else '"' + str(row[key]).replace('"', '""') + '"'
+                            for key in DETAIL_COLUMNS) + '\n')
+    data.seek(0)
+    with connection.connection.cursor() as cursor:
+        cursor.copy_expert('COPY policydata_detail_raw (' + ','.join(DETAIL_COLUMNS) + ') FROM STDIN WITH (FORMAT CSV)', data)
 
 
 def insert_detail_rows(connection, statement, rows):

@@ -2636,7 +2636,7 @@ def read_policydata_streaming(path, persist_detail=False):
     max_needed_col = max(franchise_i, id_number_i, relation_i, risk_i, retail_i, mpia_i, address_o_i) + 1
     from import_bulk import policy_detail_batches
     from contextlib import nullcontext
-    sink = policy_detail_batches(get_db_engine(), source_display, month.date()) if persist_detail else nullcontext(None)
+    sink = policy_detail_batches(get_db_engine(), source_display, month.date(), max((getattr(ws, 'max_row', 0) or 0) - 1, 0) or None) if persist_detail else nullcontext(None)
     try:
         with sink as write_batch:
             for row_number, row in enumerate(ws.iter_rows(min_row=2, max_col=max_needed_col, values_only=True), start=2):

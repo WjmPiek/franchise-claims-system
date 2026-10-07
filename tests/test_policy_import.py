@@ -64,10 +64,10 @@ class ImportAndReportsTest(unittest.TestCase):
         class Engine:
             def begin(self): return nullcontext(Connection())
         batches = []
-        def insert(conn, sql, rows):
+        def insert(conn, rows):
             batches.append((len(rows), sum(row['retail_premium'] for row in rows), sum(row['new_risk_premium'] for row in rows)))
         self.env.update(load_workbook=lambda *a, **k: Book(), get_db_engine=lambda: Engine())
-        with patch('import_bulk.insert_detail_rows', insert):
+        with patch('import_bulk.copy_detail_rows', insert):
             total = self.env['read_policydata_streaming']('PolicyData_20260901_to_20260930.xlsx', persist_detail=True).iloc[0]
         self.assertEqual([batch[0] for batch in batches], [2000, 505])
         self.assertTrue(self.env['LAST_POLICY_DETAIL_DF'].empty)
