@@ -126,6 +126,17 @@
     .premium-analysis-table td:last-child{font-weight:800;text-align:right;font-size:1.05rem}
     .premium-analysis-table .highlight-row{background:#f7f7f7}
 
+
+        .report-download-form { display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
+        .report-download-form label { display:flex; flex-direction:column; gap:8px; flex:1 1 180px; min-width:0; }
+        .report-download-form [hidden] { display:none !important; }
+        .report-download-form select { width:100%; min-height:44px; }
+        .report-download-actions { margin:0; flex:1 1 280px; display:flex; flex-wrap:wrap; gap:8px; }
+        .report-download-actions button { flex:1 1 130px; min-height:44px; }
+        .executive-main > .bottom-import, .executive-main > .report-download-card { width:100%; min-width:0; box-sizing:border-box; margin:24px 0 0; }
+        .executive-main .grid-form { grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .executive-main .grid-form label, .executive-main .grid-form input { min-width:0; max-width:100%; }
+        @media(max-width:1100px){ .executive-main .grid-form { grid-template-columns:1fr; } }
 </style>
 {% endif %}
 </head>
@@ -354,8 +365,6 @@
             {% endif %}
             <div class="exec-card span-12" id="topFranchises"><h2>Top Franchise Claims Detail</h2><table class="exec-table"><thead><tr><th>Franchise</th><th>Premium</th><th>Claims</th><th>No. Claims</th><th>Loss Ratio</th></tr></thead><tbody>{% for r in ed.get('top_franchise_rows', []) %}<tr><td><a href="{{ url_for('dashboard', franchise=r.franchise, dashboard_period_view=dashboard_period_view) }}">{{ r.franchise }}</a></td><td>{{ r.premium|money }}</td><td>{{ r.claims|money }}</td><td>{{ r.claim_count|int }}</td><td>{{ r.ratio|pct }}</td></tr>{% else %}<tr><td colspan="5">No imported data yet.</td></tr>{% endfor %}</tbody></table></div>
           </section>
-        </main>
-      </div>
       <script id="execDashboardData" type="application/json">{{ executive_dashboard|tojson }}</script>
       <script>
         (function(){
@@ -538,10 +547,66 @@
 
         <div class="actions compact-actions">
           <a href="{{ url_for('sample') }}">Download sample Excel</a>
-          <a href="{{ url_for('export') }}">Export results</a>
-          <a class="pdf-btn" href="{{ url_for('board_report', dashboard_period_view=dashboard_period_view) }}">One-click PDF board report</a>
+          <a href="#downloadReports">Choose report months</a>
         </div>
       </section>
+      <section class="card report-download-card no-print" id="downloadReports">
+        <h2>Download reports</h2>
+        <p class="small-note">Choose one month, multiple consecutive months, or all imported data. Reports use {{ 'all your franchises' if selected == 'All' else selected }}.</p>
+        <form method="get" action="{{ url_for('export') }}" id="reportDownloadForm" class="report-download-form">
+          <input type="hidden" name="franchise" value="{{ selected }}">
+          <label>Report period
+            <select name="report_period" id="reportPeriod">
+              <option value="month">One month</option>
+              <option value="range">Multiple months</option>
+              <option value="all">All imported data</option>
+            </select>
+          </label>
+          <label data-report-field="month">Month
+            <select name="report_month" required>
+              {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.last %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label data-report-field="range" hidden>From month
+            <select name="report_start" disabled required>
+              {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.revindex == 6 or (report_month_options|length < 6 and loop.first) %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label data-report-field="range" hidden>To month
+            <select name="report_end" disabled required>
+              {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.last %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <div class="actions compact-actions report-download-actions">
+            <button type="submit" {% if not report_month_options %}disabled{% endif %}>Download Excel</button>
+            <button type="submit" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Download PDF</button>
+          </div>
+        </form>
+      </section>
+      <script>
+        (function(){
+          const form = document.getElementById('reportDownloadForm');
+          const mode = document.getElementById('reportPeriod');
+          function updateFields(){
+            form.querySelectorAll('[data-report-field]').forEach(label => {
+              label.hidden = label.dataset.reportField !== mode.value;
+              label.querySelector('select').disabled = label.hidden;
+            });
+          }
+          mode.addEventListener('change', updateFields);
+          form.addEventListener('submit', event => {
+            if(mode.value === 'range' && form.elements.report_start.value > form.elements.report_end.value){
+              event.preventDefault();
+              form.elements.report_end.setCustomValidity('Choose an end month on or after the start month.');
+              form.elements.report_end.reportValidity();
+            }
+          });
+          form.addEventListener('change', () => form.elements.report_end.setCustomValidity(''));
+          updateFields();
+        })();
+      </script>
+        </main>
+      </div>
     {% else %}
       <div class="top-toolbar no-print">
         <a class="back-btn" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
