@@ -6122,7 +6122,7 @@ def dashboard():
     configured_monthly, configured_periods, _configured_portfolio_all = apply_franchise_config(apply_user_franchise_scope(LAST_RESULT['monthly']), load_franchise_config())
     configured_portfolio = build_portfolio_for_period(configured_monthly, configured_periods, dashboard_period_view)
     executive_dashboard = build_executive_dashboard_context(monthly_view, selected=selected, period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month)
-    return render_template('dashboard.html', workspace='home', portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, google_maps_api_key=get_google_maps_api_key())
+    return render_template('dashboard.html', workspace='home', portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
 
 
 
@@ -8463,6 +8463,49 @@ def export_payover():
                 ws.set_column(idx, idx, width, pct_fmt)
     return send_file(path, as_attachment=True)
 
+def _report_month_options(monthly):
+    if monthly is None or monthly.empty or 'Month' not in monthly:
+        return []
+    months = pd.to_datetime(monthly['Month'], errors='coerce').dropna().dt.to_period('M')
+    return [{'value': str(m), 'label': m.strftime('%b %Y')} for m in sorted(months.unique())]
+
+
+def _select_report_months(monthly, args, default_period='all'):
+    """Filter scoped report rows before recalculating every report summary."""
+    work = monthly.copy()
+    franchise = args.get('franchise', 'All')
+    if franchise and franchise != 'All':
+        work = work[work['Franchise'].eq(franchise)].copy()
+    if work.empty:
+        raise ValueError('No report data is available for this franchise.')
+    mode = args.get('report_period') or default_period
+    if mode in {'month', 'range'} and args.get('report_period'):
+        def parse_month(name):
+            value = str(args.get(name, '')).strip()
+            if not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', value):
+                raise ValueError('Choose a valid report month.')
+            return pd.Period(value, freq='M')
+        start = parse_month('report_month' if mode == 'month' else 'report_start')
+        end = start if mode == 'month' else parse_month('report_end')
+        if start > end:
+            raise ValueError('The start month must be before or equal to the end month.')
+        months = pd.to_datetime(work['Month'], errors='coerce').dt.to_period('M')
+        available = set(months.dropna())
+        if start not in available or end not in available:
+            raise ValueError('The selected report months have no imported data.')
+        work = work[months.between(start, end)].copy()
+        label = start.strftime('%b %Y') if start == end else f'{start.strftime("%b %Y")} - {end.strftime("%b %Y")}'
+    elif mode == 'all':
+        label = 'All imported data'
+    elif mode in {'month', 'six_months', 'year'} and not args.get('report_period'):
+        work, label = _dashboard_month_filter(work, mode)
+    else:
+        raise ValueError('Choose one month, a month range, or all imported data.')
+    if work.empty:
+        raise ValueError('No report data is available for the selected months.')
+    return work, label
+
+
 @app.route('/export')
 def export():
     if LAST_RESULT['monthly'].empty:
@@ -8470,12 +8513,18 @@ def export():
         return redirect(url_for('dashboard'))
     path = os.path.join(EXPORT_DIR, f'claims_analytics_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
     monthly_scoped = apply_user_franchise_scope(LAST_RESULT['monthly'])
-    periods_scoped = apply_user_franchise_scope(LAST_RESULT['periods'])
+    try:
+        monthly_scoped, report_label = _select_report_months(monthly_scoped, request.args)
+    except ValueError as exc:
+        flash(str(exc), 'warning')
+        return redirect(url_for('dashboard'))
+    periods_scoped, portfolio = rebuild_periods_and_portfolio(monthly_scoped)
     monthly_export = _friendly_export_df(monthly_scoped)
     periods_export = _friendly_export_df(periods_scoped)
-    portfolio_export = pd.DataFrame([build_portfolio_for_period(monthly_scoped, periods_scoped, 'six_months')]).rename(columns={'overall_claim_ratio': 'average_claim_ratio'})
+    portfolio_export = pd.DataFrame([portfolio]).rename(columns={'overall_claim_ratio': 'average_claim_ratio'})
+    portfolio_export = portfolio_export.loc[:, ~portfolio_export.columns.duplicated()]
     with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
-        _add_excel_cover(writer, 'Franchise Claims Analytics Export', 'All imported data')
+        _add_excel_cover(writer, 'Franchise Claims Analytics Export', report_label)
         monthly_export.to_excel(writer, index=False, sheet_name='Monthly Detail')
         periods_export.to_excel(writer, index=False, sheet_name='Six Month Periods')
         portfolio_export.to_excel(writer, index=False, sheet_name='Portfolio Summary')
@@ -8495,14 +8544,18 @@ def board_report():
         period_choice = 'six_months'
     period_text_map = {'month': 'Monthly', 'six_months': 'Every 6 Months', 'year': '12 Months / Yearly'}
     config = load_franchise_config()
-    configured_monthly, configured_periods, _ = apply_franchise_config(apply_user_franchise_scope(LAST_RESULT['monthly']), config)
-    portfolio = build_portfolio_for_period(configured_monthly, configured_periods, period_choice)
+    try:
+        report_monthly, report_label = _select_report_months(apply_user_franchise_scope(LAST_RESULT['monthly']), request.args, period_choice)
+    except ValueError as exc:
+        flash(str(exc), 'warning')
+        return redirect(url_for('dashboard'))
+    configured_monthly, configured_periods, portfolio = apply_franchise_config(report_monthly, config)
     path = os.path.join(EXPORT_DIR, f'board_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf')
     page_size = landscape(A4)
     doc = SimpleDocTemplate(path, pagesize=page_size, rightMargin=0.45*cm, leftMargin=0.45*cm, topMargin=0.55*cm, bottomMargin=0.55*cm)
     styles = getSampleStyleSheet()
     story = []
-    _add_pdf_cover(story, styles, 'Executive Board Report', period_text_map.get(period_choice, 'Every 6 Months'))
+    _add_pdf_cover(story, styles, 'Executive Board Report', report_label)
     summary_data = [
         ['Metric', 'Value'],
         ['Total Franchises', portfolio.get('total_franchises', 0)],
@@ -8527,9 +8580,14 @@ def board_report():
     story.append(_pdf_table(summary_data, page_size[0], font_size=5.4, first_col_weight=1.25))
     story.append(PageBreak())
 
-    detail_source = configured_periods if period_choice == 'six_months' else (configured_monthly.copy() if period_choice == 'month' else yearly_view_from_monthly(configured_monthly))
+    detail_source = configured_periods
+    if request.args.get('report_period') == 'month' or (not request.args.get('report_period') and period_choice == 'month'):
+        detail_source = configured_monthly.copy()
+        detail_source['Period'] = pd.to_datetime(detail_source['Month']).dt.strftime('%b %Y')
+    elif not request.args.get('report_period') and period_choice == 'year':
+        detail_source = yearly_view_from_monthly(configured_monthly)
     periods = _friendly_export_df(detail_source)
-    story.append(Paragraph(f'{period_text_map.get(period_choice, "Every 6 Months")} Scenario Recommendations', styles['Heading2']))
+    story.append(Paragraph(f'{report_label} Scenario Recommendations', styles['Heading2']))
     cols = [c for c in ['Franchise','Period','Retail Premium','Risk Premium','Claims','Average Claim Ratio','Claim Ratio Label','Recommendation','Policy Qty','R1 Policy Fee','Total Commission','Franchise Money','Franchise Money Running Balance','Total Book Value'] if c in periods.columns]
     story.append(_pdf_table(_rows_for_pdf(periods, cols, limit=80), page_size[0], font_size=4.6, first_col_weight=1.45))
     story.append(PageBreak())
