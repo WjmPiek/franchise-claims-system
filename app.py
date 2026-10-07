@@ -8239,6 +8239,9 @@ def _format_excel_sheet(writer, sheet_name, df):
             fmt = pct_fmt
         if any(key in col_lower for key in ['qty', 'count', 'policies', 'franchises']):
             fmt = int_fmt
+        # Percentage in a fee/book-value label describes its calculation, not its unit.
+        if '%' in col_lower and ('fee' in col_lower or 'book value' in col_lower):
+            fmt = money_fmt
         ws.set_column(col_num, col_num, width, fmt)
     rows = max(len(df), 1)
     cols = max(len(df.columns), 1)
@@ -8277,39 +8280,53 @@ def _short_pdf_header(value):
 
 
 def _short_pdf_cell(value, col_name=''):
-    text = str(value)
-    if str(col_name).lower() == 'franchise' and len(text) > 28:
-        return text[:25] + '...'
-    if len(text) > 34:
-        return text[:31] + '...'
-    return text
+    # Paragraph cells wrap the full label rather than hiding franchise names.
+    return str(value)
 
 
 def _pdf_table(data, page_width, font_size=5.4, first_col_weight=1.35):
-    """Create a fitted reportlab table for wide data."""
+    """Fit every cell within its column and repeat headers on subsequent pages."""
+    from html import escape
+    from reportlab.lib.styles import ParagraphStyle
     if not data:
         data = [['No data']]
     col_count = max(len(data[0]), 1)
     available = page_width - 1.35 * cm
     weights = [1.0] * col_count
-    if col_count:
-        weights[0] = first_col_weight
-    total_weight = sum(weights)
-    col_widths = [available * w / total_weight for w in weights]
-    if col_count > 18:
-        font_size = min(font_size, 4.2)
-    elif col_count > 14:
-        font_size = min(font_size, 4.6)
-    elif col_count > 10:
-        font_size = min(font_size, 5.0)
-    t = Table(data, colWidths=col_widths, repeatRows=1)
+    weights[0] = max(first_col_weight, 2.2) if col_count > 2 else first_col_weight
+    for i, header in enumerate(data[0]):
+        if str(header) == 'Reco':
+            weights[i] = 2.2
+        elif str(header) == 'Claim Label':
+            weights[i] = 1.65
+        elif str(header) == 'Period':
+            weights[i] = 1.25
+        elif str(header) == 'Policies':
+            weights[i] = 0.65
+    col_widths = [available * w / sum(weights) for w in weights]
+    font_size = max(font_size, 6.0 if col_count > 10 else 7.0)
+    body = ParagraphStyle('ReportCell', fontName='Helvetica', fontSize=font_size,
+                          leading=font_size + 2, textColor=colors.black)
+    numeric = ParagraphStyle('ReportNumber', parent=body, alignment=2)
+    header_style = ParagraphStyle('ReportHeader', parent=body,
+                                  fontName='Helvetica-Bold', textColor=colors.white)
+    wrapped = []
+    for row_index, row in enumerate(data):
+        cells = []
+        for value in row:
+            text = str(value)
+            style = header_style if row_index == 0 else (
+                numeric if isinstance(value, (int, float)) or text.startswith('R') and len(text) > 1 and (text[1].isdigit() or text[1] == '-') else body)
+            cells.append(Paragraph(escape(text).replace('\n', '<br/>'), style))
+        wrapped.append(cells)
+    t = Table(wrapped, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#6B4AA0')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
         ('GRID', (0,0), (-1,-1), 0.2, colors.lightgrey),
-        ('FONTSIZE', (0,0), (-1,-1), font_size),
-        ('PADDING', (0,0), (-1,-1), 1.1),
+        ('LEFTPADDING', (0,0), (-1,-1), 3),
+        ('RIGHTPADDING', (0,0), (-1,-1), 3),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
     ]))
     return t
@@ -8327,7 +8344,7 @@ def _rows_for_pdf(df, cols, limit=70):
             cl = str(c).lower()
             try:
                 if any(k in cl for k in ['premium','claims','commission','fee','value','money','amount','payover','risk','retail','book']):
-                    if 'ratio' not in cl and '%' not in cl and 'count' not in cl and 'qty' not in cl:
+                    if 'ratio' not in cl and ('%' not in cl or 'fee' in cl or 'book value' in cl) and 'count' not in cl and 'qty' not in cl:
                         v = money(v)
                 elif 'ratio' in cl or '%' in cl or 'contribution' in cl:
                     v = pct(v)
@@ -8511,7 +8528,9 @@ def export():
     if LAST_RESULT['monthly'].empty:
         flash('No data to export.', 'warning')
         return redirect(url_for('dashboard'))
-    path = os.path.join(EXPORT_DIR, f'claims_analytics_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
+    commissions = request.args.get('report_type') == 'commissions'
+    filename = 'commissions' if commissions else 'claims_analytics_export'
+    path = os.path.join(EXPORT_DIR, f'{filename}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
     monthly_scoped = apply_user_franchise_scope(LAST_RESULT['monthly'])
     try:
         monthly_scoped, report_label = _select_report_months(monthly_scoped, request.args)
@@ -8521,10 +8540,13 @@ def export():
     periods_scoped, portfolio = rebuild_periods_and_portfolio(monthly_scoped)
     monthly_export = _friendly_export_df(monthly_scoped)
     periods_export = _friendly_export_df(periods_scoped)
+    if commissions:
+        monthly_export = monthly_export.drop(columns=['Claim Ratio Label', 'Recommendation'], errors='ignore')
+        periods_export = periods_export.drop(columns=['Claim Ratio Label', 'Recommendation'], errors='ignore')
     portfolio_export = pd.DataFrame([portfolio]).rename(columns={'overall_claim_ratio': 'average_claim_ratio'})
     portfolio_export = portfolio_export.loc[:, ~portfolio_export.columns.duplicated()]
     with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
-        _add_excel_cover(writer, 'Franchise Claims Analytics Export', report_label)
+        _add_excel_cover(writer, 'Commissions' if commissions else 'Franchise Claims Analytics Export', report_label)
         monthly_export.to_excel(writer, index=False, sheet_name='Monthly Detail')
         periods_export.to_excel(writer, index=False, sheet_name='Six Month Periods')
         portfolio_export.to_excel(writer, index=False, sheet_name='Portfolio Summary')
@@ -8550,12 +8572,14 @@ def board_report():
         flash(str(exc), 'warning')
         return redirect(url_for('dashboard'))
     configured_monthly, configured_periods, portfolio = apply_franchise_config(report_monthly, config)
-    path = os.path.join(EXPORT_DIR, f'board_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf')
+    commissions = request.args.get('report_type') == 'commissions'
+    filename = 'commissions' if commissions else 'board_report'
+    path = os.path.join(EXPORT_DIR, f'{filename}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf')
     page_size = landscape(A4)
     doc = SimpleDocTemplate(path, pagesize=page_size, rightMargin=0.45*cm, leftMargin=0.45*cm, topMargin=0.55*cm, bottomMargin=0.55*cm)
     styles = getSampleStyleSheet()
     story = []
-    _add_pdf_cover(story, styles, 'Executive Board Report', report_label)
+    _add_pdf_cover(story, styles, 'Commissions' if commissions else 'Executive Board Report', report_label)
     summary_data = [
         ['Metric', 'Value'],
         ['Total Franchises', portfolio.get('total_franchises', 0)],
@@ -8587,20 +8611,22 @@ def board_report():
     elif not request.args.get('report_period') and period_choice == 'year':
         detail_source = yearly_view_from_monthly(configured_monthly)
     periods = _friendly_export_df(detail_source)
-    story.append(Paragraph(f'{report_label} Scenario Recommendations', styles['Heading2']))
+    story.append(Paragraph(f'{report_label} Commissions Detail' if commissions else f'{report_label} Scenario Recommendations', styles['Heading2']))
     cols = [c for c in ['Franchise','Period','Retail Premium','Risk Premium','Claims','Average Claim Ratio','Claim Ratio Label','Recommendation','Policy Qty','R1 Policy Fee','Total Commission','Franchise Money','Franchise Money Running Balance','Total Book Value'] if c in periods.columns]
-    story.append(_pdf_table(_rows_for_pdf(periods, cols, limit=80), page_size[0], font_size=4.6, first_col_weight=1.45))
+    if commissions:
+        cols = [c for c in cols if c not in {'Claim Ratio Label', 'Recommendation'}]
+    story.append(_pdf_table(_rows_for_pdf(periods, cols, limit=None), page_size[0], font_size=4.6, first_col_weight=1.45))
     story.append(PageBreak())
 
     # Commission summary
     story.append(Paragraph('Commission Summary', styles['Heading2']))
     commission_cols = [c for c in ['Franchise','Period','Retail Premium','BrightRock Amount','Inkulu Amount','MFF Amount','R1 Policy Fee','Underwriter 2.1% Fee','Total Commission','Total Paid Commissions'] if c in periods.columns]
-    story.append(_pdf_table(_rows_for_pdf(periods, commission_cols, limit=80), page_size[0], font_size=4.6, first_col_weight=1.45))
+    story.append(_pdf_table(_rows_for_pdf(periods, commission_cols, limit=None), page_size[0], font_size=4.6, first_col_weight=1.45))
     story.append(PageBreak())
 
     story.append(Paragraph('Book Value Summary', styles['Heading2']))
     book_cols = [c for c in ['Franchise','Period','Retail Premium','MFF Book Value 2.5%','Franchise Book Value 2.5%','Total Book Value'] if c in periods.columns]
-    story.append(_pdf_table(_rows_for_pdf(periods, book_cols, limit=100), page_size[0], font_size=4.8, first_col_weight=1.45))
+    story.append(_pdf_table(_rows_for_pdf(periods, book_cols, limit=None), page_size[0], font_size=4.8, first_col_weight=1.45))
     doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
     return send_file(path, as_attachment=True)
 

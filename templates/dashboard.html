@@ -580,6 +580,8 @@
           <div class="actions compact-actions report-download-actions">
             <button type="submit" {% if not report_month_options %}disabled{% endif %}>Download Excel</button>
             <button type="submit" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Download PDF</button>
+            <button type="submit" name="report_type" value="commissions" {% if not report_month_options %}disabled{% endif %}>Commissions Excel</button>
+            <button type="submit" name="report_type" value="commissions" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Commissions PDF</button>
           </div>
         </form>
       </section>
