@@ -6,6 +6,11 @@ import time
 from flask import Response, copy_current_request_context, current_app, stream_with_context
 
 _state = threading.local()
+_import_lock = threading.Lock()
+
+
+def busy():
+    return _import_lock.locked()
 
 
 def active():
@@ -24,6 +29,9 @@ def stream_import(view):
 
     @copy_current_request_context
     def run():
+        if not _import_lock.acquire(blocking=False):
+            updates.put({'type': 'done', 'ok': False, 'error': 'An import is already running. Wait for it to finish before retrying.'})
+            return
         _state.emit = updates.put
         try:
             response = app.make_response(view())
@@ -35,6 +43,7 @@ def stream_import(view):
             updates.put({'type': 'done', 'ok': False, 'error': 'Import failed. Check this month before retrying.'})
         finally:
             del _state.emit
+            _import_lock.release()
 
     @stream_with_context
     def events():

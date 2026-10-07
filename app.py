@@ -5967,7 +5967,9 @@ def index():
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
     global LAST_RESULT, LAST_CLAIMS_DF, LAST_POLICY_IMPORT_SUMMARY
-    from import_progress import active, report, stream_import
+    from import_progress import active, busy, report, stream_import
+    if request.method == 'POST' and busy() and not active():
+        return jsonify(ok=False, error='An import is already running. Wait for it to finish before retrying.'), 409
     if request.method == 'POST' and request.headers.get('X-Import-Progress') == 'stream' and not active():
         return stream_import(dashboard)
     if request.method == 'POST':
