@@ -1334,67 +1334,69 @@
       if(stepRows) stepRows.textContent = 'Rows processed: upload in progress...';
       showProgress(0, 'Uploading selected Excel file(s)...');
 
-      const xhr = new XMLHttpRequest();
       const importUrl = form.getAttribute('action') || window.location.href;
-      xhr.open('POST', importUrl, true);
-      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+      const queue = Array.from(policyFiles).map(file => [{field: 'excel_file', file}]);
+      if(claimsFiles.length) queue.push(Array.from(claimsFiles).map(file => ({field: 'claims_file', file})));
+      let completedFiles = 0;
+      let index = 0;
+      let elapsedTimer;
 
-      let elapsedTimer = setInterval(() => {
-        const seconds = Math.floor((Date.now() - started) / 1000);
-        if(stepRows && ((pct && pct.textContent === 'Processing') || (inlinePct && inlinePct.textContent === 'Processing'))){
-          stepRows.textContent = 'Server processing time: ' + seconds + ' seconds';
-        }
-      }, 1000);
-
-      xhr.upload.onprogress = function(event){
-        if(event.lengthComputable){
-          const uploadPct = (event.loaded / event.total) * 25;
-          showProgress(uploadPct, 'Uploading files to server...');
-          if(stepRows) stepRows.textContent = 'Uploaded ' + Math.round(event.loaded / 1024 / 1024) + ' MB of ' + Math.round(event.total / 1024 / 1024) + ' MB';
-          if(modalFile && fileNames.length){
-            modalFile.textContent = 'Uploading ' + totalFiles + ' file(s): ' + fileNames.slice(0, 3).join(', ') + (fileNames.length > 3 ? '...' : '');
-          }
-        }
-      };
-
-      xhr.onload = function(){
-        clearInterval(elapsedTimer);
-        if(xhr.status >= 200 && xhr.status < 400){
-          showProgress(100, 'Import complete. Reloading dashboard...');
-          if(stepStatus) stepStatus.textContent = 'Import complete.';
-          if(stepRows) stepRows.textContent = 'Dashboard is reloading now.';
-          window.location.href = xhr.responseURL || '{{ url_for("dashboard") }}';
-        } else {
-          restoreButton();
-          setProcessingMode('Import failed. Please check the server error and try again.');
-          if(pct) pct.textContent = 'Error';
-          if(inlinePct) inlinePct.textContent = 'Error';
-        }
-      };
-
-      xhr.onerror = function(){
+      function fail(message){
         clearInterval(elapsedTimer);
         restoreButton();
-        setProcessingMode('Import failed due to a network/browser error.');
+        setProcessingMode(message + ' Completed: ' + completedFiles + ' of ' + totalFiles + ' files.');
         if(pct) pct.textContent = 'Error';
         if(inlinePct) inlinePct.textContent = 'Error';
-      };
+        if(stepRows) stepRows.textContent = 'Completed files stay saved. Retry the failed and remaining files.';
+      }
 
-      xhr.onreadystatechange = function(){
-        if(xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED || xhr.readyState === XMLHttpRequest.LOADING){
-          setProcessingMode('Server is reading Excel files, filtering MEM rows and recalculating dashboard KPIs...');
-          if(modalFile) modalFile.textContent = 'Processing ' + totalFiles + ' imported file(s). Please keep this page open.';
+      function nextFile(){
+        if(index >= queue.length){
+          showProgress(100, 'All files imported. Reloading dashboard...');
+          window.location.href = '{{ url_for("dashboard") }}';
+          return;
         }
-      };
-
-      xhr.send(new FormData(form));
-
-      setTimeout(() => {
-        if(xhr.readyState < XMLHttpRequest.DONE && (!pct || pct.textContent !== 'Processing')){
-          setProcessingMode('Server is processing imported rows. This can take a few minutes for large monthly files...');
-          if(modalFile) modalFile.textContent = 'Processing ' + totalFiles + ' file(s).';
-        }
-      }, 2500);
+        const selected = queue[index];
+        const label = selected.map(item => item.file.name).join(', ');
+        const xhr = new XMLHttpRequest();
+        const data = new FormData(form);
+        ['excel_file', 'excel_files', 'claims_file', 'claims_files'].forEach(field => data.delete(field));
+        selected.forEach(item => data.append(item.field, item.file, item.file.name));
+        xhr.open('POST', importUrl, true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        if(stepFiles) stepFiles.textContent = 'Completed: ' + completedFiles + ' of ' + totalFiles + ' files';
+        if(modalFile) modalFile.textContent = 'Current file: ' + label;
+        showProgress(completedFiles / totalFiles * 100, 'Uploading current file...');
+        xhr.upload.onprogress = function(event){
+          if(event.lengthComputable){
+            if(stepRows) stepRows.textContent = 'Current upload: ' + Math.round(event.loaded / 1024 / 1024) + ' MB of ' + Math.round(event.total / 1024 / 1024) + ' MB';
+            if(event.loaded === event.total) setProcessingMode('Upload received. Waiting for the server to finish importing this file...');
+          }
+        };
+        xhr.upload.onload = function(){
+          setProcessingMode('Upload received. Waiting for the server to finish importing this file...');
+        };
+        const fileStarted = Date.now();
+        elapsedTimer = setInterval(() => {
+          if(stepStatus) stepStatus.textContent = 'Current file elapsed time: ' + Math.floor((Date.now() - fileStarted) / 1000) + ' seconds. Completed: ' + completedFiles + '/' + totalFiles + '.';
+        }, 1000);
+        xhr.onload = function(){
+          clearInterval(elapsedTimer);
+          let result;
+          try { result = JSON.parse(xhr.responseText); } catch(e) {}
+          if(xhr.status >= 200 && xhr.status < 300 && result && result.ok){
+            completedFiles += selected.length;
+            index += 1;
+            nextFile();
+          } else {
+            fail('Stopped at ' + label + '. ' + (result?.error || 'The server did not confirm a successful import.'));
+          }
+        };
+        xhr.onerror = function(){ fail('Connection lost while importing ' + label + '. Check this month before retrying.'); };
+        xhr.onabort = function(){ fail('Import request was interrupted at ' + label + '.'); };
+        xhr.send(data);
+      }
+      nextFile();
     });
   })();
 

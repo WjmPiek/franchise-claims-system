@@ -555,8 +555,8 @@ def save_policy_detail_to_postgres(df, source_file=''):
                 new_risk_premium = EXCLUDED.new_risk_premium,
                 raw_data = EXCLUDED.raw_data
         """)
-        for i in range(0, len(rows), 2000):
-            conn.execute(insert_sql, rows[i:i+2000])
+        from import_bulk import insert_detail_rows
+        insert_detail_rows(conn, insert_sql, rows)
     return True
 
 
@@ -6054,7 +6054,13 @@ def dashboard():
             elif not imported_any:
                 flash('No data available yet. Import a policy/premium file or claims file.', 'warning')
         except Exception as exc:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                app.logger.error('Excel import failed (%s)', type(exc).__name__)
+                return jsonify(ok=False, error='Import failed. This file was not confirmed complete; check the server logs before retrying.'), 400
             flash(str(exc), 'danger')
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            session.pop('_flashes', None)
+            return jsonify(ok=True, dashboard_url=url_for('dashboard', dashboard_period_view=request.args.get('dashboard_period_view', 'six_months')))
         # Post/Redirect/Get prevents the browser from asking to resubmit the large import on refresh/back.
         return redirect(url_for('dashboard', dashboard_period_view=request.args.get('dashboard_period_view', 'six_months')))
 
