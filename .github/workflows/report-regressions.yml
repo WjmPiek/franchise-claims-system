@@ -1,0 +1,25 @@
+name: Report regressions
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'report_summary.py'
+      - 'tests/**'
+      - '.github/workflows/report-regressions.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt pypdf
+      - run: python -m unittest discover -s tests -p 'test_report_summary*.py'
+      - run: python -m unittest discover -s tests -p 'test_policy_import.py'
+      - run: python -m unittest discover -s tests -p 'test_import_session.py'
+      - run: node tests/test_import_queue.js
