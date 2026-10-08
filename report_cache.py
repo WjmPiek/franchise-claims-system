@@ -8,20 +8,36 @@ class ResultCache:
         self.ttl, self.max_entries = ttl, max_entries
         self._values = OrderedDict()
         self._lock = threading.RLock()
+        self._inflight = {}
 
     def get(self, key, loader):
-        # Serialize identical generation and bound the number of in-memory results.
         with self._lock:
             current = self._values.get(key)
             if current and time.monotonic() - current[0] < self.ttl:
                 self._values.move_to_end(key)
                 return current[1]
-            value = loader()  # Failures never become cached successes.
-            self._values[key] = (time.monotonic(), value)
-            self._values.move_to_end(key)
-            while len(self._values) > self.max_entries:
-                self._values.popitem(last=False)
-            return value
+            flight = self._inflight.setdefault(key, [threading.Lock(), 0])
+            flight[1] += 1
+        try:
+            # Only identical requests wait together; other report scopes can run.
+            with flight[0]:
+                with self._lock:
+                    current = self._values.get(key)
+                    if current and time.monotonic() - current[0] < self.ttl:
+                        self._values.move_to_end(key)
+                        return current[1]
+                value = loader()  # Failures never become cached successes.
+                with self._lock:
+                    self._values[key] = (time.monotonic(), value)
+                    self._values.move_to_end(key)
+                    while len(self._values) > self.max_entries:
+                        self._values.popitem(last=False)
+                return value
+        finally:
+            with self._lock:
+                flight[1] -= 1
+                if not flight[1]:
+                    self._inflight.pop(key, None)
 
     def clear(self):
         with self._lock:

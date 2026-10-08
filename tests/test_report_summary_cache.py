@@ -53,6 +53,18 @@ class ReportCacheTest(unittest.TestCase):
         refresh_reporting_data(self.engine,lambda s:s,loader,('different rates',))
         self.assertEqual(loader.call_count,4)
 
+    def test_different_scopes_are_not_serialized(self):
+        cache = ResultCache()
+        barrier = threading.Barrier(2)
+        def load():
+            barrier.wait(timeout=2)
+            return 'ready'
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            a = pool.submit(cache.get, 'September', load)
+            b = pool.submit(cache.get, 'October', load)
+            self.assertEqual(a.result(), 'ready')
+            self.assertEqual(b.result(), 'ready')
+
     def test_expiry_failures_bounded_size_and_single_generation(self):
         cache = ResultCache(ttl=1,max_entries=2)
         loader = Mock(return_value=7)
