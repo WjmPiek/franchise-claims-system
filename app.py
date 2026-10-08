@@ -527,9 +527,9 @@ def save_policy_detail_to_postgres(df, source_file=''):
     rows = [r for r in rows if r['franchise_name'] and r['import_month']]
     if not rows:
         return False
-    from premium_precision import ensure_premium_precision
+    from premium_precision import prepare_premium_precision
+    prepare_premium_precision(engine)
     with engine.begin() as conn:
-        ensure_premium_precision(conn)
         report('Replacing this month in the database')
         for m in months:
             conn.execute(text('DELETE FROM policydata_detail_raw WHERE import_month = :m'), {'m': m, 'src': src})
@@ -578,9 +578,9 @@ def save_policy_raw_to_postgres(df, source_file=''):
     rows = [r for r in rows if r['franchise_name'] and r['import_month']]
     if not rows:
         return False
-    from premium_precision import ensure_premium_precision
+    from premium_precision import prepare_premium_precision
+    prepare_premium_precision(engine)
     with engine.begin() as conn:
-        ensure_premium_precision(conn)
         for m in months:
             conn.execute(text('DELETE FROM policy_monthly_raw WHERE import_month = :m'), {'m': m})
         conn.execute(text("""
@@ -6093,6 +6093,9 @@ def dashboard():
         except Exception as exc:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 app.logger.error('Excel import failed (%s)', type(exc).__name__)
+                from premium_precision import PremiumPrecisionBusy
+                if isinstance(exc, PremiumPrecisionBusy):
+                    return jsonify(ok=False, error=str(exc)), 409
                 return jsonify(ok=False, error='Import failed. This file was not confirmed complete; check the server logs before retrying.'), 400
             flash(str(exc), 'danger')
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
