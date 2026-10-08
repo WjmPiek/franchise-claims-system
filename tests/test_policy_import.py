@@ -67,13 +67,45 @@ class ImportAndReportsTest(unittest.TestCase):
         def insert(conn, rows):
             batches.append((len(rows), sum(row['retail_premium'] for row in rows), sum(row['new_risk_premium'] for row in rows)))
         self.env.update(load_workbook=lambda *a, **k: Book(), get_db_engine=lambda: Engine())
-        with patch('import_bulk.copy_detail_rows', insert):
+        with patch('import_bulk.copy_detail_rows', insert), patch('premium_precision.ensure_premium_precision'):
             total = self.env['read_policydata_streaming']('PolicyData_20260901_to_20260930.xlsx', persist_detail=True).iloc[0]
         self.assertEqual([batch[0] for batch in batches], [2000, 505])
         self.assertTrue(self.env['LAST_POLICY_DETAIL_DF'].empty)
         self.assertEqual(self.env['LAST_POLICY_IMPORT_SUMMARY']['detail_rows_stored'], 2505)
         self.assertAlmostEqual(sum(batch[1] for batch in batches), total.retail_premium)
         self.assertAlmostEqual(sum(batch[2] for batch in batches), total.risk_premium)
+
+    def test_excel_source_precision_is_summed_before_display_rounding(self):
+        # Excel SUM = 300.012 -> 300.01; SUM(ROUND(each row,2)) = 300.00.
+        self.rows[:] = []
+        for branch in ['ERMELO', 'ERMELO', 'SOWETO']:
+            row = [None] * 18
+            row[0], row[8], row[12], row[13], row[17] = branch, 'MEM', 100.004, 150.004, 1
+            self.rows.append(row)
+        total = self.env['read_policydata_streaming']('PolicyData_20240801_to_20240831.xlsx')
+        detail = self.env['LAST_POLICY_DETAIL_DF']
+        self.assertEqual(detail.original_risk_premium.iloc[0], Decimal('100.004'))
+        self.assertEqual(detail.retail_premium.iloc[0], Decimal('150.004'))
+        self.assertEqual(f'{total.original_risk_premium.sum():.2f}', '300.01')
+        self.assertEqual(f'{total.retail_premium.sum():.2f}', '450.01')
+        # Existing derived fee and payover calculations retain their cent base.
+        self.assertEqual(detail.adv_fund_2_1_fee.tolist(), [2.08] * 3)
+        self.assertEqual(detail.new_risk_premium.tolist(), [96.92] * 3)
+        from report_summary import reconciliation
+        monthly = total.rename(columns={'franchise':'Franchise', 'month':'Month',
+            'original_risk_premium':'Original Risk Premium', 'retail_premium':'Retail Premium',
+            'risk_premium':'Risk Premium'})
+        result = reconciliation(monthly, memory=detail)
+        self.assertEqual(result['totals'][0], Decimal('300.012'))
+        self.assertEqual(result['totals'][1], Decimal('450.012'))
+        self.assertEqual(result['totals'][5:], [Decimal('0.00')] * 3)
+        self.assertEqual(f"{result['totals'][0]:.2f}", '300.01')
+        from flask import Flask
+        app = Flask('precision', template_folder=str(Path(__file__).resolve().parents[1]/'templates'))
+        app.add_url_rule('/dashboard', endpoint='dashboard', view_func=lambda:'')
+        register_policy_reports(app, lambda:None, None, lambda:detail)
+        response = app.test_client().get('/policy_reports?month=2024-08&external_risk=300.01&external_retail=450.01')
+        self.assertEqual(response.data.count(b': Balanced'), 2)
 
     def test_blank_relation_export_and_controls(self):
         response=self.client.get('/policy_reports?relation=(Blanks)&download=detail')
