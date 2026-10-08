@@ -8,7 +8,7 @@ from reportlab.lib import colors
 FIELDS = ['original_risk_premium', 'retail_premium', 'r1_policy_fee',
           'adv_fund_2_1_fee', 'new_risk_premium']
 HEADERS = ['Month', 'Franchise', 'Excel rows', 'Original risk', 'Retail',
-           'R1 fee', 'ADV fee', 'Net payover', 'Risk difference', 'Retail difference',
+           'R1 fee', 'ADV fee', 'Risk (Payover)', 'Risk difference', 'Retail difference',
            'Payover difference']
 
 def amount(value):
@@ -82,7 +82,7 @@ def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None
 
 NOTE = ('All applicable relation rows, including blanks and negative adjustments, are included. '
         'Original risk and retail are the amounts to compare with the source Excel sheet. '
-        'Net payover is after R1 and ADV fees. Differences are report totals minus imported detail. '
+        'Risk (Payover) is the existing risk amount after R1 and ADV fees. Retail minus Risk (Payover) is Admin fee. Differences are report totals minus imported detail. '
         'A match confirms internal consistency; compare the totals and row counts with Excel to confirm the source.')
 
 def add_pdf_summary(story, styles, result, width):
@@ -90,7 +90,7 @@ def add_pdf_summary(story, styles, result, width):
     story.append(Paragraph(escape(result['status']), styles['Normal']))
     story.append(Paragraph(f"Imported Excel rows: {result['count']:,} | Source files: {len({s[2] for s in result['sources']})}", styles['Normal']))
     story.append(Spacer(1, 8))
-    labels = ['Original risk', 'Retail', 'R1 fee', 'ADV fee', 'Net payover',
+    labels = ['Original risk', 'Retail', 'R1 fee', 'ADV fee', 'Risk (Payover)',
               'Risk difference', 'Retail difference', 'Payover difference']
     overview = [['Imported totals' + (' (available detail only)' if result['missing'] else ''), 'Rand']]
     overview += [[label, f'{value:,.2f}'] for label, value in zip(labels, result['totals'])]
@@ -112,7 +112,7 @@ def add_pdf_summary(story, styles, result, width):
         for index, col in enumerate([2, 3, 4, 7]):
             values[index] += row[col]
     if by_month:
-        data = [['Month', 'Excel rows', 'Original risk', 'Retail', 'Net payover']]
+        data = [['Month', 'Excel rows', 'Original risk', 'Retail', 'Risk (Payover)']]
         data += [[month, f'{v[0]:,}', *[f'{a:,.2f}' for a in v[1:]]]
                  for month, v in sorted(by_month.items())]
         table = Table(data, colWidths=[width * .14, width * .14, width * .24, width * .24, width * .24], repeatRows=1)
