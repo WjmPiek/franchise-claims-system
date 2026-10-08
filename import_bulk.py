@@ -13,9 +13,9 @@ def policy_detail_batches(engine, source_file, month, total_rows=None):
     if engine is None:
         raise RuntimeError('PostgreSQL is unavailable; policy details were not saved')
     written = 0
-    from premium_precision import ensure_premium_precision
+    from premium_precision import prepare_premium_precision
+    prepare_premium_precision(engine)
     with engine.begin() as connection:
-        ensure_premium_precision(connection)
         report('Replacing this month in the database')
         connection.execute(text('DELETE FROM policydata_detail_raw WHERE import_month = :month'), {'month': month})
         def write_batch(batch):
