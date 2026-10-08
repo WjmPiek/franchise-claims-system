@@ -4895,13 +4895,19 @@ def load_logged_in_user():
         flash('View-only users cannot make changes.', 'danger')
         return redirect(url_for('dashboard'))
     record_user_activity(g.user.get('id'))
-    # Reports must reflect committed imports even when another worker or instance
-    # handled the upload. A non-empty process cache is not evidence of freshness.
+    # Check the committed import/mapping revision on every request. Reuse the
+    # analytics snapshot only while that revision and calculation settings match.
     reporting_endpoints = {'dashboard', 'workspace_page', 'export', 'export_payover',
                            'board_report', 'client_heatmap_page'}
     if DATABASE_URL and request.endpoint in reporting_endpoints:
         try:
-            reload_dashboard_from_postgres(strict=True)
+            from report_cache import refresh_reporting_data
+            settings = (tuple(sorted(LAST_RESULT.get('rates', {}).items())),
+                        tuple(sorted(LAST_RESULT.get('book_rates', {}).items())),
+                        os.stat(CONFIG_FILE).st_mtime_ns if os.path.exists(CONFIG_FILE) else None)
+            refresh_reporting_data(get_db_engine(), text,
+                                   lambda: reload_dashboard_from_postgres(strict=True),
+                                   settings)
         except Exception as exc:
             print(f'Reporting refresh failed: {exc}', flush=True)
             return ('Reporting data could not be refreshed from PostgreSQL. '
@@ -8633,8 +8639,6 @@ def _financial_download(output_format):
     except ValueError as exc:
         flash(str(exc), 'warning')
         return redirect(url_for('dashboard'))
-    frames = _financial_report_frames(monthly, report_type)
-    import_summary = _import_report_summary(monthly, load_franchise_config())
     if output_format == 'view':
         params = request.args.to_dict()
         params.pop('report_format', None)
@@ -8643,6 +8647,8 @@ def _financial_download(output_format):
                                excel_url=url_for('export', **params),
                                pdf_url=url_for('board_report', **params),
                                preview_url=url_for('board_report', **preview_params))
+    frames = _financial_report_frames(monthly, report_type)
+    import_summary = _import_report_summary(monthly, load_franchise_config())
     path = os.path.join(EXPORT_DIR, f'{report_type}_{uuid.uuid4().hex}.{output_format}')
     if output_format == 'xlsx':
         with pd.ExcelWriter(path, engine='xlsxwriter') as writer:

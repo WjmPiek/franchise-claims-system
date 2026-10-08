@@ -4,6 +4,7 @@ on:
     paths:
       - 'app.py'
       - 'report_summary.py'
+      - 'report_cache.py'
       - 'import_bulk.py'
       - 'policy_reports.py'
       - 'premium_precision.py'
@@ -52,3 +53,4 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -p 'test_premium_precision.py'
+      - run: python -m unittest discover -s tests -p 'test_report_summary_cache.py'

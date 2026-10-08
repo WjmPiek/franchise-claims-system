@@ -51,13 +51,14 @@ class ReconciliationTest(unittest.TestCase):
         for row in records:
             row['rows'] = 1
         class Result:
-            def mappings(self): return records
+            def __init__(self, rows): self.rows = rows
+            def mappings(self): return self.rows
         class Connection:
             def __enter__(self): return self
             def __exit__(self, *args): pass
             def execute(self, query, params):
                 self.params = params
-                return Result()
+                return Result([{'imports':1,'mapping':''}] if 'FROM import_history' in query else records)
         class Engine:
             def connect(self): return Connection()
         selected = self.monthly.iloc[[1, 3]]
