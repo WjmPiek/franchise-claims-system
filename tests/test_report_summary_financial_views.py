@@ -42,6 +42,17 @@ class FinancialPreviewTest(unittest.TestCase):
                 self.assertNotIn('report_format=view', html)
                 self.assertNotIn('report-table', html)
 
+    def test_view_does_not_generate_report_twice(self):
+        frames = Mock()
+        audit = Mock()
+        self.env['_financial_report_frames'] = frames
+        self.env['_import_report_summary'] = audit
+        with self.app.test_request_context('/export?report_type=commissions&report_format=view&report_period=month&report_month=2024-09'):
+            html = self.env['_financial_download']('view')
+        self.assertIn('application/pdf', html)
+        frames.assert_not_called()
+        audit.assert_not_called()
+
     def test_pdf_inline_only_for_preview(self):
         from reportlab.lib.pagesizes import landscape, A4
         from reportlab.lib.units import cm

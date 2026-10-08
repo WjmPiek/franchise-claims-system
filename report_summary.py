@@ -39,8 +39,8 @@ def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None
                  + ') AND import_month IN ('
                  + ','.join(f':m{i}' for i in range(len(months)))
                  + ') GROUP BY franchise_name, import_month, source_file')
-        with engine.connect() as conn:
-            detail = [dict(r) for r in conn.execute(sql_text(query), params).mappings()]
+        from report_cache import read_policy_details
+        detail = read_policy_details(engine, sql_text, query, params)
     elif memory is not None and not memory.empty:
         frame = memory.rename(columns={'franchise': 'franchise_name'}).copy()
         for keys, group in frame.groupby(['franchise_name', 'import_month', 'source_file'], dropna=False):
