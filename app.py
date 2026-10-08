@@ -8293,7 +8293,7 @@ PDF_HEADER_ABBREVIATIONS = {
     'Weighted Claim Ratio': 'Avg Claim %',
     'Claim Ratio Label': 'Claim Label',
     'Recommendation': 'Reco',
-    'Retail Premium': 'Retail',
+    'Retail Premium': 'Retail Premium',
     'Risk Premium': 'Risk',
     'Original Risk Premium': 'Orig Risk',
     'Total Commission': 'Tot Comm',
@@ -8623,18 +8623,11 @@ def _financial_download(output_format):
     if output_format == 'view':
         params = request.args.to_dict()
         params.pop('report_format', None)
-        tables = []
-        for frame in frames[:2]:
-            display = frame.copy()
-            for column in display.columns:
-                if column == 'Month':
-                    display[column] = pd.to_datetime(display[column]).dt.strftime('%b %Y')
-                elif pd.api.types.is_numeric_dtype(display[column]) and column != 'Policy Qty':
-                    display[column] = display[column].map(money)
-            tables.append(display.to_html(index=False, classes='report-table', escape=True))
+        preview_params = dict(params, preview='1')
         return render_template('financial_report.html', title=title, period=label,
-                               tables=tables, excel_url=url_for('export', **params),
-                               pdf_url=url_for('board_report', **params))
+                               excel_url=url_for('export', **params),
+                               pdf_url=url_for('board_report', **params),
+                               preview_url=url_for('board_report', **preview_params))
     path = os.path.join(EXPORT_DIR, f'{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.{output_format}')
     if output_format == 'xlsx':
         with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
@@ -8660,7 +8653,7 @@ def _financial_download(output_format):
                 pdf_frame["Month"] = pd.to_datetime(pdf_frame["Month"]).dt.strftime("%b %Y")
             story.append(_pdf_table(_rows_for_pdf(pdf_frame, list(pdf_frame.columns), limit=None), page_size[0]))
         doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
-    return send_file(path, as_attachment=True)
+    return send_file(path, as_attachment=not (output_format == 'pdf' and request.args.get('preview') == '1'))
 
 
 @app.route('/export')
