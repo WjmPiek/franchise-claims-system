@@ -6093,6 +6093,9 @@ def dashboard():
         except Exception as exc:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 app.logger.error('Excel import failed (%s)', type(exc).__name__)
+                from premium_precision import PremiumPrecisionBusy
+                if isinstance(exc, PremiumPrecisionBusy):
+                    return jsonify(ok=False, error=str(exc)), 409
                 return jsonify(ok=False, error='Import failed. This file was not confirmed complete; check the server logs before retrying.'), 400
             flash(str(exc), 'danger')
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':

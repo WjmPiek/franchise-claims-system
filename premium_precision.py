@@ -28,6 +28,10 @@ def ensure_premium_precision(connection):
             # Identifiers come exclusively from the fixed allowlist above.
             connection.execute(text(f'ALTER TABLE "{table}" ALTER COLUMN "{column}" TYPE NUMERIC'))
 
+class PremiumPrecisionBusy(RuntimeError):
+    """Safe user-facing error raised before any month replacement."""
+
+
 def prepare_premium_precision(engine):
     """Commit schema locks before the long-running Excel/COPY transaction."""
     from import_progress import report
@@ -43,7 +47,7 @@ def prepare_premium_precision(engine):
     except DBAPIError as exc:
         code = getattr(exc.orig, 'pgcode', None)
         if code in {'55P03', '57014'}:
-            raise RuntimeError(
+            raise PremiumPrecisionBusy(
                 'The database precision update is busy or timed out. No rows from this '
                 'import have been replaced. Wait for the current import to finish '
                 'before retrying.') from exc
