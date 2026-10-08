@@ -168,8 +168,8 @@ REQUIRED_DB_SCHEMA = {
         'source_file': 'TEXT', 'import_month': 'DATE', 'row_number': 'INTEGER',
         'source_row_key': 'TEXT', 'client_address_o': 'TEXT', 'id_number_f': 'TEXT',
         'franchise_name': 'TEXT', 'relation': 'TEXT', 'is_mem': 'BOOLEAN DEFAULT false',
-        'retail_premium': 'NUMERIC(18,2) DEFAULT 0', 'risk_premium': 'NUMERIC(18,2) DEFAULT 0',
-        'original_risk_premium': 'NUMERIC(18,2) DEFAULT 0', 'mpia': 'NUMERIC(18,2) DEFAULT 0',
+        'retail_premium': 'NUMERIC DEFAULT 0', 'risk_premium': 'NUMERIC(18,2) DEFAULT 0',
+        'original_risk_premium': 'NUMERIC DEFAULT 0', 'mpia': 'NUMERIC(18,2) DEFAULT 0',
         'single_premium': 'NUMERIC(18,2) DEFAULT 0', 'single_monthly_premium': 'NUMERIC(18,2) DEFAULT 0',
         'r1_policy_fee': 'NUMERIC(18,2) DEFAULT 0', 'adv_fund_2_1_fee': 'NUMERIC(18,2) DEFAULT 0',
         'risk_after_r1': 'NUMERIC(18,2) DEFAULT 0', 'new_risk_premium': 'NUMERIC(18,2) DEFAULT 0',
@@ -178,11 +178,11 @@ REQUIRED_DB_SCHEMA = {
     'policy_monthly_raw': {
         'id': 'BIGSERIAL PRIMARY KEY',
         'franchise_name': 'TEXT', 'import_month': 'DATE',
-        'retail_premium': 'NUMERIC(18,2) DEFAULT 0', 'risk_premium': 'NUMERIC(18,2) DEFAULT 0',
+        'retail_premium': 'NUMERIC DEFAULT 0', 'risk_premium': 'NUMERIC(18,2) DEFAULT 0',
         'claims': 'NUMERIC(18,2) DEFAULT 0', 'claim_count': 'INTEGER DEFAULT 0',
         'claim_paid_franchise': 'NUMERIC(18,2) DEFAULT 0', 'claim_paid_client': 'NUMERIC(18,2) DEFAULT 0',
         'repudiated_pending': 'NUMERIC(18,2) DEFAULT 0', 'grand_total_claims': 'NUMERIC(18,2) DEFAULT 0',
-        'policy_qty': 'NUMERIC(18,2) DEFAULT 0', 'original_risk_premium': 'NUMERIC(18,2) DEFAULT 0',
+        'policy_qty': 'NUMERIC(18,2) DEFAULT 0', 'original_risk_premium': 'NUMERIC DEFAULT 0',
         'r1_policy_fee': 'NUMERIC(18,2) DEFAULT 0', 'underwriter_2_1_fee': 'NUMERIC(18,2) DEFAULT 0',
         'risk_after_r1': 'NUMERIC(18,2) DEFAULT 0', 'single_monthly_premium_total': 'NUMERIC(18,2) DEFAULT 0',
         'current_scenario': "TEXT DEFAULT '100% Claim Ratio'", 'source_file': 'TEXT',
@@ -527,7 +527,9 @@ def save_policy_detail_to_postgres(df, source_file=''):
     rows = [r for r in rows if r['franchise_name'] and r['import_month']]
     if not rows:
         return False
+    from premium_precision import ensure_premium_precision
     with engine.begin() as conn:
+        ensure_premium_precision(conn)
         report('Replacing this month in the database')
         for m in months:
             conn.execute(text('DELETE FROM policydata_detail_raw WHERE import_month = :m'), {'m': m, 'src': src})
@@ -576,7 +578,9 @@ def save_policy_raw_to_postgres(df, source_file=''):
     rows = [r for r in rows if r['franchise_name'] and r['import_month']]
     if not rows:
         return False
+    from premium_precision import ensure_premium_precision
     with engine.begin() as conn:
+        ensure_premium_precision(conn)
         for m in months:
             conn.execute(text('DELETE FROM policy_monthly_raw WHERE import_month = :m'), {'m': m})
         conn.execute(text("""
@@ -2649,8 +2653,11 @@ def read_policydata_streaming(path, persist_detail=False):
                     skipped_rows += 1
                     continue
                 franchise = str(row[franchise_i] or '').strip() if franchise_i < len(row) else ''
-                risk = float(Decimal(str(clean_money(row[risk_i] if risk_i < len(row) else 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-                retail = float(Decimal(str(clean_money(row[retail_i] if retail_i < len(row) else 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                source_risk = Decimal(str(clean_money(row[risk_i] if risk_i < len(row) else 0)))
+                # Preserve Excel precision for gross totals. Existing fee/payover
+                # rules still use the same rounded per-policy base as before.
+                risk = float(source_risk.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                retail = Decimal(str(clean_money(row[retail_i] if retail_i < len(row) else 0)))
                 mpia = clean_money(row[mpia_i] if mpia_i < len(row) else 1)
                 if mpia <= 0:
                     mpia = 1
@@ -2679,7 +2686,7 @@ def read_policydata_streaming(path, persist_detail=False):
                         'relation': relation,
                         'is_mem': is_mem,
                         'retail_premium': retail,
-                        'original_risk_premium': risk,
+                        'original_risk_premium': source_risk,
                         'mpia': mpia,
                         'single_premium': single_premium,
                         'r1_policy_fee': r1_fee,
@@ -2697,11 +2704,11 @@ def read_policydata_streaming(path, persist_detail=False):
                     skipped_rows += 1
                     continue
                 rec = agg.setdefault(franchise, {
-                    'retail_premium': 0.0,
+                    'retail_premium': Decimal(0),
                     'risk_premium': 0.0,
                     'claims': 0.0,
                     'policy_qty': 0.0,
-                    'original_risk_premium': 0.0,
+                    'original_risk_premium': Decimal(0),
                     'r1_policy_fee_imported': 0.0,
                     'underwriter_2_1_fee': 0.0,
                     'risk_after_r1': 0.0,
@@ -2710,7 +2717,7 @@ def read_policydata_streaming(path, persist_detail=False):
                 rec['retail_premium'] += retail
                 rec['risk_premium'] += net_risk
                 rec['policy_qty'] += mpia if is_mem else 0
-                rec['original_risk_premium'] += risk
+                rec['original_risk_premium'] += source_risk
                 rec['r1_policy_fee_imported'] += r1_fee
                 rec['underwriter_2_1_fee'] += underwriter_fee
                 rec['risk_after_r1'] += risk_after_r1
@@ -2728,11 +2735,11 @@ def read_policydata_streaming(path, persist_detail=False):
         rows.append({
             'franchise': franchise,
             'month': month,
-            'retail_premium': rec['retail_premium'],
+            'retail_premium': float(rec['retail_premium']),
             'risk_premium': rec['risk_premium'],
             'claims': 0.0,
             'policy_qty': rec['policy_qty'],
-            'original_risk_premium': rec['original_risk_premium'],
+            'original_risk_premium': float(rec['original_risk_premium']),
             'r1_policy_fee_imported': rec['r1_policy_fee_imported'],
             'underwriter_2_1_fee': rec['underwriter_2_1_fee'],
             'risk_after_r1': rec['risk_after_r1'],

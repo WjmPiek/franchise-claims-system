@@ -11,6 +11,9 @@ HEADERS = ['Month', 'Franchise', 'Excel rows', 'Risk Premium', 'Retail Premium',
            'R1 fee', 'ADV fee', 'Payover Less Comm.', 'Risk difference', 'Retail difference',
            'Payover difference']
 
+def source_amount(value):
+    return Decimal(str(value if pd.notna(value) else 0))
+
 def amount(value):
     return Decimal(str(value if pd.notna(value) else 0)).quantize(Decimal('.01'))
 
@@ -42,7 +45,7 @@ def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None
         frame = memory.rename(columns={'franchise': 'franchise_name'}).copy()
         for keys, group in frame.groupby(['franchise_name', 'import_month', 'source_file'], dropna=False):
             detail.append(dict(zip(['franchise_name', 'import_month', 'source_file'], keys),
-                               rows=len(group), **{c: sum(amount(v) for v in group[c]) for c in FIELDS}))
+                               rows=len(group), **{c: sum(source_amount(v) for v in group[c]) for c in FIELDS}))
     imported, sources = {}, set()
     for row in detail:
         franchise, month = str(row['franchise_name']), pd.Timestamp(row['import_month']).strftime('%Y-%m')
@@ -53,13 +56,13 @@ def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None
         total = imported.setdefault(key, {'rows': 0, **{c: Decimal(0) for c in FIELDS}})
         total['rows'] += int(row['rows'])
         for c in FIELDS:
-            total[c] += amount(row[c])
+            total[c] += source_amount(row[c])
     reports = {}
     for row in work.to_dict('records'):
         key = (pd.Timestamp(row['Month']).strftime('%Y-%m'), mapping.get(row['Franchise'], row['Franchise']))
         total = reports.setdefault(key, [Decimal(0)] * 3)
         for i, c in enumerate(['Original Risk Premium', 'Retail Premium', 'Risk Premium']):
-            total[i] += amount(row.get(c, 0))
+            total[i] += source_amount(row.get(c, 0))
     rows = []
     missing = []
     for key, report in sorted(reports.items()):
@@ -69,8 +72,8 @@ def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None
             rows.append([*key, 'Unavailable', *([None] * 8)])
         else:
             rows.append([*key, imp['rows'], *[imp[c] for c in FIELDS],
-                         report[0] - imp[FIELDS[0]], report[1] - imp[FIELDS[1]],
-                         report[2] - imp[FIELDS[4]]])
+                         amount(report[0] - imp[FIELDS[0]]), amount(report[1] - imp[FIELDS[1]]),
+                         amount(report[2] - imp[FIELDS[4]])])
     totals = [sum(row[i] for row in rows if row[i] is not None and row[2] != 'Unavailable')
               for i in range(3, 11)]
     has_difference = any(row[i] != 0 for row in rows if row[2] != 'Unavailable' for i in (8, 9, 10))
@@ -81,7 +84,8 @@ def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None
                 sources=sorted(sources), status=status, missing=missing)
 
 NOTE = ('All applicable relation rows, including blanks and negative adjustments, are included. '
-        'Risk Premium and Retail Premium are the amounts to compare with the source Excel sheet. '
+        'Risk Premium and Retail Premium retain source Excel precision; totals display two decimals. '
+        'Compare totals with Excel SUM, rather than summing individually rounded rows. '
         'Payover Less Comm. is the existing risk amount after R1 and ADV fees. Retail minus Payover Less Comm. is Admin fee. Differences are report totals minus imported detail. '
         'A match confirms internal consistency; compare the totals and row counts with Excel to confirm the source.')
 
