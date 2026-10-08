@@ -71,7 +71,7 @@ def register_policy_reports(app, get_engine, sql_text, get_memory, scope_fn=None
                     if not external.is_finite() or external != external.quantize(Decimal('.01')): raise InvalidOperation
                 except InvalidOperation:
                     return 'External totals must be finite amounts with at most two decimals.', 400
-                delta = external - totals[key].quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+                delta = external - Decimal(str(totals[key])).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
                 controls[field] = {'value':external, 'difference':delta if groups else None, 'status':('Balanced' if delta == 0 else 'Difference to investigate') if groups else 'No imported rows; comparison unavailable'}
         download = request.args.get('download')
         if download:
