@@ -6170,7 +6170,7 @@ def dashboard():
     configured_monthly, configured_periods, _configured_portfolio_all = apply_franchise_config(apply_user_franchise_scope(LAST_RESULT['monthly']), load_franchise_config())
     configured_portfolio = build_portfolio_for_period(configured_monthly, configured_periods, dashboard_period_view)
     executive_dashboard = build_executive_dashboard_context(monthly_view, selected=selected, period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month)
-    return render_template('dashboard.html', workspace='home', portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
+    return render_template('dashboard.html', workspace='home', portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
 
 
 
@@ -8258,6 +8258,10 @@ def _friendly_export_df(df):
         'BrightRock Month Total': 'Franchise Money',
         'BrightRock Running Balance': 'Franchise Money Running Balance',
     }
+    if 'Original Risk Premium' in out.columns:
+        # The imported gross risk and after-fee payover are distinct amounts.
+        rename.update({'Original Risk Premium': 'Risk Premium',
+                       'Risk Premium': 'Payover Less Comm.'})
     out = out.rename(columns={k: v for k, v in rename.items() if k in out.columns})
     return out
 
@@ -8304,8 +8308,8 @@ PDF_HEADER_ABBREVIATIONS = {
     'Claim Ratio Label': 'Claim Label',
     'Recommendation': 'Reco',
     'Retail Premium': 'Retail Premium',
-    'Risk Premium': 'Risk',
-    'Original Risk Premium': 'Orig Risk',
+    'Risk Premium': 'Risk Premium',
+    'Original Risk Premium': 'Risk Premium',
     'Total Commission': 'Tot Comm',
     'Total Paid Commissions': 'Paid Comm',
     'Franchise Money': 'Franchise $',
@@ -8562,10 +8566,11 @@ def _select_report_months(monthly, args, default_period='all'):
         work = work[work['Franchise'].eq(franchise) | work['Franchise'].map(groups).eq(franchise)].copy()
     if work.empty:
         raise ValueError('No report data is available for this franchise.')
-    mode = args.get('report_period') or default_period
-    if mode in {'month', 'range'} and args.get('report_period'):
+    selected_month = args.get('report_month') or args.get('premium_analysis_month')
+    mode = args.get('report_period') or ('month' if selected_month else default_period)
+    if mode in {'month', 'range'} and (args.get('report_period') or selected_month):
         def parse_month(name):
-            value = str(args.get(name, '')).strip()
+            value = str((selected_month if name == 'report_month' else args.get(name, '')) or '').strip()
             if not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', value):
                 raise ValueError('Choose a valid report month.')
             return pd.Period(value, freq='M')
@@ -8591,7 +8596,7 @@ def _select_report_months(monthly, args, default_period='all'):
 
 
 FINANCIAL_REPORT_COLUMNS = {
-    'commissions': ['Franchise', 'Month', 'Period', 'Retail Premium', 'Risk Premium',
+    'commissions': ['Franchise', 'Month', 'Period', 'Retail Premium', 'Risk Premium', 'Payover Less Comm.',
                     'Claims', 'Policy Qty', 'R1 Policy Fee', 'ADV Fee 2.1%',
                     'Underwriter 2.1% Fee', 'BrightRock Amount', 'Inkulu Amount',
                     'MFF Amount', 'Total Commission', 'Total Paid Commissions',
@@ -8638,7 +8643,7 @@ def _financial_download(output_format):
                                excel_url=url_for('export', **params),
                                pdf_url=url_for('board_report', **params),
                                preview_url=url_for('board_report', **preview_params))
-    path = os.path.join(EXPORT_DIR, f'{report_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.{output_format}')
+    path = os.path.join(EXPORT_DIR, f'{report_type}_{uuid.uuid4().hex}.{output_format}')
     if output_format == 'xlsx':
         with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
             _add_excel_cover(writer, title, label)
@@ -8663,7 +8668,8 @@ def _financial_download(output_format):
                 pdf_frame["Month"] = pd.to_datetime(pdf_frame["Month"]).dt.strftime("%b %Y")
             story.append(_pdf_table(_rows_for_pdf(pdf_frame, list(pdf_frame.columns), limit=None), page_size[0]))
         doc.build(story, onFirstPage=_page_footer, onLaterPages=_page_footer)
-    return send_file(path, as_attachment=not (output_format == 'pdf' and request.args.get('preview') == '1'))
+    download_name = f'{report_type}_{re.sub(r"[^A-Za-z0-9]+", "_", label).strip("_")}.{output_format}'
+    return send_file(path, download_name=download_name, max_age=0, as_attachment=not (output_format == 'pdf' and request.args.get('preview') == '1'))
 
 
 @app.route('/export')
@@ -8675,7 +8681,7 @@ def export():
         return redirect(url_for('dashboard'))
     commissions = request.args.get('report_type') == 'commissions'
     filename = 'commissions' if commissions else 'claims_analytics_export'
-    path = os.path.join(EXPORT_DIR, f'{filename}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
+    path = os.path.join(EXPORT_DIR, f'{filename}_{uuid.uuid4().hex}.xlsx')
     monthly_scoped = apply_user_franchise_scope(LAST_RESULT['monthly'])
     try:
         monthly_scoped, report_label = _select_report_months(monthly_scoped, request.args)
@@ -8722,7 +8728,7 @@ def board_report():
     configured_monthly, configured_periods, portfolio = apply_franchise_config(report_monthly, config)
     commissions = request.args.get('report_type') == 'commissions'
     filename = 'commissions' if commissions else 'board_report'
-    path = os.path.join(EXPORT_DIR, f'{filename}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf')
+    path = os.path.join(EXPORT_DIR, f'{filename}_{uuid.uuid4().hex}.pdf')
     page_size = landscape(A4)
     doc = SimpleDocTemplate(path, pagesize=page_size, rightMargin=0.45*cm, leftMargin=0.45*cm, topMargin=0.55*cm, bottomMargin=0.55*cm)
     styles = getSampleStyleSheet()
@@ -8761,7 +8767,7 @@ def board_report():
         detail_source = yearly_view_from_monthly(configured_monthly)
     periods = _friendly_export_df(detail_source)
     story.append(Paragraph(f'{report_label} Commissions Detail' if commissions else f'{report_label} Scenario Recommendations', styles['Heading2']))
-    cols = [c for c in ['Franchise','Period','Retail Premium','Risk Premium','Claims','Average Claim Ratio','Claim Ratio Label','Recommendation','Policy Qty','R1 Policy Fee','Total Commission','Franchise Money','Franchise Money Running Balance','Total Book Value'] if c in periods.columns]
+    cols = [c for c in ['Franchise','Period','Retail Premium','Risk Premium','Payover Less Comm.','Claims','Average Claim Ratio','Claim Ratio Label','Recommendation','Policy Qty','R1 Policy Fee','Total Commission','Franchise Money','Franchise Money Running Balance','Total Book Value'] if c in periods.columns]
     if commissions:
         cols = [c for c in cols if c not in {'Claim Ratio Label', 'Recommendation'}]
     story.append(_pdf_table(_rows_for_pdf(periods, cols, limit=None), page_size[0], font_size=4.6, first_col_weight=1.45))

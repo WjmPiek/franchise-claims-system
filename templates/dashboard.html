@@ -564,7 +564,7 @@
           </label>
           <label data-report-field="month">Month
             <select name="report_month" required>
-              {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.last %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+              {% for m in report_month_options %}<option value="{{ m.value }}" {% if m.value == report_selected_month or (not report_selected_month and loop.last) %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
             </select>
           </label>
           <label data-report-field="range" hidden>From month
@@ -606,6 +606,16 @@
               label.querySelector('select').disabled = label.hidden;
             });
           }
+          const analysisMonth = document.querySelector('select[name="premium_analysis_month"]');
+          if (analysisMonth) analysisMonth.addEventListener('change', function(){
+            if (!analysisMonth.value) return;
+            const reportMonth = form.elements.report_month;
+            if (Array.from(reportMonth.options).some(option => option.value === analysisMonth.value)) {
+              reportMonth.value = analysisMonth.value;
+              mode.value = 'month';
+              updateFields();
+            }
+          });
           mode.addEventListener('change', updateFields);
           form.addEventListener('submit', event => {
             if(mode.value === 'range' && form.elements.report_start.value > form.elements.report_end.value){
@@ -624,9 +634,9 @@
       <div class="top-toolbar no-print">
         <a class="back-btn" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
         <button onclick="window.print()">Print</button>
-        <a href="{{ url_for('board_report', period_view=period_view, franchise=selected) }}">Export PDF</a>
-        <a href="{{ url_for('export') }}">Export Excel</a>
-        <a href="{{ url_for('policy_reports', franchise=selected) }}">Policy relation reports / Reconciliation</a>
+        <a href="{{ url_for('board_report', period_view=period_view, franchise=selected, premium_analysis_month=premium_analysis_month) }}">Export PDF</a>
+        <a href="{{ url_for('export', franchise=selected, premium_analysis_month=premium_analysis_month) }}">Export Excel</a>
+        <a href="{{ url_for('policy_reports', franchise=selected, month=premium_analysis_month) }}">Policy relation reports / Reconciliation</a>
       </div>
 
       <section class="print-cover">
