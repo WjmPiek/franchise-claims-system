@@ -4868,16 +4868,23 @@ def load_logged_in_user():
             return '<h1>Maintenance Mode</h1><p>The Martins Direct analytics system is temporarily unavailable while maintenance is being performed.</p>', 503
     if endpoint in PUBLIC_ENDPOINTS or endpoint.startswith('static'):
         return None
+    ajax_import = endpoint == 'import_session' or (endpoint == 'dashboard' and request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest')
     if g.user is None:
+        if ajax_import:
+            return jsonify(ok=False, error='Your login session expired. Sign in again, then retry the failed and remaining files. Completed files stay saved.', login_url=url_for('login', next=url_for('dashboard'))), 401
         return redirect(url_for('login', next=request.path))
     if not g.user.get('is_active'):
         session.clear()
+        if ajax_import:
+            return jsonify(ok=False, error='Your account is inactive. Contact the administrator.'), 403
         flash('Your account is waiting for admin approval or has been disabled. Contact the system administrator.', 'danger')
         return redirect(url_for('login'))
     if endpoint in ADMIN_ENDPOINTS and g.user.get('role') != 'admin':
         flash('Admin access required.', 'danger')
         return redirect(url_for('dashboard'))
-    if g.user.get('role') == 'viewer' and request.method == 'POST':
+    if g.user.get('role') == 'viewer' and (request.method == 'POST' or endpoint == 'import_session'):
+        if ajax_import:
+            return jsonify(ok=False, error='View-only users cannot import files.'), 403
         flash('View-only users cannot make changes.', 'danger')
         return redirect(url_for('dashboard'))
     record_user_activity(g.user.get('id'))
@@ -4893,6 +4900,16 @@ def load_logged_in_user():
             return ('Reporting data could not be refreshed from PostgreSQL. '
                     'Please retry or ask the administrator to check the Render logs.', 503)
     return None
+
+
+@app.get('/api/import/session')
+def import_session():
+    # Protected by load_logged_in_user; renew only an already-valid session.
+    # The configured idle timeout remains unchanged outside active import batches.
+    session.modified = True
+    response = jsonify(ok=True)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @app.context_processor

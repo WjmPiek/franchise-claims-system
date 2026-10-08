@@ -1342,9 +1342,25 @@
       const totalBytes = Array.from(policyFiles).concat(Array.from(claimsFiles)).reduce((sum, file) => sum + (file.size || 0), 0);
       let index = 0;
       let elapsedTimer;
+      let sessionTimer;
+      let sessionError = '';
+      async function checkImportSession(){
+        try {
+          const response = await fetch('{{ url_for("import_session") }}', {credentials:'same-origin', cache:'no-store'});
+          const result = await response.json();
+          if(!response.ok || !result.ok){
+            sessionError = result.error || 'Sign in again before continuing the import.';
+            return false;
+          }
+          return true;
+        } catch(error) {
+          return false;
+        }
+      }
 
       function fail(message){
         clearInterval(elapsedTimer);
+        clearInterval(sessionTimer);
         restoreButton();
         setProcessingMode(message + ' Completed: ' + completedFiles + ' of ' + totalFiles + ' files.');
         if(pct) pct.textContent = 'Error';
@@ -1352,10 +1368,15 @@
         if(stepRows) stepRows.textContent = 'Completed files stay saved. Retry the failed and remaining files.';
       }
 
-      function nextFile(){
+      async function nextFile(){
         if(index >= queue.length){
+          clearInterval(sessionTimer);
           showProgress(100, 'All files imported. Reloading dashboard...');
           window.location.href = '{{ url_for("dashboard") }}';
+          return;
+        }
+        if(sessionError || !(await checkImportSession())){
+          fail(sessionError || 'Could not check your login session. Check the connection and retry the remaining files.');
           return;
         }
         const selected = queue[index];
@@ -1418,6 +1439,12 @@
         xhr.onload = function(){
           clearInterval(elapsedTimer);
           receiveProgress();
+          if(!serverResult){
+            try { serverResult = JSON.parse(xhr.responseText); } catch(error) {}
+          }
+          if(!serverResult && xhr.responseURL && new URL(xhr.responseURL, window.location.href).pathname === '/login'){
+            serverResult = {ok:false, error:'Your login session expired. Sign in again, then retry the failed and remaining files.'};
+          }
           if(xhr.status >= 200 && xhr.status < 300 && serverResult && serverResult.ok){
             completedFiles += selected.length;
             completedBytes += selected.reduce((sum, item) => sum + (item.file.size || 0), 0);
@@ -1431,6 +1458,11 @@
         xhr.onabort = function(){ fail('Import request was interrupted at ' + label + '.'); };
         xhr.send(data);
       }
+      // Keep the valid login active only while this selected batch is running.
+      sessionTimer = setInterval(async () => {
+        await checkImportSession();
+        if(sessionError && stepRows) stepRows.textContent = sessionError + ' Waiting for the current file to finish before stopping.';
+      }, 60000);
       nextFile();
     });
   })();
