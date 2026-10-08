@@ -1,5 +1,7 @@
 import ast
 import os
+import re
+import uuid
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,7 +21,7 @@ class FinancialPreviewTest(unittest.TestCase):
         self.app.add_url_rule('/board_report', endpoint='board_report', view_func=lambda: '')
         source = ROOT.joinpath('app.py').read_text(encoding='utf-8')
         node = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.name == '_financial_download')
-        self.env = dict(request=request, render_template=render_template, url_for=url_for,
+        self.env = dict(uuid=uuid, re=re, request=request, render_template=render_template, url_for=url_for,
             LAST_RESULT={'monthly': pd.DataFrame({'Month': ['2024-08-01']})},
             apply_user_franchise_scope=lambda x: x,
             _select_report_months=lambda x, args: (x, 'Aug 2024 - Oct 2024'),
