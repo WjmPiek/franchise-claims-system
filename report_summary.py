@@ -1,5 +1,5 @@
 """Read-only reconciliation of report scope against stored Excel detail rows."""
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from xml.sax.saxutils import escape
 import pandas as pd
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
@@ -15,7 +15,7 @@ def source_amount(value):
     return Decimal(str(value if pd.notna(value) else 0))
 
 def amount(value):
-    return Decimal(str(value if pd.notna(value) else 0)).quantize(Decimal('.01'))
+    return Decimal(str(value if pd.notna(value) else 0)).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
 
 def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None):
     """Monthly is scoped *before* grouping; never fetch outside those exact pairs."""
@@ -97,7 +97,7 @@ def add_pdf_summary(story, styles, result, width):
     labels = ['Risk Premium', 'Retail Premium', 'R1 fee', 'ADV fee', 'Payover Less Comm.',
               'Risk difference', 'Retail difference', 'Payover difference']
     overview = [['Imported totals' + (' (available detail only)' if result['missing'] else ''), 'Rand']]
-    overview += [[label, f'{value:,.2f}'] for label, value in zip(labels, result['totals'])]
+    overview += [[label, f'{amount(value):,.2f}'] for label, value in zip(labels, result['totals'])]
     table = Table(overview, colWidths=[width * .6, width * .4], repeatRows=1)
     table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e8edf5')),
                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -117,7 +117,7 @@ def add_pdf_summary(story, styles, result, width):
             values[index] += row[col]
     if by_month:
         data = [['Month', 'Excel rows', 'Risk Premium', 'Retail Premium', 'Payover Less Comm.']]
-        data += [[month, f'{v[0]:,}', *[f'{a:,.2f}' for a in v[1:]]]
+        data += [[month, f'{v[0]:,}', *[f'{amount(a):,.2f}' for a in v[1:]]]
                  for month, v in sorted(by_month.items())]
         table = Table(data, colWidths=[width * .14, width * .14, width * .24, width * .24, width * .24], repeatRows=1)
         table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e8edf5')),
