@@ -97,7 +97,7 @@ def add_pdf_summary(story, styles, result, width):
     table = Table(overview, colWidths=[width * .6, width * .4], repeatRows=1)
     table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e8edf5')),
                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                               ('ALIGN', (1, 1), (1, -1), 'RIGHT'),
+                               ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
                                ('FONTSIZE', (0, 0), (-1, -1), 9),
                                ('BOTTOMPADDING', (0, 0), (-1, -1), 5)]))
     story.append(table)
@@ -118,12 +118,10 @@ def add_pdf_summary(story, styles, result, width):
         table = Table(data, colWidths=[width * .14, width * .14, width * .24, width * .24, width * .24], repeatRows=1)
         table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e8edf5')),
                                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                                   ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+                                   ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
                                    ('FONTSIZE', (0, 0), (-1, -1), 8)]))
         story.append(table)
         story.append(Spacer(1, 8))
-    members = sorted({s[1] for s in result['sources']})
-    story.append(Paragraph(escape('Source franchises: ' + ', '.join(members)), styles['Normal']))
     for source in sorted({s[2] for s in result['sources']}):
         story.append(Paragraph(escape('Source file: ' + source), styles['Normal']))
     if result['missing']:
@@ -157,8 +155,8 @@ def add_excel_summary(writer, result):
     ws.write_number(index, 2, result['count'])
     for col, value in enumerate(result['totals'], 3):
         ws.write_number(index, col, float(value), money)
-    ws.write_row(index + 3, 0, ['Month', 'Source franchise', 'Source Excel file'], bold)
-    for index, row in enumerate(result['sources'], index + 4):
+    ws.write_row(index + 3, 0, ['Month', 'Source Excel file'], bold)
+    for index, row in enumerate(sorted({(month, source) for month, franchise, source in result['sources']}), index + 4):
         for col, value in enumerate(row):
             ws.write_string(index, col, value)
     ws.set_landscape()
