@@ -63,14 +63,15 @@ class DirectAnalyticsTest(unittest.TestCase):
         who={'id':1,'role':'admin'}
         @app.before_request
         def user():g.user=who
+        app.add_url_rule('/overview/<section>','overview_page',lambda section:'overview')
         app.add_url_rule('/dashboard','dashboard',lambda:render_template('direct_dashboard.html'))
         app.add_url_rule('/direct-data','direct_data',lambda:'prepare')
         app.add_url_rule('/direct-data/reports','direct_reports',lambda:'reports')
         register_direct_analytics(app,self.store)
         client=app.test_client()
         response=client.get('/dashboard')
-        self.assertIn(b'Direct Data Analytics',response.data)
-        self.assertIn(b'category=plan2',response.data)
+        self.assertIn(b'Direct monthly data',response.data)
+        self.assertIn(b'category=insurers',response.data)
         self.assertIn(b'61',response.data)
         response=client.get('/direct-data/analytics?category=plan2&page=2')
         self.assertEqual(response.status_code,200)

@@ -56,15 +56,19 @@ class SavedDirectReportsTest(unittest.TestCase):
         who={'id':1,'role':'admin'}
         @app.before_request
         def user():g.user=who
+        app.add_url_rule('/overview/<section>','overview_page',lambda section:'centre')
         app.add_url_rule('/dashboard','dashboard',lambda:'dashboard')
         app.add_url_rule('/api/import/session','import_session',lambda:'session')
         register_direct_data(app,self.root)
         client=app.test_client();source=io.StringIO();csv.writer(source).writerow(record())
         response=client.post('/direct-data',data={'data_month':'2025-10','direct_file':(io.BytesIO(source.getvalue().encode()),'October.csv')})
         self.assertEqual(response.status_code,200,response.data);batch=response.json['job']
-        self.assertIn(b'Recreate 2025-10 downloads',client.get('/direct-data/reports').data)
+        self.assertIn('/overview/downloads#preparedDownloads',client.get('/direct-data/reports').location)
         result=client.post('/direct-data/reports/'+batch)
         self.assertEqual(result.status_code,200,result.data)
+        self.assertEqual(result.json['job'],batch)
+        with patch('direct_data.prepare_outputs',side_effect=AssertionError('Cached files should be reused')):
+            self.assertEqual(client.post('/direct-data/reports/'+batch).json['job'],batch)
         self.assertIn('Direct_reports.zip',result.json['files'])
         downloaded=client.get('/direct-data/download/'+result.json['job']+'/Direct_reports.zip')
         self.assertEqual(downloaded.status_code,200);downloaded.close()

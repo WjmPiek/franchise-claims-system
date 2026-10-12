@@ -44,6 +44,11 @@ def run():
         assert overview['detail_totals']['original_risk'] == Decimal('100.005')
         assert store.row(900000001,'synthetic-a',1)['data'][5] == '0012312345678'
         assert store.row(900000002,'synthetic-a',1) is None
+        before=store.overview(900000001)['categories']
+        products=store.product_insights(900000001)
+        assert products['top'][0]['value']==1 and products['products']==['Family R 50 000']
+        assert store.overview(900000001)['categories']==before
+        assert store.product_insights(900000002)['rows']==[]
         fill('200.005')
         store.save(stage,'synthetic-b',900000001,'2026-09','synthetic.csv')
         assert store.overview(900000001)['categories']['source']['rows'] == 1
@@ -56,7 +61,7 @@ def run():
         assert batch['month']=='2026-09'
         assert restored.execute('SELECT policy,original_risk,payover FROM saved').fetchone()==('000011','200.005','96.93')
         restored.close()
-        print('PASS: PostgreSQL COPY, exact decimals, detail totals, owner isolation, atomic monthly replacement and saved report restoration. Temporary test tables disappear when the connection closes.')
+        print('PASS: PostgreSQL COPY, exact decimals, detail totals, owner isolation, atomic monthly replacement saved report restoration and product rankings. Temporary test tables disappear when the connection closes.')
     finally:
         stage.close()
         engine.dispose()

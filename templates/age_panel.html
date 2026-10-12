@@ -1,0 +1,27 @@
+            <div class="exec-card span-12"><h2><a href="{{ url_for('admin_age_notifications_franchise',franchise_name=selected) }}">Age Limit Notifications</a></h2>
+              <p class="kpi-sub">Daily check from PolicyData Column I relation and Column F ID number. Click a franchise to list all affected members.</p>
+              {% set ant = ed.get('age_notification_totals', {}) %}
+              <div class="status-mini-grid" style="margin-bottom:10px">
+                <a class="status-mini" href="{{ url_for('admin_age_notifications_franchise',franchise_name=selected) }}"><small>Total to Fix</small><strong>{{ ant.get('total',0)|int }}</strong></a>
+                <div class="status-mini"><small>Franchises</small><strong>{{ ant.get('franchises',0)|int }}</strong></div>
+              </div>
+              <div class="status-mini-grid" style="margin-bottom:10px">
+                {% for b in ed.get('age_notification_age_bands', []) %}
+                  <a class="status-mini" href="{{ url_for('admin_age_notifications_franchise_band',franchise_name=selected,age_band=b.age_band) }}"><small>{{ b.age_band }}</small><strong>{{ b.count|int }}</strong></a>
+                {% endfor %}
+              </div>
+              <form method="post" action="{{ url_for('admin_refresh_policy_age_notifications') }}" class="no-print" style="margin-bottom:10px">
+                <input type="hidden" name="franchise" value="{{ selected }}">
+                <input type="hidden" name="limit" value="600000">
+                <button class="btn" type="submit">Refresh Notifications</button>
+              </form>
+              <table class="exec-table"><thead><tr><th>Franchise</th><th>Total to Fix</th><th>Next Due</th></tr></thead><tbody>
+                {% for n in ed.get('age_notification_summary', []) %}
+                <tr>
+                  <td><a class="link" href="{{ url_for('admin_age_notifications_franchise', franchise_name=n.franchise_name) }}">{{ n.franchise_name }}</a></td>
+                  <td>{{ n.notification_count|int }}</td>
+                  <td>{{ n.next_due_date or '-' }}</td>
+                </tr>
+                {% else %}<tr><td colspan="3">No active age notifications. Click Refresh Notifications to scan PolicyData.</td></tr>{% endfor %}
+              </tbody></table>
+            </div>

@@ -1,0 +1,4 @@
+            <div class="exec-card span-12"><h2>Claims by Status</h2><div class="status-mini-grid">{% for s in ed.get('status_cards', []) %}<div class="status-mini"><small>{{ s.label }}</small><strong>{{ s.value }}</strong></div>{% endfor %}</div></div>
+            <div class="exec-card span-12"><h2>Claims by Franchise</h2><div class="chart-bars" data-bars="claims_by_franchise"></div></div>
+            <div class="exec-card span-6"><h2>Status Distribution</h2><div class="donut-wrap"><div class="donut" id="statusDonut"></div><div class="legend" id="statusLegend"></div></div></div>
+            <div class="exec-card span-6"><h2>Loss Ratio by Franchise</h2><div class="chart-bars" data-bars="loss_ratio_by_franchise"></div></div>

@@ -1,0 +1,28 @@
+import unittest
+from test_direct_analytics import DirectAnalyticsTest
+from test_direct_data import record
+
+class ProductInsightsTest(DirectAnalyticsTest):
+    def test_counts_products_without_counting_payment_rows_as_new_policies(self):
+        self.save([record(product='Family',cover='40000',mpia='2'),record(product='Family',cover='40000',mpia='1'),record(product='Cremation',cover='20000'),record(relation='SPS',product='Family',cover='40000'),record(relation='MEM',product='GROCERY DISCOUNT COUPONS FOR MARTINS CLIENTS',risk='8.5')])
+        before=self.store.overview(1)['categories']
+        result=self.store.product_insights(1)
+        self.assertEqual(sum(row['policies'] for row in result['rows']),2)
+        self.assertEqual(result['top'][0]['value'],2)
+        self.assertEqual(next(r for r in result['rows'] if r['product']=='Family')['paid_months'],3)
+        self.assertEqual(self.store.overview(1)['categories'],before)
+        self.assertEqual(self.store.product_insights(2)['rows'],[])
+        self.assertEqual(len(self.store.product_insights(1,product='Family')['rows']),1)
+        self.save([record(product='Replacement')],batch='new')
+        self.assertEqual(self.store.product_insights(1)['products'],['Replacement'])
+    def test_top_ten_and_single_month_scope(self):
+        self.save([record(franchise=f'Branch {i}',policy=f'P{j}',product='Family',cover='20000') for i in range(12) for j in range(i+1)])
+        self.save([record(franchise='Old Branch',product='Old')],month='2026-08',batch='old')
+        result=self.store.product_insights(1)
+        self.assertEqual(result['month'],'2026-09')
+        self.assertEqual(len(result['top']),10)
+        self.assertEqual(result['top'][0]['label'],'Branch 11')
+        self.assertNotIn('Old',result['products'])
+        self.assertEqual(self.store.product_insights(1,'2026-08')['products'],['Old'])
+
+if __name__=='__main__':unittest.main()

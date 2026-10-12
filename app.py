@@ -6184,7 +6184,13 @@ def dashboard(section='dashboard'):
     configured_monthly, configured_periods, _configured_portfolio_all = apply_franchise_config(apply_user_franchise_scope(LAST_RESULT['monthly']), load_franchise_config())
     configured_portfolio = build_portfolio_for_period(configured_monthly, configured_periods, dashboard_period_view)
     executive_dashboard = build_executive_dashboard_context(monthly_view, selected=selected, period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month)
-    home_titles={'dashboard':'Dashboard','compare':'Compare','top_franchise':'Top Franchise','imports':'Admin & Imports','reports':'Reports','downloads':'Downloads','graphs':'Graphs','claim_trend':'Claim Amount Comparison Over Time','policy_trend':'New Policy / Client Trend','relations':'Policy Relation Counts'}
+    home_titles={'dashboard':'Dashboard','risk':'Risk & Retail','commissions':'Commissions & Fees','policies':'Policies & Products','claims':'Claims','compare':'Compare','top_franchise':'Top Franchise','imports':'Admin & Imports','reports':'Reports & Downloads','downloads':'Reports & Downloads','graphs':'Graphs','claim_trend':'Claim Amount Comparison Over Time','policy_trend':'Policy / Client Trend','relations':'Policy Relation Counts'}
+    topic_frame,_topic_label=_dashboard_month_filter(monthly_view,dashboard_period_view)
+    topic_totals={key:_sum_col(topic_frame,key) for key in ('Total Commission','Total Paid Commissions','Total Book Value','BrightRock Month Total')}
+    topic_top=[]
+    if not topic_frame.empty:
+        grouped=topic_frame.groupby('Franchise',as_index=False).agg({'Retail Premium':'sum','Claims':'sum','Risk Premium':'sum','Policy Qty':'sum'}).sort_values('Retail Premium',ascending=False).head(10)
+        topic_top=[{'label':row['Franchise'],'value':float(row['Retail Premium']),'claims':float(row['Claims']),'risk':float(row['Risk Premium']),'policies':float(row['Policy Qty'])} for _,row in grouped.iterrows()]
     if request.args.get('download') in {'xlsx','pdf'} and section in {'compare','top_franchise','claim_trend','policy_trend','relations'}:
         from report_files import table_workbook,workbook_pdf
         if section=='compare':
@@ -6201,11 +6207,14 @@ def dashboard(section='dashboard'):
             headers=['Relation','Description','Current Members'];values=[[row['code'],row['label'],row['count']] for row in executive_dashboard.get('relation_counts',{}).get('rows',[])]
         book=table_workbook(headers,values,home_titles[section]);kind=request.args['download']
         return send_file(workbook_pdf(book,home_titles[section]) if kind=='pdf' else book,as_attachment=True,download_name=section+'.'+kind,mimetype='application/pdf' if kind=='pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    return render_template('dashboard.html', workspace='home', home_section=section,home_title=home_titles.get(section,'Dashboard'), portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
+    return render_template('dashboard.html', workspace='home', home_section=section,home_title=home_titles.get(section,'Dashboard'),topic_monthly=topic_frame.to_dict('records'),topic_totals=topic_totals,topic_top=topic_top, portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
 
 @app.route('/overview/<section>',methods=['GET'])
 def overview_page(section):
-    if section not in {'compare','top_franchise','imports','reports','downloads','graphs','claim_trend','policy_trend','relations'}:
+    aliases={'compare':'risk','reports':'downloads','relations':'policies'}
+    if section in aliases and not request.args.get('download'):
+        return redirect(url_for('overview_page',section=aliases[section],**request.args.to_dict()))
+    if section not in {'risk','commissions','policies','claims','compare','top_franchise','imports','reports','downloads','graphs','claim_trend','policy_trend','relations'}:
         return redirect(url_for('dashboard'))
     return dashboard(section)
 

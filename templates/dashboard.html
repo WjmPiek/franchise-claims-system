@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" href="/static/brand/icon-192.png?v=20260918-brand" sizes="192x192">
 <link rel="apple-touch-icon" href="/static/brand/icon-180.png?v=20260918-brand" sizes="180x180">
 <link rel="stylesheet" href="/static/module-shell.css?v=20260919-mobile-scroll">
-{% if workspace == 'home' %}
+{% if True %}
       <style>
         :root {
           --md-ink: #18202a;
@@ -128,6 +128,7 @@
 
 
         html body .ms-sidebar .side-section-link{display:block!important;padding:12px 16px!important;color:#fff!important;text-decoration:none;border-radius:10px;margin:4px 0!important;background:rgba(255,255,255,.13)!important}html body .ms-sidebar .side-section-link:hover{background:rgba(255,255,255,.23)!important}html body .ms-sidebar .side-section-link strong{display:block!important;color:#fff!important;font:700 11.7px/1.2 Arial,sans-serif!important}html body .ms-sidebar .side-section-link small{display:block!important;font:400 9.1px/1.25 Arial,sans-serif!important;color:rgba(255,255,255,.75)!important;margin-top:3px!important}.status-mini[href]{display:block;text-decoration:none;color:inherit}.exec-card h2 a{color:inherit;text-decoration:none}.exec-card h2 a:hover{text-decoration:underline}
+        .topic-panel{padding:22px;border:1px solid #e1e6ee;border-radius:14px;background:#fff;margin:20px 0}.topic-panel h2{margin:0 0 10px;font-size:20px}.topic-panel>summary,.breakdown>summary{font-size:16px;font-weight:700;cursor:pointer;padding:12px 0}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:16px 0}.summary-link{display:block;text-decoration:none!important;color:#18202a!important;transition:box-shadow .15s}.summary-link:hover{box-shadow:0 8px 24px rgba(107,74,160,.13)}.summary-link .kpi-value{overflow-wrap:anywhere}.panel-heading{display:flex;justify-content:space-between;gap:18px;align-items:start;flex-wrap:wrap}.topic-actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.topic-button{display:inline-block;padding:11px 16px;border:1px solid #6950a1;border-radius:8px;background:#6950a1;color:white!important;text-decoration:none!important;font-weight:700;font-size:13px}.topic-button.secondary{background:white;color:#6950a1!important}.topic-filter{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:18px 0}.topic-filter label{display:flex;flex-direction:column;gap:6px;font-weight:700}.topic-filter select{padding:10px;min-width:180px;max-width:100%}.product-bar{display:grid;grid-template-columns:minmax(150px,1.3fr) minmax(70px,1fr) auto;gap:10px;align-items:center;font-size:12px}.product-bar span{overflow-wrap:anywhere}.section-title{font-size:20px;margin:24px 0 14px}.section-title small{font-size:13px;font-weight:400;color:#64707d}.side-section-link.active{outline:2px solid rgba(255,255,255,.65);outline-offset:-2px}.report-block{border:1px solid #e1e6ee;border-radius:12px;padding:18px;margin:12px 0;background:#fff}.report-block h3{margin:0 0 7px;font-size:17px}.report-block p{color:#64707d;margin:0 0 12px}.download-status{white-space:pre-line;padding:14px;background:#f1edf8;border-radius:8px}.download-status:empty{display:none}.report-download-actions{display:block!important;width:100%;flex-basis:100%!important}.report-download-group{width:100%;box-sizing:border-box;margin:12px 0}.report-download-group button{flex:0 1 auto!important}.reports-list{display:block!important}.prepared-catalog{margin-top:18px}@media(max-width:1100px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.summary-grid{grid-template-columns:1fr}.product-bar{grid-template-columns:1fr auto}.product-bar .bar-track{grid-column:1/-1;grid-row:2}.topic-panel{padding:16px}}
         .report-download-form { display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
         .report-download-form label { display:flex; flex-direction:column; gap:8px; flex:1 1 180px; min-width:0; }
         .report-download-form [hidden] { display:none !important; }
@@ -168,60 +169,15 @@
       </div>
     {% endif %}
 
+      <div class="claims-mobile-nav no-print"><strong>Claims</strong><button type="button" id="claims-menu" aria-controls="claims-sidebar" aria-expanded="false">Menu</button></div>
+<button type="button" class="claims-nav-backdrop no-print" aria-label="Close menu"></button>
+
     {% if workspace == 'home' %}
 
       {% set ed = executive_dashboard or {} %}
       {% set ek = ed.get('kpis', {}) %}
-      <div class="claims-mobile-nav no-print"><strong>Claims</strong><button type="button" id="claims-menu" aria-controls="claims-sidebar" aria-expanded="false">Menu</button></div>
-<button type="button" class="claims-nav-backdrop no-print" aria-label="Close menu"></button>
 <div class="executive-shell ms-shell">
-        <aside class="executive-sidebar no-print ms-sidebar" id="claims-sidebar">
-          <div class="executive-brand ms-brand">
-            <img class="martins-brand-logo" width="150" height="68" loading="eager" fetchpriority="high" src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
-            <div class="ms-brand-copy"><strong class="ms-brand-title">Martin's Funerals</strong><span class="ms-brand-module">Claims</span></div>
-          </div>
-          <div class="side-tabs">
-            <a class="side-section-link" href="{{ url_for('dashboard') }}"><strong>Executive Overview</strong><small>Dashboard</small></a>
-            <a class="side-section-link" href="{{ url_for('client_heatmap_page', franchise=selected) }}"><strong>Heat Map</strong><small>Client Heatmap</small></a>
-            <a class="side-section-link" href="{{ url_for('overview_page', section='top_franchise', franchise=selected) }}"><strong>Top Franchise</strong><small>Franchise rankings and detail</small></a>
-            <a class="side-section-link" href="{{ url_for('overview_page', section='compare', franchise=selected) }}"><strong>Compare</strong><small>Premium / Parlour Fee Analysis</small></a>
-            <a class="side-section-link" href="{{ url_for('overview_page', section='graphs', franchise=selected) }}"><strong>Graphs</strong><small>Monthly trends and details</small></a>
-            <a class="side-section-link" href="{{ url_for('overview_page', section='downloads', franchise=selected) }}"><strong>Downloads</strong><small>Prepared files and saved months</small></a>
-            <a class="side-section-link" href="{{ url_for('overview_page', section='reports', franchise=selected) }}"><strong>Reports</strong><small>View, Excel and PDF reports</small></a>
-            <details class="side-group">
-              <summary><span class="ms-nav-icon" aria-hidden="true">C</span><span><strong>Claims</strong><small>Claims workflow and reports</small></span></summary><div class="ms-nav-submenu">
-              <a href="{{ url_for('claims_workflow') }}">Claims Workflow</a>
-              <a href="{{ url_for('claims_workflow') }}">Claims Reports</a>
-              <a href="{{ url_for('workspace_page', workspace='claims_reconciliation') }}">Claims Reconciliation</a>
-              <a href="{{ url_for('workspace_page', workspace='claims_mapping') }}">Claims Mapping</a>
-            </div></details>
-            <details class="side-group">
-              <summary><span class="ms-nav-icon" aria-hidden="true">A</span><span><strong>Analysis</strong><small>Trends and comparisons</small></span></summary><div class="ms-nav-submenu">
-              <a href="{{ url_for('workspace_page', workspace='claim_ratio') }}">Claim Ratio Analysis</a>
-              <a href="{{ url_for('workspace_page', workspace='move_recommendations') }}">Move Recommendations</a>
-              <a href="{{ url_for('workspace_page', workspace='franchise_money') }}">Franchise Money</a>
-              <a href="{{ url_for('workspace_page', workspace='advanced_analytics') }}">Advanced Analytics</a>
-              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('dashboard') }}#directAnalytics">Direct Data Analytics</a>{% endif %}
-            </div></details>
-            <details class="side-group">
-              <summary><span class="ms-nav-icon" aria-hidden="true">F</span><span><strong>Finance</strong><small>Commission and allocations</small></span></summary><div class="ms-nav-submenu">
-              <a href="{{ url_for('workspace_page', workspace='commission_analysis') }}">Commission Analysis</a>
-              <a href="{{ url_for('workspace_page', workspace='commission_business') }}">Commission Comparison</a>
-              <a href="{{ url_for('workspace_page', workspace='underwriter_allocation') }}">Underwriter Allocation</a>
-              <a href="{{ url_for('workspace_page', workspace='book_value') }}">Book Value Analysis</a>
-              <a href="{{ url_for('workspace_page', workspace='scenario_comparison') }}">Scenario Comparison</a>
-              <a href="{{ url_for('overview_page', section='compare', franchise=selected) }}">Premium / Parlour Fee Analysis</a>
-            </div></details>
-            <details class="side-group">
-              <summary><span class="ms-nav-icon" aria-hidden="true">S</span><span><strong>Admin & Imports</strong><small>Settings and data imports</small></span></summary><div class="ms-nav-submenu">
-              <a href="{{ url_for('overview_page', section='imports') }}">Import Excel</a>
-              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('direct_data') }}">Direct Data Preparation</a>{% endif %}
-              <a href="{{ url_for('workspace_page', workspace='franchise_configuration') }}">Franchise Configuration</a>
-              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_parlour_fee_settings') }}">Parlour Fee Settings</a>{% endif %}
-              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_users') }}">Manage Users</a><a href="{{ url_for('admin_claims_rules') }}">Claims Rules</a><a href="{{ url_for('admin_map_cache_manager') }}">Map Cache Manager</a><a href="{{ url_for('admin_prepare_client_map_locations') }}">Prepare Client Map</a><a href="{{ url_for('database_health') }}">Database Health</a>{% endif %}
-            </div></details>
-          </div>
-        </aside>
+        {% include 'topic_sidebar.html' %}
         <main class="executive-main ms-main">
           <header class="martins-module-topbar no-print ms-topbar">
             <a class="martins-module-brand ms-topbar-brand" href="https://martinssystem.co.za/">
@@ -261,90 +217,15 @@
               <button type="submit">Apply</button>
             </form>
           </div>
-          {% if home_section in ['compare','top_franchise','claim_trend','policy_trend','relations'] %}{% include 'overview_report_links.html' %}{% endif %}
-          {% if home_section == 'dashboard' %}
-          {% if current_user and current_user.role == 'admin' %}{% include 'direct_dashboard.html' %}{% endif %}
-          <section class="exec-grid">
-            <div class="exec-card span-3 hero-card"><span class="kpi-title">Premium Amount</span><strong class="kpi-value">{{ ek.get('premium_amount',0)|money }}</strong><div class="kpi-sub">Imported retail premium</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Claim Amount</span><strong class="kpi-value">{{ ek.get('claim_amount',0)|money }}</strong><div class="kpi-sub">Paid/imported claims</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">No. of Claims</span><strong class="kpi-value">{{ ek.get('claim_count',0)|int }}</strong><div class="kpi-sub">From claims workbook/workflow</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Average Claim Value</span><strong class="kpi-value">{{ ek.get('average_claim_value',0)|money }}</strong><div class="kpi-sub">Claim amount ÷ claim count</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Loss Ratio</span><strong class="kpi-value">{{ ek.get('loss_ratio',0)|pct }}</strong><div class="kpi-sub">Claims ÷ risk premium</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Policies / Clients</span><strong class="kpi-value">{{ ek.get('policy_count',0)|int }}</strong><div class="kpi-sub">Policy quantity imported</div><p style="margin:6px 0 0"><a class="btn" href="{{ url_for('client_heatmap_page', franchise=selected) }}">Open client heatmap</a></p></div>
-            <div class="exec-card span-3"><span class="kpi-title">Franchise Admin Fee</span><strong class="kpi-value">{{ ek.get('franchise_admin_fee',0)|money }}</strong><div class="kpi-sub">Retail premiums - risk premiums</div></div>
-            <div class="exec-card span-3"><span class="kpi-title">Franchise Money</span><strong class="kpi-value">{{ ek.get('franchise_money',0)|money }}</strong><div class="kpi-sub">Retail - claims - paid commissions</div></div>
-            <div class="exec-card span-6"><h2><a href="{{ url_for('overview_page',section='claim_trend',franchise=selected,dashboard_period_view=dashboard_period_view) }}">Claim Amount Comparison Over Time</a></h2><svg class="line-chart" id="claimTrendChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg></div>
-            <div class="exec-card span-6"><h2><a href="{{ url_for('overview_page',section='policy_trend',franchise=selected,dashboard_period_view=dashboard_period_view) }}">New Policy / Client Trend</a></h2><svg class="line-chart" id="policyTrendChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg></div>
-            <div class="exec-card span-12"><h2><a href="{{ url_for('overview_page',section='relations',franchise=selected) }}">Policy Relation Counts</a></h2>
-              {% set rc = ed.get('relation_counts', {}) %}
-              <div class="status-mini-grid">
-                {% for r in rc.get('rows', []) %}
-                  <a class="status-mini" href="{{ url_for('current_relation_members',franchise=selected,relation=r.code) }}"><small>{{ r.code }} - {{ r.label }}</small><strong>{{ r.count|int }}</strong></a>
-                {% else %}
-                  <div class="status-mini"><small>No PolicyData relation counts yet</small><strong>0</strong></div>
-                {% endfor %}
-              </div>
-            </div>
-            <div class="exec-card span-12"><h2><a href="{{ url_for('admin_age_notifications_franchise',franchise_name=selected) }}">Age Limit Notifications</a></h2>
-              <p class="kpi-sub">Daily check from PolicyData Column I relation and Column F ID number. Click a franchise to list all affected members.</p>
-              {% set ant = ed.get('age_notification_totals', {}) %}
-              <div class="status-mini-grid" style="margin-bottom:10px">
-                <a class="status-mini" href="{{ url_for('admin_age_notifications_franchise',franchise_name=selected) }}"><small>Total to Fix</small><strong>{{ ant.get('total',0)|int }}</strong></a>
-                <div class="status-mini"><small>Franchises</small><strong>{{ ant.get('franchises',0)|int }}</strong></div>
-              </div>
-              <div class="status-mini-grid" style="margin-bottom:10px">
-                {% for b in ed.get('age_notification_age_bands', []) %}
-                  <a class="status-mini" href="{{ url_for('admin_age_notifications_franchise_band',franchise_name=selected,age_band=b.age_band) }}"><small>{{ b.age_band }}</small><strong>{{ b.count|int }}</strong></a>
-                {% endfor %}
-              </div>
-              <form method="post" action="{{ url_for('admin_refresh_policy_age_notifications') }}" class="no-print" style="margin-bottom:10px">
-                <input type="hidden" name="franchise" value="{{ selected }}">
-                <input type="hidden" name="limit" value="600000">
-                <button class="btn" type="submit">Refresh Notifications</button>
-              </form>
-              <table class="exec-table"><thead><tr><th>Franchise</th><th>Total to Fix</th><th>Next Due</th></tr></thead><tbody>
-                {% for n in ed.get('age_notification_summary', []) %}
-                <tr>
-                  <td><a class="link" href="{{ url_for('admin_age_notifications_franchise', franchise_name=n.franchise_name) }}">{{ n.franchise_name }}</a></td>
-                  <td>{{ n.notification_count|int }}</td>
-                  <td>{{ n.next_due_date or '-' }}</td>
-                </tr>
-                {% else %}<tr><td colspan="3">No active age notifications. Click Refresh Notifications to scan PolicyData.</td></tr>{% endfor %}
-              </tbody></table>
-            </div>
-            <div class="exec-card span-12"><h2>Claims by Status</h2><div class="status-mini-grid">{% for s in ed.get('status_cards', []) %}<div class="status-mini"><small>{{ s.label }}</small><strong>{{ s.value }}</strong></div>{% endfor %}</div></div>
-            <div class="exec-card span-12"><h2>Claims by Franchise</h2><div class="chart-bars" data-bars="claims_by_franchise"></div></div>
-            <div class="exec-card span-6"><h2>Status Distribution</h2><div class="donut-wrap"><div class="donut" id="statusDonut"></div><div class="legend" id="statusLegend"></div></div></div>
-            <div class="exec-card span-6"><h2>Loss Ratio by Franchise</h2><div class="chart-bars" data-bars="loss_ratio_by_franchise"></div></div>
-            {% set fd = ed.get('franchise_detail') %}
-            {% if fd %}
-            <div class="exec-card span-12" id="franchiseDetail"><h2>{{ fd.name }} - Full Franchise Detail</h2>
-              <div class="status-mini-grid">
-                <div class="status-mini"><small>Retail Premium</small><strong>{{ fd.totals.get('Retail Premium',0)|money }}</strong></div>
-                <div class="status-mini"><small>Risk Premium</small><strong>{{ fd.totals.get('Risk Premium',0)|money }}</strong></div>
-                <div class="status-mini"><small>Claims</small><strong>{{ fd.totals.get('Claims',0)|money }}</strong></div>
-                <div class="status-mini"><small>Claim Ratio</small><strong>{{ fd.totals.get('Claim Ratio',0)|pct }}</strong></div>
-                <div class="status-mini"><small>Total Commission</small><strong>{{ fd.totals.get('Total Commission',0)|money }}</strong></div>
-                <div class="status-mini"><small>Paid Commissions</small><strong>{{ fd.totals.get('Total Paid Commissions',0)|money }}</strong></div>
-                <div class="status-mini"><small>Franchise Money</small><strong>{{ fd.totals.get('BrightRock Month Total',0)|money }}</strong></div>
-                <div class="status-mini"><small>Book Value</small><strong>{{ fd.totals.get('Total Book Value',0)|money }}</strong></div>
-                <div class="status-mini"><small>Policies / Clients</small><strong>{{ fd.totals.get('Policy Qty',0)|int }}</strong></div>
-                <div class="status-mini"><small>Mapped Addresses</small><strong>{{ fd.address_count }}</strong></div>
-              </div>
-              <h2 style="margin-top:14px">Portfolio Comparison</h2>
-              <div class="chart-bars">{% for c in fd.comparisons %}<div class="bar-row"><span>{{ c.label }}</span><div class="bar-track"><div class="bar-fill" style="width:{{ [c.value,100]|min }}%"></div></div><strong>{{ c.value|pct }}</strong></div>{% endfor %}</div>
-              <h2 style="margin-top:14px">Monthly Franchise Detail</h2>
-              <div class="table-wrap"><table class="exec-table"><thead><tr><th>Month</th><th>Retail</th><th>Risk</th><th>Claims</th><th>No. Claims</th><th>Claim Ratio</th><th>Commission</th><th>Paid Comm.</th><th>Franchise Money</th><th>Book Value</th></tr></thead><tbody>{% for m in fd.monthly_rows %}<tr><td>{{ m.month }}</td><td>{{ m.retail|money }}</td><td>{{ m.risk|money }}</td><td>{{ m.claims|money }}</td><td>{{ m.claim_count|int }}</td><td>{{ m.ratio|pct }}</td><td>{{ m.commission|money }}</td><td>{{ m.paid_commission|money }}</td><td>{{ m.franchise_money|money }}</td><td>{{ m.book_value|money }}</td></tr>{% else %}<tr><td colspan="10">No monthly detail available.</td></tr>{% endfor %}</tbody></table></div>
-            </div>
-            {% endif %}
-          </section>
-          {% elif home_section == 'compare' %}{% include 'compare_section.html' %}
+          {% if home_section == 'dashboard' %}{% include 'overview_summary.html' %}
+          {% elif home_section == 'risk' %}{% include 'risk_retail_section.html' %}
+          {% elif home_section == 'commissions' %}{% include 'commissions_section.html' %}
+          {% elif home_section == 'policies' %}{% include 'policies_products_section.html' %}
           {% elif home_section == 'top_franchise' %}{% include 'top_franchise_section.html' %}
-          {% elif home_section == 'imports' %}{% include 'imports_section.html' %}
-          {% elif home_section == 'reports' %}{% include 'reports_section.html' %}
-          {% elif home_section == 'downloads' %}{% include 'downloads_section.html' %}
+          {% elif home_section == 'claims' %}{% include 'claims_section.html' %}
+          {% elif home_section == 'imports' %}{% include 'imports_section.html' %}{% include 'admin_tools_section.html' %}
+          {% elif home_section == 'downloads' %}{% include 'reports_section.html' %}{% include 'prepared_downloads_section.html' %}
           {% elif home_section in ['graphs','claim_trend','policy_trend'] %}{% include 'graphs_section.html' %}
-          {% elif home_section == 'relations' %}{% include 'relations_section.html' %}
           {% endif %}
       <script id="execDashboardData" type="application/json">{{ executive_dashboard|tojson }}</script>
       <script>
@@ -388,6 +269,7 @@
         </main>
       </div>
     {% else %}
+      <div class="executive-shell ms-shell">{% include 'topic_sidebar.html' %}<main class="executive-main ms-main">
       <div class="top-toolbar no-print">
         <a class="back-btn" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
         <button onclick="window.print()">Print</button>
@@ -965,6 +847,7 @@
         <section class="card ai-panel"><h2>Ask AI Data Assistant</h2><p class="muted">This offline test build includes a rule-based assistant. In production this can connect to the OpenAI API and use the same backend calculation functions.</p><form method="get" class="ai-form"><label>Your question<input type="text" name="ask" value="{{ ai_question }}" placeholder="Example: Which franchises should move to BrightRock?"></label><button type="submit">Ask</button></form></section>
         {% if ai_answer %}<section class="card"><h2>Answer</h2><p>{{ ai_answer.summary }}</p>{% if ai_answer.rows %}<div class="table-wrap draggable-table"><table class="compact-table"><thead><tr>{% for c in ai_answer.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>{% for row in ai_answer.rows %}<tr>{% for c in ai_answer.columns %}<td>{{ row[c] }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% endif %}</section>{% endif %}
       {% endif %}
+      </main></div>
     {% endif %}
   </div>
 <script>

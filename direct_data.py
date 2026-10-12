@@ -13,7 +13,7 @@ from contextlib import closing
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
-from flask import g, request, render_template, send_file, jsonify, session, url_for
+from flask import redirect, g, request, render_template, send_file, jsonify, session, url_for
 from openpyxl import load_workbook
 import xlsxwriter
 from import_progress import report, active, stream_import
@@ -451,7 +451,7 @@ def register_direct_data(app, export_dir, get_engine=None):
     def direct_reports():
         user=getattr(g,'user',None) or {}
         if user.get('role')!='admin':return 'Admin access required.',403
-        return render_template('direct_reports.html',batches=store.batches(user['id']))
+        return redirect(url_for('overview_page',section='downloads')+'#preparedDownloads')
 
     @app.post('/direct-data/reports/<batch_id>')
     def direct_recreate(batch_id):
@@ -463,6 +463,18 @@ def register_direct_data(app, export_dir, get_engine=None):
                 g.user=authenticated_user
                 return direct_recreate(batch_id)
             return stream_import(run)
+        batch=next((b for b in store.batches(user['id']) if b['id']==batch_id),None)
+        if batch is None:return jsonify(ok=False,error='Saved month not found.'),400
+        for candidate in root.iterdir():
+            if not candidate.is_dir() or candidate.is_symlink() or not re.fullmatch(r'[a-f0-9]{32}',candidate.name):continue
+            try:
+                metadata=json.loads((candidate/'owner.json').read_text())
+                if metadata.get('owner')!=user['id'] or metadata.get('batch',candidate.name)!=batch_id:continue
+                if datetime.now()-datetime.fromisoformat(metadata['created'])>timedelta(hours=12):continue
+                files=json.loads((candidate/'files.json').read_text())
+                if files and all(Path(name).name==name and (candidate/name).is_file() for name in files):
+                    return jsonify(ok=True,job=candidate.name,month=batch['month'],files=files)
+            except (OSError,ValueError,KeyError):continue
         if not LOCK.acquire(blocking=False):return jsonify(ok=False,error='Another Direct preparation is running. Wait for it to finish.'),409
         folder=root/uuid.uuid4().hex
         folder.mkdir()
@@ -473,7 +485,7 @@ def register_direct_data(app, export_dir, get_engine=None):
                 paths,archive,totals,issues=prepare_outputs(conn,folder,batch['source_file'],saved=True)
             (folder/'rows.db').unlink()
             files=[p.name for p in paths.values()]+[archive.name]
-            (folder/'owner.json').write_text(json.dumps({'owner':user['id'],'created':datetime.now().isoformat()}))
+            (folder/'owner.json').write_text(json.dumps({'owner':user['id'],'batch':batch_id,'created':datetime.now().isoformat()}))
             (folder/'files.json').write_text(json.dumps(files))
             return jsonify(ok=True,job=folder.name,month=batch['month'],files=files)
         except ValueError as exc:return jsonify(ok=False,error=str(exc)),400
@@ -519,7 +531,7 @@ def register_direct_data(app, export_dir, get_engine=None):
             path.unlink()
             (folder / 'rows.db').unlink()
             # Keep no identifiers in cookies. Downloads require this admin's session and opaque job ID.
-            (folder / 'owner.json').write_text(json.dumps({'owner': user.get('id'), 'created': datetime.now().isoformat()}))
+            (folder / 'owner.json').write_text(json.dumps({'owner': user.get('id'), 'batch': folder.name, 'created': datetime.now().isoformat()}))
             (folder / 'files.json').write_text(json.dumps([p.name for p in paths.values()] + [archive.name]))
             source_json = {k: str(v) if isinstance(v, Decimal) else v for k, v in source.items()}
             return jsonify(ok=True, source=source_json, issues=len(issues), job=folder.name, month=month,

@@ -217,6 +217,23 @@ class DirectStore:
         row=rows[0];row['data']=json.loads(row['data']);row['issues']=json.loads(row['issues'])
         return row
 
+    def product_insights(self,owner,month=None,product=''):
+        from product_insights import product_summary,insights
+        batches=self.batches(owner)
+        batch=next((b for b in batches if b['month']==month),None) if month else (batches[0] if batches else None)
+        if not batch:return insights([],month or '',product)
+        summary=batch['summary']
+        if 'member_products' not in summary:
+            with self.connection() as conn:
+                sql="SELECT franchise,policy,data,original_risk,retail,payover FROM direct_data_rows WHERE batch_id=:id AND relation='MEM' AND destination<>'Vouchers' ORDER BY n"
+                result=conn.execution_options(stream_results=True).execute(text(sql),{'id':batch['id']}) if self.get_engine else conn.execute(sql,{'id':batch['id']})
+                result=result.mappings() if self.get_engine else result
+                summary['member_products']=product_summary(dict(row) for row in result)
+                result.close() if hasattr(result,'close') else None
+            with self.connection() as conn:
+                self.execute(conn,'UPDATE direct_data_batches SET summary=:summary WHERE id=:id AND owner_id=:owner',{'summary':encode(summary),'id':batch['id'],'owner':owner})
+        return insights(summary['member_products'],batch['month'],product)
+
     def restore_stage(self, owner, batch_id, stage):
         """Restore an owned snapshot for downloads without recalculating its amounts."""
         self.ensure()
@@ -260,13 +277,18 @@ def register_direct_analytics(app, store):
         if not owner() or request.endpoint not in ('dashboard','overview_page','workspace_page','direct_data'):
             return {}
         try:
-            overview=store.overview(owner(),request.args.get('direct_month'))
+            overview=store.overview(owner(),request.args.get('direct_month') or request.args.get('product_month'))
             graphs=[]
             all_batches=store.batches(owner())
             for key,label,category,field,unit in GRAPHS:
                 points=[{'label':batch['month'],'value':str(batch['summary']['categories'][category][field]),'url':url_for('direct_analytics',month=batch['month'],category=category if category not in ('fees','vouchers') else key)} for batch in reversed(all_batches)]
                 graphs.append({'key':key,'label':label,'unit':unit,'points':points,'category':category if category not in ('fees','vouchers') else key})
-            return {'direct_analytics_data':overview,'direct_graphs':graphs}
+            extra={}
+            if request.endpoint=='overview_page' and request.view_args.get('section') in ('top_franchise','policies'):
+                selected_product_month=request.args.get('product_month') or request.args.get('direct_month')
+                if selected_product_month=='all':selected_product_month=None
+                extra['product_insights']=store.product_insights(owner(),selected_product_month,request.args.get('product',''))
+            return {'direct_analytics_data':overview,'direct_graphs':graphs,'direct_batches':all_batches,**extra}
         except Exception as exc:
             app.logger.warning('Direct analytics unavailable (%s)',type(exc).__name__)
             return {'direct_analytics_data':{'available':False,'error':'Direct analytics could not be loaded. Please retry.'}}
