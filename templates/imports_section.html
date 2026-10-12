@@ -1,6 +1,6 @@
       <section class="card import-card bottom-import" id="importPanel">
-        <h2>Import Excel</h2>
-        <form method="post" action="{{ url_for('dashboard') }}" enctype="multipart/form-data" class="grid-form" id="importForm">
+        <h2>Import files</h2>{% include 'import_guidance.html' %}{% if current_user.role=='admin' %}{% include 'direct_queue.html' %}<p><a class="topic-button" href="{{ url_for('import_log') }}">View import log</a> <a class="topic-button secondary" href="{{ url_for('import_log',format='csv') }}">Download log CSV</a></p>{% endif %}<h3>Policy / premium and claims Excel</h3>
+        <p class="small-note">Claims are allocated by Participating Group and Date Of Claim Paid, then matched to the imported franchise/month. Select files below, then start the import.</p><form method="post" action="{{ url_for('dashboard') }}" enctype="multipart/form-data" class="grid-form" id="importForm">
           <input type="hidden" name="action" value="import">
           <label>Policy / premium Excel files<input type="file" name="excel_file" accept=".xlsx,.xls" multiple></label>
           <label>Claims paid Excel files<input type="file" name="claims_file" accept=".xlsx,.xls" multiple></label>
@@ -27,7 +27,7 @@
           </div>
         </div>
 
-        <p class="small-note">Claims are allocated by Participating Group and Date Of Claim Paid, then matched to the imported franchise/month.</p>
+        
 
         {% if policy_import_summary %}
           <div class="claims-summary policy-summary">
@@ -76,6 +76,6 @@
 
         <div class="actions compact-actions">
           <a href="{{ url_for('sample') }}">Download sample Excel</a>
-          <a href="{{ url_for('overview_page',section='reports',franchise=selected) }}">Choose report months</a>
+          <a href="{{ url_for('overview_page',section='reports',franchise=selected) }}">Reports & Downloads</a>
         </div>
       </section>

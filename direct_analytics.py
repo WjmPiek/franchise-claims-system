@@ -290,12 +290,10 @@ def register_direct_analytics(app, store):
         if not owner() or request.endpoint not in ('dashboard','overview_page','workspace_page','direct_data'):
             return {}
         try:
-            from period_selection import month_bounds
-            start,end=month_bounds(request.args)
+            from period_selection import month_bounds,selected_dates
             batches_for_period=store.batches(owner())
-            if not start and not (request.args.get('direct_month') or request.args.get('product_month')) and request.args.get('dashboard_period_view') in ('six_months','year') and batches_for_period:
-                width=12 if request.args.get('dashboard_period_view')=='year' else 6
-                chosen=batches_for_period[:width];start=chosen[-1]['month'];end=chosen[0]['month']
+            fallback={'date_from':batches_for_period[-1]['month']+'-01','date_to':batches_for_period[0]['month']+'-'+str(calendar.monthrange(int(batches_for_period[0]['month'][:4]),int(batches_for_period[0]['month'][5:]))[1])} if batches_for_period else None
+            start,end=month_bounds(selected_dates(request.args,fallback))
             overview=store.overview(owner(),request.args.get('direct_month') or request.args.get('product_month'),start,end)
             graphs=[]
             all_batches=store.batches(owner())
@@ -307,7 +305,7 @@ def register_direct_analytics(app, store):
                 selected_product_month=request.args.get('product_month') or request.args.get('direct_month')
                 if selected_product_month=='all':selected_product_month=None
                 extra['product_insights']=store.product_insights(owner(),selected_product_month,request.args.get('product',''),start,end)
-            return {'direct_range_args':{'date_from':start+'-01','date_to':end+'-'+str(calendar.monthrange(int(end[:4]),int(end[5:]))[1])} if start else {},'direct_analytics_data':overview,'direct_graphs':graphs,'direct_batches':[b for b in all_batches if not start or start<=b['month']<=end],**extra}
+            return {'direct_range_args':dict(g.period_dates),'direct_analytics_data':overview,'direct_graphs':graphs,'direct_batches':[b for b in all_batches if not start or start<=b['month']<=end],**extra}
         except Exception as exc:
             app.logger.warning('Direct analytics unavailable (%s)',type(exc).__name__)
             return {'direct_analytics_data':{'available':False,'error':'Direct analytics could not be loaded. Please retry.'}}
@@ -316,8 +314,8 @@ def register_direct_analytics(app, store):
     def direct_analytics():
         if not owner():return 'Admin access required.',403
         try:
-            from period_selection import month_bounds
-            start,end=month_bounds(request.args)
+            from period_selection import month_bounds,selected_dates
+            start,end=month_bounds(selected_dates(request.args))
             category=request.args.get('category','source')
             overview,rows,count,page=store.detail(owner(),request.args.get('month'),category,
                 request.args.get('destination',''),request.args.get('franchise',''),request.args.get('q',''),request.args.get('page',1,type=int),start,end)
@@ -332,9 +330,9 @@ def register_direct_analytics(app, store):
     @app.get('/direct-data/franchise')
     def direct_franchise():
         if not owner():return 'Admin access required.',403
-        from period_selection import month_bounds
+        from period_selection import month_bounds,selected_dates
         try:
-            start,end=month_bounds(request.args)
+            start,end=month_bounds(selected_dates(request.args))
             franchise=request.args.get('franchise','')
             if not franchise:return 'Choose a franchise.',400
             month=request.args.get('month')

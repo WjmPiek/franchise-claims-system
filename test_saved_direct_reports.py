@@ -76,7 +76,7 @@ class SavedDirectReportsTest(unittest.TestCase):
         report='/direct-data/report/'+result.json['job']+'/'+excel
         self.assertEqual(client.get(report).status_code,200)
         pdf=client.get(report+'?format=pdf');self.assertEqual(pdf.status_code,200);self.assertTrue(pdf.data.startswith(b'%PDF'));pdf.close()
-        self.assertIn(b'category=r1',client.get('/direct-data/analytics?category=r1').data)
+        self.assertIn(b'<option value="r1" selected>',client.get('/direct-data/analytics?category=r1').data)
         who['id']=2;self.assertNotIn(b'October.csv',client.get('/direct-data/reports').data)
         self.assertEqual(client.post('/direct-data/reports/'+batch).status_code,400)
         self.assertEqual(client.get(report).status_code,404)

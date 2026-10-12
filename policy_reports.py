@@ -33,8 +33,8 @@ def register_policy_reports(app, get_engine, sql_text, get_memory, scope_fn=None
             return 'Choose an available imported month.', 400
         if franchise != 'All' and franchise not in franchises:
             return 'Choose an available franchise.', 400
-        from period_selection import month_bounds
-        try:start,end=month_bounds(request.args)
+        from period_selection import month_bounds,selected_dates
+        try:start,end=month_bounds(selected_dates(request.args))
         except ValueError as exc:return str(exc),400
         params = {'month': month + '-01'}
         where = ['import_month = :month']

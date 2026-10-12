@@ -23,7 +23,7 @@
 <link rel="icon" type="image/png" href="/static/brand/icon-192.png?v=20260918-brand" sizes="192x192">
 <link rel="apple-touch-icon" href="/static/brand/icon-180.png?v=20260918-brand" sizes="180x180">
 <link rel="stylesheet" href="/static/module-shell.css?v=20260919-mobile-scroll">
-{% set range_args={'date_from':request.args.get('date_from'),'date_to':request.args.get('date_to')} if request.args.get('date_from') else {} %}
+{% set range_args=period_dates %}
 {% if True %}
       <style>
         :root {
@@ -141,6 +141,7 @@
         .executive-main .grid-form label, .executive-main .grid-form input { min-width:0; max-width:100%; }
         @media(max-width:1100px){ .executive-main .grid-form { grid-template-columns:1fr; } }
 .product-ranking-grid{align-items:stretch}.product-ranking-grid .exec-card{height:100%;box-sizing:border-box}.product-ranking-grid .chart-bars{display:grid;grid-auto-rows:minmax(68px,auto)}
+.import-card .grid-form{display:flex!important;flex-direction:column!important;align-items:stretch}.import-card .grid-form label{width:100%;display:flex;flex-direction:column;gap:10px}.import-card .grid-form button{align-self:flex-start}.import-outcome{white-space:pre-wrap;margin:16px 0;padding:16px;background:#f4effa;border-radius:10px}
 </style>
 {% endif %}
 </head>
@@ -208,26 +209,20 @@
                   {% for f in franchises %}<option value="{{ f }}" {% if selected == f %}selected{% endif %}>{{ f }}</option>{% endfor %}
                 </select>
               </label>
-              <label>Dashboard period<br>
-                <select name="dashboard_period_view">
-                  <option value="month" {% if dashboard_period_view == 'month' %}selected{% endif %}>Latest month</option>
-                  <option value="six_months" {% if dashboard_period_view == 'six_months' %}selected{% endif %}>Latest 6 months</option>
-                  <option value="custom" {% if dashboard_period_view=='custom' %}selected{% endif %}>Custom dates</option><option value="year" {% if dashboard_period_view == 'year' %}selected{% endif %}>Latest 12 months</option>
-                </select>
-              </label>
-              <label class="custom-period">From date<input type="date" name="date_from" value="{{ request.args.get('date_from','') }}"></label><label class="custom-period">To date<input type="date" name="date_to" value="{{ request.args.get('date_to','') }}"></label>
+<input type="hidden" name="dashboard_period_view" value="custom">
+              <label class="custom-period">From date<input type="date" name="date_from" value="{{ period_dates.date_from }}"></label><label class="custom-period">To date<input type="date" name="date_to" value="{{ period_dates.date_to }}"></label>
               <input name="q" value="{{ search_text }}" placeholder="Search franchise">
               <button type="submit">Apply</button>
             </form>
           </div>
-          <p class="muted">Monthly figures use receipt months. Custom dates include every imported month between the selected dates.</p><script>(()=>{const form=document.querySelector('.dashboard-period-form.executive-filter');if(!form)return;const mode=form.elements.dashboard_period_view;function update(){form.querySelectorAll('.custom-period').forEach(label=>{label.hidden=mode.value!=='custom';label.querySelector('input').disabled=mode.value!=='custom';label.querySelector('input').required=mode.value==='custom';});}mode.addEventListener('change',update);update();})();</script>
+          <p class="muted">Monthly figures use receipt months. Custom dates include every imported month between the selected dates.</p>
           {% if home_section == 'dashboard' %}{% include 'overview_summary.html' %}
           {% elif home_section == 'risk' %}{% include 'risk_retail_section.html' %}
           {% elif home_section == 'commissions' %}{% include 'commissions_section.html' %}
           {% elif home_section == 'policies' %}{% include 'policies_products_section.html' %}
           {% elif home_section == 'top_franchise' %}{% include 'top_franchise_section.html' %}
           {% elif home_section == 'claims' %}{% include 'claims_section.html' %}
-          {% elif home_section == 'imports' %}{% include 'import_guidance.html' %}{% include 'imports_section.html' %}
+          {% elif home_section == 'imports' %}{% include 'imports_section.html' %}
 {% elif home_section == 'admin' %}{% include 'admin_tools_section.html' %}
 {% elif home_section == 'commission_detail' %}{% include 'commission_detail.html' %}
           {% elif home_section == 'downloads' %}{% include 'reports_section.html' %}{% include 'prepared_downloads_section.html' %}
@@ -309,14 +304,7 @@
               {% for f in franchises %}<option value="{{ f }}" {% if selected == f %}selected{% endif %}>{{ f }}</option>{% endfor %}
             </select>
           </label>
-          <label>Period
-            <select name="period_view">
-              <option value="month" {% if period_view == 'month' %}selected{% endif %}>Monthly</option>
-              <option value="six_months" {% if period_view == 'six_months' %}selected{% endif %}>Every 6 Months</option>
-              <option value="year" {% if period_view == 'year' %}selected{% endif %}>Yearly</option>
-            </select>
-          </label>
-          <label>Traffic Light
+<input type="hidden" name="period_view" value="custom"><label>From date<input type="date" name="date_from" value="{{ period_dates.date_from }}" required></label><label>To date<input type="date" name="date_to" value="{{ period_dates.date_to }}" required></label>          <label>Traffic Light
             <select name="traffic_filter">
               <option value="All" {% if traffic_filter == 'All' %}selected{% endif %}>All</option>
               <option value="Blue" {% if traffic_filter == 'Blue' %}selected{% endif %}>Blue - Move (<50%)</option>
@@ -709,9 +697,9 @@
             <div class="scenario-control-card">
               <label>Period</label>
               <div class="period-buttons">
-                <label><input type="radio" name="compare_period_view" value="month" {% if compare_args.compare_period_view == 'month' %}checked{% endif %}> <span>Monthly</span></label>
-                <label><input type="radio" name="compare_period_view" value="six_months" {% if compare_args.compare_period_view == 'six_months' %}checked{% endif %}> <span>6 Months</span></label>
-                <label><input type="radio" name="compare_period_view" value="year" {% if compare_args.compare_period_view == 'year' %}checked{% endif %}> <span>Yearly</span></label>
+                
+                
+                
               </div>
             </div>
             <div class="scenario-control-card highlight-blue"><span>Retail Premium</span><strong>{{ compare_summary.get('retail_total', 0)|money }}</strong></div>
@@ -993,6 +981,7 @@
       const importUrl = form.getAttribute('action') || window.location.href;
       const queue = Array.from(policyFiles).map(file => [{field: 'excel_file', file}]);
       if(claimsFiles.length) queue.push(Array.from(claimsFiles).map(file => ({field: 'claims_file', file})));
+      const failedFiles = [];
       let completedFiles = 0;
       let completedBytes = 0;
       const totalBytes = Array.from(policyFiles).concat(Array.from(claimsFiles)).reduce((sum, file) => sum + (file.size || 0), 0);
@@ -1027,7 +1016,14 @@
       async function nextFile(){
         if(index >= queue.length){
           clearInterval(sessionTimer);
-          showProgress(100, 'All files imported. Reloading dashboard...');
+          if(failedFiles.length){
+            restoreButton();showProgress(100,'Import queue finished. '+completedFiles+' files saved; '+failedFiles.length+' files need correction.');
+            if(stepRows)stepRows.textContent=failedFiles.map(item=>item.name+': '+item.error).join('\n');
+            if(stepStatus)stepStatus.textContent='Completed months remain saved. Fix the listed files and import only those files again.';
+            const notice=document.createElement('div');notice.className='import-outcome';notice.setAttribute('role','alert');notice.textContent='Import finished. Saved: '+completedFiles+'. Fix and re-import:\n'+failedFiles.map(item=>item.name+': '+item.error).join('\n');form.after(notice);
+            const close=document.createElement('button');close.type='button';close.textContent='Close summary and retry files';close.onclick=()=>{if(modal)modal.style.display='none';};if(modal)modal.querySelector('.import-modal-card').append(close);return;
+          }
+          showProgress(100, 'All files imported. Reloading Risk & Retail...');
           window.location.href = '{{ url_for("dashboard") }}';
           return;
         }
@@ -1107,7 +1103,9 @@
             index += 1;
             nextFile();
           } else {
-            fail('Stopped at ' + label + '. ' + (serverResult?.error || 'The server did not confirm a successful import.'));
+            const knownFailure=serverResult?.ok===false && ![401,403,409].includes(serverResult?.status||xhr.status) && !sessionError && !(xhr.responseURL && new URL(xhr.responseURL,window.location.href).pathname==='/login');
+            if(knownFailure){selected.forEach(item=>failedFiles.push({name:item.file.name,error:serverResult.error||'Import failed.'}));index+=1;nextFile();}
+            else fail('Unconfirmed at ' + label + '. ' + (serverResult?.error || 'The server did not confirm a successful import.'));
           }
         };
         xhr.onerror = function(){ fail('Connection lost while importing ' + label + '. Check this month before retrying.'); };

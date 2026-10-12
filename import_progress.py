@@ -30,13 +30,13 @@ def stream_import(view):
     @copy_current_request_context
     def run():
         if not _import_lock.acquire(blocking=False):
-            updates.put({'type': 'done', 'ok': False, 'error': 'An import is already running. Wait for it to finish before retrying.'})
+            updates.put({'type': 'done', 'ok': False, 'status':409, 'error': 'An import is already running. Wait for it to finish before retrying.'})
             return
         _state.emit = updates.put
         try:
             response = app.make_response(view())
             result = response.get_json(silent=True) or {}
-            updates.put({**result, 'type': 'done', 'ok': response.status_code < 300 and result.get('ok') is True,
+            updates.put({**result, 'type': 'done', 'status':response.status_code, 'ok': response.status_code < 300 and result.get('ok') is True,
                          'error': result.get('error', 'The server did not confirm a successful import.')})
         except Exception as exc:
             app.logger.error('Streamed Excel import failed (%s)', type(exc).__name__)

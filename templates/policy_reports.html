@@ -3,8 +3,8 @@
 <a href="{{ url_for('dashboard') }}">Back to dashboard</a><h1>Policy relation reports and reconciliation</h1>
 <p>All relation types contribute to premiums. R1 and ADV fees apply to MEM only. Fees are rounded to cents per row. Re-import historical months to include previously excluded rows.</p>
 <form method="get">
-<label>Month <select name="month">{% for m in months %}<option {% if m==month %}selected{% endif %}>{{ m }}</option>{% endfor %}</select></label>
-<label>From date <input name="date_from" type="date" value="{{ args.get('date_from','') }}"></label><label>To date <input name="date_to" type="date" value="{{ args.get('date_to','') }}"></label><p>Optional custom dates include receipt months between both dates. Clear both dates to use one month.</p><label>Franchise <select name="franchise"><option>All</option>{% for f in franchises %}<option {% if f==franchise %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></label>
+
+<label>From date <input name="date_from" type="date" value="{{ g.period_dates.date_from }}"></label><label>To date <input name="date_to" type="date" value="{{ g.period_dates.date_to }}"></label><p>Dates include the receipt months between both dates.</p><label>Franchise <select name="franchise"><option>All</option>{% for f in franchises %}<option {% if f==franchise %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></label>
 <label>Relation <select name="relation"><option>All</option>{% for r in relations %}<option {% if r==relation %}selected{% endif %}>{{ r }}</option>{% endfor %}{% for g in groups %}{% if g.relation not in relations %}<option {% if g.relation==relation %}selected{% endif %}>{{ g.relation }}</option>{% endif %}{% endfor %}</select></label>
 <p>Enter the other system's raw premium totals for the same month, franchise and relation selection. Controls are used for this report only.</p>
 <label>Other system risk before fees <input name="external_risk" inputmode="decimal" value="{{ args.get('external_risk','') }}"></label>

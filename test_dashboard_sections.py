@@ -33,12 +33,16 @@ class DashboardSectionsTest(unittest.TestCase):
     def tearDownClass(cls):
         claims.LAST_RESULT=cls.original;claims.app.before_request_funcs=cls.original_before;cls.engine_patch.stop();cls.relation_patch.stop();cls.temp.cleanup()
     def test_dashboard_has_sidebar_links_and_no_import_report_comparison_or_map_panels(self):
-        response=self.client.get('/dashboard');self.assertEqual(response.status_code,200,response.data[:200])
+        redirect=self.client.get('/dashboard');self.assertEqual(redirect.status_code,302);self.assertIn('/overview/risk',redirect.location)
+        response=self.client.get('/overview/risk');self.assertEqual(response.status_code,200,response.data[:200])
         for path in ('risk','commissions','policies','claims','top_franchise','imports','downloads','graphs'):
             self.assertIn(('/overview/'+path).encode(),response.data)
-        for removed in (b'id="importForm"',b'id="reportDownloadForm"',b'id="premiumParlourAnalysis"',b'id="topFranchises"',b'dashboardClientMiniMap',b'maps.googleapis.com'):
+        for removed in (b'id="importForm"',b'id="reportDownloadForm"',b'id="topFranchises"',b'dashboardClientMiniMap',b'maps.googleapis.com'):
             self.assertNotIn(removed,response.data)
         self.assertIn(b'/overview/policies',response.data)
+        self.assertNotIn(b'Latest 6 months',response.data)
+        self.assertNotIn(b'name="direct_month"',response.data)
+        self.assertNotIn(b'id="claimTrendChart"',response.data)
     def test_independent_pages_render_their_own_content(self):
         expected={'imports':b'id="importForm"','reports':b'View Book Value','compare':b'First date','top_franchise':b'id="topFranchises"','downloads':b'Prepared Direct files','graphs':b'data-direct-series','claim_trend':b'Claim ratio','policy_trend':b'Policy / client quantity','relations':b'latest active member snapshot'}
         for section,text in expected.items():
@@ -56,13 +60,29 @@ class DashboardSectionsTest(unittest.TestCase):
         self.assertEqual(page.status_code,200)
         self.assertNotIn(b'Commission calculation',page.data)
         self.assertIn(b'/overview/commission_detail?',page.data)
-        self.assertIn(b'2026-09-01',page.data)
+        self.assertIn(b'2026-09-12',page.data)
         self.assertIn(b'Commission calculation',self.client.get('/overview/admin').data)
-        self.assertIn(b'Import complete Direct data',self.client.get('/overview/imports').data)
+        self.assertIn(b'Import Direct files',self.client.get('/overview/imports').data)
         self.assertEqual(self.client.get('/overview/graphs?dashboard_period_view=custom&date_from=2026-10-01&date_to=2026-09-01').status_code,400)
         for kind in ('view','download'):
             result=self.client.get('/export?report_type=commissions&report_period=custom&report_from_date=2026-09-12&report_to_date=2026-10-18&report_format='+kind)
             self.assertEqual(result.status_code,200);result.close()
+
+    def test_date_only_layout_and_removed_duplicate_panels(self):
+        args='?date_from=2026-08-12&date_to=2026-10-18'
+        for section in ['risk','commissions','policies','top_franchise','graphs','downloads','imports']:
+            response=self.client.get('/overview/'+section+args)
+            self.assertEqual(response.status_code,200,section)
+            self.assertNotIn(b'Latest 6 months',response.data,section)
+            self.assertNotIn(b'<select name="direct_month"',response.data,section)
+            self.assertNotIn(b'<select name="dashboard_period_view"',response.data,section)
+            self.assertIn(b'name="date_from" value="2026-08-12"',response.data,section)
+        policies=self.client.get('/overview/policies'+args).data
+        self.assertNotIn(b'Top 10 products',policies)
+        self.assertLess(policies.index(b'Age Limit Notifications'),policies.index(b'<h2>Direct monthly data'))
+        top=self.client.get('/overview/top_franchise'+args).data
+        self.assertIn(b'Top 10 claims ranking',top);self.assertNotIn(b'Claims ranking details',top)
+        self.assertEqual(self.client.get('/overview/risk?date_from=2020-01-01&date_to=2020-01-31').status_code,200)
 
     def test_comparison_values_dates_and_missing_prior_data(self):
         source=claims.LAST_RESULT['monthly'];current=source[source.Month==pd.Timestamp('2026-10-01')]
