@@ -65,6 +65,7 @@ class DirectAnalyticsTest(unittest.TestCase):
         def user():g.user=who
         app.add_url_rule('/dashboard','dashboard',lambda:render_template('direct_dashboard.html'))
         app.add_url_rule('/direct-data','direct_data',lambda:'prepare')
+        app.add_url_rule('/direct-data/reports','direct_reports',lambda:'reports')
         register_direct_analytics(app,self.store)
         client=app.test_client()
         response=client.get('/dashboard')

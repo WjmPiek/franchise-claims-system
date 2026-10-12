@@ -17,7 +17,8 @@ FIELDS = ['n','destination','plan','franchise','policy','relation','original_ris
 MONEY = FIELDS[6:14]
 CATEGORIES = {'source':'All Direct source rows', 'insurers':'Insurer payover', 'aul':'AUL data',
               'plan2':'AUL Plan 2', 'historic':'AUL Historic', 'faithnet':'Faithnet MEM adjustments',
-              'fees':'MEM fees', 'vouchers':'Vouchers', 'review':'Records to review'}
+              'fees':'MEM fees', 'r1':'R1 fees', 'adv':'2.1% fees', 'supplier':'Voucher supplier fees',
+              'retained':'Voucher retained amounts', 'vouchers':'Vouchers', 'review':'Records to review'}
 
 def data_month(filename, chosen=''):
     match = re.search(r'(\d{8})_to_(\d{8})', filename)
@@ -167,6 +168,9 @@ class DirectStore:
                     total = target.setdefault(key,metric())
                     total['rows'] += values['rows']
                     for field in MONEY: total[field] += Decimal(values[field])
+        # These categories use the same persisted rows and support earlier imports.
+        for target,source in [('r1','fees'),('adv','fees'),('supplier','vouchers'),('retained','vouchers')]:
+            categories[target] = categories[source].copy()
         return {'months':months,'month':selected,'batches':chosen,'categories':categories,
                 'destinations':destinations,'franchises':franchises,'available':bool(chosen)}
 
@@ -182,6 +186,7 @@ class DirectStore:
                       'historic':"r.destination='AUL' AND r.plan='Historic'",
                       'faithnet':'CAST(r.faithnet AS NUMERIC)<>0',
                       'fees':"r.relation='MEM' AND r.destination<>'Vouchers'",'review':"r.issues<>'[]'"}
+        predicates.update(r1=predicates['fees'],adv=predicates['fees'],supplier=predicates['vouchers'],retained=predicates['vouchers'])
         if category in predicates:where.append('('+predicates[category]+')')
         for key,value in [('destination',destination),('franchise',franchise)]:
             if value:
@@ -210,6 +215,34 @@ class DirectStore:
         if not rows:return None
         row=rows[0];row['data']=json.loads(row['data']);row['issues']=json.loads(row['issues'])
         return row
+
+    def restore_stage(self, owner, batch_id, stage):
+        """Restore an owned snapshot for downloads without recalculating its amounts."""
+        self.ensure()
+        from direct_data import branch_key, VOUCHER_PRODUCT, norm
+        stage.execute('CREATE TABLE rows (n INTEGER PRIMARY KEY, branch TEXT, policy TEXT, relation TEXT, product TEXT, voucher INTEGER, destination TEXT, plan INTEGER, risk TEXT, retail TEXT, mpia TEXT, values_json TEXT)')
+        stage.execute('CREATE TABLE saved ('+','.join(field+(' INTEGER PRIMARY KEY' if field=='n' else ' TEXT') for field in FIELDS)+')')
+        with self.connection() as conn:
+            batches=self.records(self.execute(conn,'SELECT id,month,source_file FROM direct_data_batches WHERE owner_id=:owner AND id=:id',{'owner':owner,'id':batch_id}))
+            if not batches:raise ValueError('This saved Direct month is not available.')
+            sql='SELECT r.* FROM direct_data_rows r WHERE r.batch_id=:id ORDER BY r.n'
+            result=conn.execution_options(stream_results=True).execute(text(sql),{'id':batch_id}) if self.get_engine else conn.execute(sql,{'id':batch_id})
+            result=result.mappings() if self.get_engine else result
+            count=0
+            while True:
+                chunk=result.fetchmany(1000)
+                if not chunk:break
+                for raw in chunk:
+                    row=dict(raw);data=json.loads(row['data'])
+                    stage.execute('INSERT INTO rows VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',(row['n'],branch_key(data[0]),row['policy'],row['relation'],data[11],int(norm(data[11])==norm(VOUCHER_PRODUCT)),row['destination'],int(row['plan']=='Plan 2'),str(row['original_risk']),str(row['retail']),data[17],row['data']))
+                    stage.execute('INSERT INTO saved VALUES ('+','.join('?' for _ in FIELDS)+')',[row['n'] if key=='n' else str(row[key]) for key in FIELDS])
+                    count+=1
+                from import_progress import report
+                report('Restoring saved monthly data',count)
+            result.close() if hasattr(result,'close') else None
+        stage.execute('CREATE INDEX policy_lookup ON rows(branch,policy)')
+        stage.commit()
+        return batches[0]
 
 def register_direct_analytics(app, store):
     @app.template_filter('direct_number')

@@ -17,7 +17,7 @@ from flask import g, request, render_template, send_file, jsonify, session
 from openpyxl import load_workbook
 import xlsxwriter
 from import_progress import report, active, stream_import
-from direct_analytics import DirectStore, data_month, register_direct_analytics
+from direct_analytics import DirectStore, FIELDS, data_month, register_direct_analytics
 
 HEADERS = ['Franchise', 'Group', 'Policy Number', 'Surname', 'Full Names', 'ID Number',
            'Date of Birth', 'Passport Nr', 'Relation', 'Inception Date', 'Cover', 'Product',
@@ -256,16 +256,35 @@ class SheetWriter:
         self.sheet.set_row(self.n, 32)
         self.n += 1
 
-def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double', voucher_basis='mpia', plan_basis='policy'):
+def separate_product_plans(conn):
+    """Different insured products may legitimately share the same policy number."""
+    assignments={}
+    conflicts=conn.execute("SELECT branch,policy FROM rows WHERE destination='AUL' AND voucher=0 AND relation='MEM' GROUP BY branch,policy HAVING MIN(plan)<>MAX(plan)").fetchall()
+    for branch,policy in conflicts:
+        members=conn.execute("SELECT n,plan,product FROM rows WHERE branch=? AND policy=? AND relation='MEM' AND voucher=0 ORDER BY n",(branch,policy)).fetchall()
+        products=defaultdict(set)
+        for n,plan,product in members:products[norm(product)].add(plan)
+        if any(not key or len(flags)>1 for key,flags in products.items()):
+            description='; '.join(f'row {n}: {product} ({"Plan 2" if plan else "Historic"})' for n,plan,product in members[:10])
+            raise ValueError(f'Source row {members[0][0]}: AUL policy {policy} at {branch} has conflicting MEM plans for the same product. {description}. Confirm the correct cover/product in the source. No rows were skipped or saved.')
+        for n,rel,product,plan in conn.execute("SELECT n,relation,product,plan FROM rows WHERE branch=? AND policy=? AND voucher=0 ORDER BY n",(branch,policy)):
+            flags=products.get(norm(product),set())
+            if rel=='MEM':assignments[n]=plan
+            elif len(flags)==1:assignments[n]=next(iter(flags))
+            elif re.search(r'(?<!\d)(?:40\s*000|50\s*000)(?!\d)',product):assignments[n]=1
+            else:
+                raise ValueError(f'Source row {n}: policy {policy} at {branch} has separate MEM products, but {rel or "(Blank)"} product {product} cannot be linked to one of them. Confirm which insured product this row belongs to. No rows were skipped or saved.')
+    return assignments
+
+def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double', voucher_basis='mpia', plan_basis='policy', saved=False):
     if faithnet_basis not in ('row', 'mpia', 'over_two_double') or voucher_basis not in ('row', 'mpia') or plan_basis not in ('policy', 'row'):
         raise ValueError('Choose the fee timing and AUL policy split before preparing downloads.')
-    if plan_basis == 'policy':
+    product_plans={}
+    if plan_basis == 'policy' and not saved:
         missing = conn.execute("SELECT MIN(n) FROM rows WHERE destination='AUL' AND voucher=0 AND TRIM(policy)=''").fetchone()[0]
         if missing:
             raise ValueError(f'Source row {missing}: missing policy number prevents the AUL policy split.')
-        conflict = conn.execute("SELECT MIN(first_row) FROM (SELECT MIN(n) AS first_row FROM rows WHERE destination='AUL' AND voucher=0 AND relation='MEM' GROUP BY branch,policy HAVING MIN(plan)<>MAX(plan))").fetchone()[0]
-        if conflict:
-            raise ValueError(f'Source row {conflict}: one AUL policy has conflicting MEM plans. Resolve it before export.')
+        product_plans=separate_product_plans(conn)
     folder = Path(folder)
     folder.mkdir(exist_ok=True, parents=True)
     writers = {}
@@ -311,7 +330,12 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
         row = json.loads(data)
         writer('Converted Source').append(row)
         risk, retail = Decimal(row[12]), Decimal(row[13])
-        deduction, r1, adv, net, supplier, retained = row_fees(row, faithnet_basis, voucher_basis)
+        snapshot=None
+        if saved:
+            snapshot=dict(zip(FIELDS,conn.execute('SELECT * FROM saved WHERE n=?',(n,)).fetchone()))
+            deduction,r1,adv,net,supplier,retained=[Decimal(snapshot[key]) for key in ('faithnet','r1','adv','payover','supplier','retained')]
+        else:
+            deduction, r1, adv, net, supplier, retained = row_fees(row, faithnet_basis, voucher_basis)
         plan_name = ''
         phone = row[15]
         if is_voucher:
@@ -327,6 +351,7 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
             expected = cents(Decimal('8.50') * (Decimal(row[17]) if voucher_basis == 'mpia' else Decimal(1)))
             if risk != expected:
                 issues.append([n, row[0], policy, 'Voucher risk differs from 8.50 under selected fee timing.'])
+            if saved:phone=snapshot['contact']
             writer('Vouchers', VOUCHER_HEADERS).append([row[0], row[2], row[3], row[4], row[6], row[8], row[9], row[11], supplier, phone, row[17]])
             key = 'Vouchers'
             fees = (Decimal(0), Decimal(0), Decimal(0), supplier, retained)
@@ -338,11 +363,13 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
             if dest == 'AUL':
                 if plan_basis == 'row':
                     plan = int(Decimal(row[10]) in (40000, 50000))
-                if plan_basis == 'policy':
+                if saved:
+                    plan=int(snapshot['plan']=='Plan 2')
+                elif plan_basis == 'policy':
                     flags = policy_plan.get((branch, policy), set()) if policy else set()
-                    if len(flags) > 1:
-                        raise ValueError(f'Source row {n}: one AUL policy has conflicting MEM plans. Resolve it before export.')
-                    if flags:
+                    if n in product_plans:
+                        plan=product_plans[n]
+                    elif flags:
                         plan = int(next(iter(flags)))
                     elif not policy:
                         raise ValueError(f'Source row {n}: missing policy number prevents the AUL policy split.')
@@ -362,6 +389,9 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
         t[0] += 1
         for i, value in enumerate((risk, retail, *fees), 1):
             t[i] += value
+        if saved:
+            del issues[issue_start:]
+            issues.extend([n,row[0],policy,message] for message in json.loads(snapshot['issues']))
         row_issues = [issue[3] for issue in issues[issue_start:]]
         analytics_values = (n,key,plan_name,row[0],policy,rel,str(risk),str(retail),
             str(deduction if not is_voucher else 0),str(r1 if not is_voucher else 0),
@@ -416,6 +446,41 @@ def register_direct_data(app, export_dir, get_engine=None):
                     and folder.resolve().parent == root.resolve()
                     and datetime.now() - datetime.fromtimestamp(folder.stat().st_mtime) > timedelta(hours=12)):
                 shutil.rmtree(folder)
+
+    @app.get('/direct-data/reports')
+    def direct_reports():
+        user=getattr(g,'user',None) or {}
+        if user.get('role')!='admin':return 'Admin access required.',403
+        return render_template('direct_reports.html',batches=store.batches(user['id']))
+
+    @app.post('/direct-data/reports/<batch_id>')
+    def direct_recreate(batch_id):
+        user=getattr(g,'user',None) or {}
+        if user.get('role')!='admin':return 'Admin access required.',403
+        if request.headers.get('X-Import-Progress')=='stream' and not active():
+            authenticated_user=dict(user)
+            def run():
+                g.user=authenticated_user
+                return direct_recreate(batch_id)
+            return stream_import(run)
+        if not LOCK.acquire(blocking=False):return jsonify(ok=False,error='Another Direct preparation is running. Wait for it to finish.'),409
+        folder=root/uuid.uuid4().hex
+        folder.mkdir()
+        try:
+            cleanup()
+            with closing(sqlite3.connect(folder/'rows.db')) as conn:
+                batch=store.restore_stage(user['id'],batch_id,conn)
+                paths,archive,totals,issues=prepare_outputs(conn,folder,batch['source_file'],saved=True)
+            (folder/'rows.db').unlink()
+            files=[p.name for p in paths.values()]+[archive.name]
+            (folder/'owner.json').write_text(json.dumps({'owner':user['id'],'created':datetime.now().isoformat()}))
+            (folder/'files.json').write_text(json.dumps(files))
+            return jsonify(ok=True,job=folder.name,month=batch['month'],files=files)
+        except ValueError as exc:return jsonify(ok=False,error=str(exc)),400
+        except Exception:
+            app.logger.exception('Saved Direct report recreation failed')
+            return jsonify(ok=False,error='Could not recreate these downloads. Please retry.'),500
+        finally:LOCK.release()
 
     @app.route('/direct-data', methods=['GET', 'POST'])
     def direct_data():

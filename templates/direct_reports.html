@@ -1,0 +1,26 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Saved Direct Reports</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"><style>body{background:#f4f6fa;font:15px Arial,sans-serif;color:#18202a}main{max-width:1100px;margin:24px auto;padding:24px;background:white;border-radius:12px}table{width:100%;border-collapse:collapse}th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd}button{padding:10px;background:#6950a1;color:white;border:0;border-radius:6px;cursor:pointer}.scroll{overflow:auto}#status{white-space:pre-line;padding:16px;background:#edf1f7}#status:empty{display:none}#links a{display:block;padding:10px}</style></head><body><main>
+<a href="{{ url_for('dashboard') }}#directAnalytics">Back to dashboard</a> · <a href="{{ url_for('direct_data') }}">Prepare a new month</a><h1>Saved Direct Reports</h1>
+<p>Recreate all insurer, AUL, voucher, source and reconciliation downloads from a saved month. Stored amounts and product splits are preserved. No source upload is needed.</p>
+<p>Preparing the same month again replaces its saved dataset. Earlier months remain available. Each generated set of download links lasts 12 hours; use this page to generate fresh links later.</p>
+<div class="scroll"><table><thead><tr><th>Month</th><th>Source file</th><th>Rows</th><th>Analytics</th><th>Downloads</th></tr></thead><tbody>{% for batch in batches %}<tr><td>{{ batch.month }}</td><td>{{ batch.source_file }}</td><td>{{ '{:,}'.format(batch.summary.categories.source.rows) }}</td><td><a href="{{ url_for('direct_analytics',month=batch.month) }}">View details</a></td><td><button data-url="{{ url_for('direct_recreate',batch_id=batch.id) }}">Recreate {{ batch.month }} downloads</button></td></tr>{% else %}<tr><td colspan="5">No saved Direct months yet. Prepare a monthly source file first.</td></tr>{% endfor %}</tbody></table></div>
+<div id="status" role="status" aria-live="polite"></div><div id="links"></div>
+</main><script>
+const status=document.getElementById('status'),links=document.getElementById('links'),buttons=[...document.querySelectorAll('button[data-url]')];
+for(const button of buttons)button.addEventListener('click',async()=>{
+ buttons.forEach(b=>b.disabled=true);links.replaceChildren();status.textContent='Restoring saved data and recreating downloads…';let timer;
+ try{
+  timer=setInterval(()=>fetch('{{ url_for("import_session") }}',{credentials:'same-origin',cache:'no-store'}).catch(()=>{}),60000);
+  const response=await fetch(button.dataset.url,{method:'POST',credentials:'same-origin',headers:{'X-Import-Progress':'stream','X-Requested-With':'XMLHttpRequest'}});let result;
+  if((response.headers.get('Content-Type')||'').includes('application/x-ndjson')){
+   const reader=response.body.getReader(),decoder=new TextDecoder();let pending='',stage='Recreating downloads';
+   while(true){const chunk=await reader.read();pending+=decoder.decode(chunk.value||new Uint8Array(),{stream:!chunk.done});const lines=pending.split('\n');pending=lines.pop();
+    for(const line of lines){if(!line.trim())continue;const update=JSON.parse(line);if(update.type==='progress')stage=update.stage+(update.current!=null?' — '+Number(update.current).toLocaleString()+(update.total?' / '+Number(update.total).toLocaleString():'')+' rows':'');if(update.type==='done')result=update;status.textContent=stage+'\nElapsed: '+Math.floor((update.elapsed||0)/60)+'m '+((update.elapsed||0)%60)+'s.';}
+    if(chunk.done)break;
+   }
+  }else result=await response.json();
+  if(!response.ok||!result?.ok)throw Error(result?.error||'Downloads were not confirmed.');
+  status.textContent='Downloads ready for '+result.month+'. Check Reconciliation and Review before sending insurer files.';
+  for(const file of result.files){const a=document.createElement('a');a.textContent=file;a.href='{{ url_for("direct_download",job="JOB",name="FILE") }}'.replace('JOB',encodeURIComponent(result.job)).replace('FILE',encodeURIComponent(file));links.appendChild(a);}
+ }catch(error){status.textContent=error.message||'Could not recreate downloads.';}finally{clearInterval(timer);buttons.forEach(b=>b.disabled=false);}
+});
+</script></body></html>

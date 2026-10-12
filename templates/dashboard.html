@@ -213,7 +213,7 @@
             <details class="side-group">
               <summary><span class="ms-nav-icon" aria-hidden="true">S</span><span><strong>Admin & Imports</strong><small>Settings and data imports</small></span></summary><div class="ms-nav-submenu">
               <a href="#importPanel">Import Excel</a>
-              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('direct_data') }}">Direct Data Preparation</a>{% endif %}
+              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('direct_data') }}">Direct Data Preparation</a><a href="{{ url_for('direct_reports') }}">Saved Direct Reports</a>{% endif %}
               <a href="{{ url_for('workspace_page', workspace='franchise_configuration') }}">Franchise Configuration</a>
               {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_parlour_fee_settings') }}">Parlour Fee Settings</a>{% endif %}
               {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_users') }}">Manage Users</a><a href="{{ url_for('admin_claims_rules') }}">Claims Rules</a><a href="{{ url_for('admin_map_cache_manager') }}">Map Cache Manager</a><a href="{{ url_for('admin_prepare_client_map_locations') }}">Prepare Client Map</a><a href="{{ url_for('database_health') }}">Database Health</a>{% endif %}
