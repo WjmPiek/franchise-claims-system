@@ -6,7 +6,8 @@ from flask import g,request,render_template,url_for
 def register_current_members(app,get_engine,sql_text,scope_fn):
     @app.get('/policy-members')
     def current_relation_members():
-        if not getattr(g,'user',None):return 'Sign in required.',403
+        user=getattr(g,'user',None) or {}
+        if user.get('role')!='admin':return 'Admin access required for member details.',403
         engine=get_engine();selected=request.args.get('franchise','All');relation=request.args.get('relation','All').upper();query=request.args.get('q','')[:100]
         rows=[];count=0;page=max(1,request.args.get('page',1,type=int));franchises=[]
         unavailable=engine is not None and not inspect(engine).has_table('app_policydata_current_members')

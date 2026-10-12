@@ -13,7 +13,7 @@ class MemberReportAccessTest(unittest.TestCase):
         with engine.begin() as conn:
             conn.execute(text('CREATE TABLE app_policydata_current_members (franchise_name TEXT,relation TEXT,member_name TEXT,policy_number TEXT,id_number TEXT,age INTEGER,age_band TEXT,import_month TEXT,active BOOLEAN)'))
             conn.execute(text('INSERT INTO app_policydata_current_members VALUES (:f,:r,:name,:policy,:id,30,:band,:month,true)'),[{'f':branch,'r':'MEM','name':'Member '+str(i),'policy':f'000{i:04d}','id':'0012312345678','band':'30','month':'2026-10-01'} for branch in ('A','B') for i in range(61)])
-        app=Flask(__name__);user={'id':1,'role':'viewer'}
+        app=Flask(__name__);user={'id':1,'role':'admin'}
         @app.before_request
         def who():g.user=user
         app.add_url_rule('/overview/<section>','overview_page',lambda section:'overview')
@@ -23,6 +23,7 @@ class MemberReportAccessTest(unittest.TestCase):
         self.assertEqual(client.get('/policy-members?franchise=B').status_code,400)
         self.assertNotIn(b'<td>B</td>',response.data)
         self.assertIn(b'1 matching active members',client.get('/policy-members?q=0000060').data)
+        user['role']='viewer';self.assertEqual(client.get('/policy-members').status_code,403)
         user.clear();self.assertEqual(client.get('/policy-members').status_code,403);engine.dispose()
     def test_relation_excel_pdf_preserve_totals_and_external_controls(self):
         frame=pd.DataFrame([{'import_month':pd.Timestamp('2026-10-01'),'franchise':f,'relation':'MEM','original_risk_premium':100.005,'retail_premium':150.123,'r1_policy_fee':1,'adv_fund_2_1_fee':2.08,'new_risk_premium':96.93} for f in ('A','B')])
