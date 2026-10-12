@@ -213,8 +213,9 @@ def row_fees(row, faithnet_basis, voucher_basis):
     return deduction, r1, adv, net, supplier, retained
 
 class SheetWriter:
-    def __init__(self, path, sheet, headers):
-        self.book = xlsxwriter.Workbook(str(path), {'constant_memory': True, 'strings_to_formulas': False, 'strings_to_urls': False})
+    def __init__(self, path, sheet, headers, book=None):
+        self.owns_book = book is None
+        self.book = book if book is not None else xlsxwriter.Workbook(str(path), {'constant_memory': True, 'strings_to_formulas': False, 'strings_to_urls': False})
         self.sheet = self.book.add_worksheet(sheet[:31])
         self.headers = headers
         self.date_fmt = self.book.add_format({'num_format': 'dd/mm/yyyy'})
@@ -245,7 +246,8 @@ class SheetWriter:
 
     def close(self):
         self.sheet.autofilter(0, 0, max(self.n - 1, 1), len(self.headers) - 1)
-        self.book.close()
+        if self.owns_book:
+            self.book.close()
 
     def note(self, text):
         fmt = self.book.add_format({'text_wrap': True, 'valign': 'top', 'font_color': '#596675'})
@@ -270,6 +272,13 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
     period = re.search(r'(\d{8}_to_\d{8})', source_name)
     prefix = 'PolicyData_' + period.group(1) if period else 'Direct'
     labels = {'AUL Plan 2 New': 'Martins Funeral Plan 2 (New)', 'AUL Historic': 'Martins Funeral Plan (Historic)'}
+    summary_headers = ['Destination', 'Rows', 'Original Risk', 'Retail', 'Faithnet Deduction', 'R1 Fee', 'ADV Fee', 'Payover', 'Voucher Retained']
+    combined_path = folder / (prefix + '_Insurer Sheets.xlsx')
+    combined_book = xlsxwriter.Workbook(str(combined_path), {'constant_memory': True, 'strings_to_formulas': False, 'strings_to_urls': False})
+    combined = {'AUL Totals': SheetWriter(combined_path, 'AUL Totals', summary_headers, book=combined_book)}
+    for destination in EXCEPTIONS + [GROUP_NAME, 'AUL']:
+        combined[destination] = SheetWriter(combined_path, 'AUL All Data' if destination == 'AUL' else destination, HEADERS, book=combined_book)
+    paths['Insurer Sheets'] = combined_path
     def writer(key, headers=HEADERS):
         if key not in writers:
             path = folder / (prefix + '_' + labels.get(key, key) + '.xlsx')
@@ -319,6 +328,7 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
             prepared = row.copy()
             prepared[12] = str(net)
             writer('AUL All Data' if dest == 'AUL' else dest).append(prepared)
+            combined[dest].append(prepared)
             if dest == 'AUL':
                 if plan_basis == 'row':
                     plan = int(Decimal(row[10]) in (40000, 50000))
@@ -348,7 +358,6 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
         processed += 1
         if processed % 2000 == 0:
             report('Preparing insurer and voucher reports', processed, source_count)
-    summary_headers = ['Destination', 'Rows', 'Original Risk', 'Retail', 'Faithnet Deduction', 'R1 Fee', 'ADV Fee', 'Payover', 'Voucher Retained']
     summary = writer('Reconciliation', summary_headers)
     summary.note('Source file: ' + source_name)
     summary.note('Faithnet: MEM 1+ products 40.00; other MEM products 10.00; once at MPIA 1/2 and doubled above 2.' if faithnet_basis == 'over_two_double' else 'Faithnet timing: ' + faithnet_basis)
@@ -361,14 +370,19 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
     summary.note('The risk difference shows fee rounding and the existing MEM zero floor. Original Risk and Retail retain source precision. All rows, including vouchers, are counted once in TOTAL. Review contains unmatched or ambiguous source records.')
     aul = writer('AUL Totals', summary_headers)
     aul.append(['AUL', *totals['AUL']])
+    combined['AUL Totals'].append(['AUL', *totals['AUL']])
     for key in ('AUL Plan 2 New', 'AUL Historic'):
         # The two loading files partition AUL All Data; counts are visible here.
         aul.append([key, *aul_details[key]])
+        combined['AUL Totals'].append([key, *aul_details[key]])
     issue_writer = writer('Review', ['Source Row', 'Franchise', 'Policy Number', 'Issue'])
     for issue in issues:
         issue_writer.append(issue)
     for w in writers.values():
         w.close()
+    for w in combined.values():
+        w.close()
+    combined_book.close()
     report('Creating the download ZIP', source_count, source_count)
     archive = folder / 'Direct_reports.zip'
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as pack:

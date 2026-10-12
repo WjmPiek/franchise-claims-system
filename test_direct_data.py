@@ -53,6 +53,14 @@ class DirectDataTest(unittest.TestCase):
             self.assertEqual(sum(v[2] for v in totals.values()),control['retail'])
             self.assertFalse(issues)
             self.assertTrue(archive.exists())
+            wb=load_workbook(files['Insurer Sheets'],data_only=True)
+            self.assertEqual(wb.sheetnames[0],'AUL Totals')
+            self.assertIn('Pretoria North Group',wb.sheetnames)
+            self.assertEqual(wb['AUL All Data'].max_row,3)
+            self.assertEqual(wb['Alberton'].max_row,2)
+            for sheet in wb:
+                self.assertFalse(any(VOUCHER_PRODUCT in r for r in sheet.iter_rows(values_only=True)))
+            wb.close()
             self.assertIn('Martins Funeral Plan 2 (New)',files['AUL Plan 2 New'].name)
             wb=load_workbook(files['Converted Source'],data_only=True)
             ws=wb.active
