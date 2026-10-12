@@ -154,13 +154,13 @@ class DirectStore:
         for row in rows: row['summary'] = json.loads(row['summary'])
         return rows
 
-    def overview(self, owner, month=None):
+    def overview(self, owner, month=None, start=None, end=None):
         batches = self.batches(owner)
         months = [r['month'] for r in batches]
-        selected = month or (months[0] if months else '')
+        selected = 'all' if start else month or (months[0] if months else '')
         if selected not in months and selected not in ('all',''):
             raise ValueError('Choose an available Direct data month.')
-        chosen = [r for r in batches if selected=='all' or r['month']==selected]
+        chosen = [r for r in batches if (start<=r['month']<=end if start else selected=='all' or r['month']==selected)]
         categories = {k:metric() for k in CATEGORIES}
         destinations,franchises = {},{}
         for batch in chosen:
@@ -173,14 +173,16 @@ class DirectStore:
         for target,source in [('r1','fees'),('adv','fees'),('supplier','vouchers'),('retained','vouchers')]:
             categories[target] = categories[source].copy()
         return {'months':months,'month':selected,'batches':chosen,'categories':categories,
-                'destinations':destinations,'franchises':franchises,'available':bool(chosen)}
+                'destinations':destinations,'franchises':franchises,'available':bool(chosen),'period':start+' to '+end if start else selected}
 
-    def detail(self, owner, month, category, destination='', franchise='', query='', page=1):
+    def detail(self, owner, month, category, destination='', franchise='', query='', page=1, start=None, end=None):
         if category not in CATEGORIES: raise ValueError('Choose a valid detail category.')
-        overview = self.overview(owner,month)
+        overview = self.overview(owner,month,start,end)
         params = {'owner':owner}
         where = ['b.owner_id=:owner']
-        if overview['month']!='all':
+        if start:
+            where.append('b.month BETWEEN :start AND :end');params.update(start=start,end=end)
+        elif overview['month']!='all':
             where.append('b.month=:month');params['month']=overview['month']
         predicates = {'insurers':"r.destination<>'Vouchers'",'vouchers':"r.destination='Vouchers'",
                       'aul':"r.destination='AUL'",'plan2':"r.destination='AUL' AND r.plan='Plan 2'",
@@ -217,9 +219,19 @@ class DirectStore:
         row=rows[0];row['data']=json.loads(row['data']);row['issues']=json.loads(row['issues'])
         return row
 
-    def product_insights(self,owner,month=None,product=''):
+    def product_insights(self,owner,month=None,product='',start=None,end=None,franchise=''):
         from product_insights import product_summary,insights
         batches=self.batches(owner)
+        if start:
+            sql="SELECT r.franchise,r.policy,r.data,r.original_risk,r.retail,r.payover FROM direct_data_rows r JOIN direct_data_batches b ON b.id=r.batch_id WHERE b.owner_id=:owner AND b.month BETWEEN :start AND :end AND r.relation='MEM' AND r.destination<>'Vouchers'"
+            params={'owner':owner,'start':start,'end':end}
+            if franchise:sql+=' AND r.franchise=:franchise';params['franchise']=franchise
+            with self.connection() as conn:
+                result=conn.execution_options(stream_results=True).execute(text(sql),params) if self.get_engine else conn.execute(sql,params)
+                records=result.mappings() if self.get_engine else result
+                groups=product_summary(dict(row) for row in records)
+                result.close() if hasattr(result,'close') else None
+            return insights(groups,start+' to '+end,product)
         batch=next((b for b in batches if b['month']==month),None) if month else (batches[0] if batches else None)
         if not batch:return insights([],month or '',product)
         summary=batch['summary']
@@ -232,7 +244,7 @@ class DirectStore:
                 result.close() if hasattr(result,'close') else None
             with self.connection() as conn:
                 self.execute(conn,'UPDATE direct_data_batches SET summary=:summary WHERE id=:id AND owner_id=:owner',{'summary':encode(summary),'id':batch['id'],'owner':owner})
-        return insights(summary['member_products'],batch['month'],product)
+        return insights([r for r in summary['member_products'] if not franchise or r['franchise']==franchise],batch['month'],product)
 
     def restore_stage(self, owner, batch_id, stage):
         """Restore an owned snapshot for downloads without recalculating its amounts."""
@@ -277,18 +289,20 @@ def register_direct_analytics(app, store):
         if not owner() or request.endpoint not in ('dashboard','overview_page','workspace_page','direct_data'):
             return {}
         try:
-            overview=store.overview(owner(),request.args.get('direct_month') or request.args.get('product_month'))
+            from period_selection import month_bounds
+            start,end=month_bounds(request.args)
+            overview=store.overview(owner(),request.args.get('direct_month') or request.args.get('product_month'),start,end)
             graphs=[]
             all_batches=store.batches(owner())
             for key,label,category,field,unit in GRAPHS:
-                points=[{'label':batch['month'],'value':str(batch['summary']['categories'][category][field]),'url':url_for('direct_analytics',month=batch['month'],category=category if category not in ('fees','vouchers') else key)} for batch in reversed(all_batches)]
+                points=[{'label':batch['month'],'value':str(batch['summary']['categories'][category][field]),'url':url_for('direct_analytics',month=batch['month'],category=category if category not in ('fees','vouchers') else key)} for batch in reversed(all_batches) if not start or start<=batch['month']<=end]
                 graphs.append({'key':key,'label':label,'unit':unit,'points':points,'category':category if category not in ('fees','vouchers') else key})
             extra={}
             if request.endpoint=='overview_page' and request.view_args.get('section') in ('top_franchise','policies'):
                 selected_product_month=request.args.get('product_month') or request.args.get('direct_month')
                 if selected_product_month=='all':selected_product_month=None
-                extra['product_insights']=store.product_insights(owner(),selected_product_month,request.args.get('product',''))
-            return {'direct_analytics_data':overview,'direct_graphs':graphs,'direct_batches':all_batches,**extra}
+                extra['product_insights']=store.product_insights(owner(),selected_product_month,request.args.get('product',''),start,end)
+            return {'direct_analytics_data':overview,'direct_graphs':graphs,'direct_batches':[b for b in all_batches if not start or start<=b['month']<=end],**extra}
         except Exception as exc:
             app.logger.warning('Direct analytics unavailable (%s)',type(exc).__name__)
             return {'direct_analytics_data':{'available':False,'error':'Direct analytics could not be loaded. Please retry.'}}
@@ -297,15 +311,36 @@ def register_direct_analytics(app, store):
     def direct_analytics():
         if not owner():return 'Admin access required.',403
         try:
+            from period_selection import month_bounds
+            start,end=month_bounds(request.args)
             category=request.args.get('category','source')
             overview,rows,count,page=store.detail(owner(),request.args.get('month'),category,
-                request.args.get('destination',''),request.args.get('franchise',''),request.args.get('q',''),request.args.get('page',1,type=int))
+                request.args.get('destination',''),request.args.get('franchise',''),request.args.get('q',''),request.args.get('page',1,type=int),start,end)
         except ValueError as exc:return str(exc),400
         args=request.args.to_dict();args.update(month=overview['month'],category=category)
         def page_url(n):return url_for('direct_analytics',**{**args,'page':n})
         return render_template('direct_analytics.html',overview=overview,rows=rows,count=count,page=page,
             category=category,title=CATEGORIES[category],categories=CATEGORIES,
             previous=page_url(page-1) if page>1 else '',next_page=page_url(page+1) if page*50<count else '')
+
+
+    @app.get('/direct-data/franchise')
+    def direct_franchise():
+        if not owner():return 'Admin access required.',403
+        from period_selection import month_bounds
+        try:
+            start,end=month_bounds(request.args)
+            franchise=request.args.get('franchise','')
+            if not franchise:return 'Choose a franchise.',400
+            month=request.args.get('month')
+            from direct_data import branch_key
+            available=store.overview(owner(),month,start,end)
+            franchise=next((name for name in available['franchises'] if branch_key(name)==branch_key(franchise)),franchise)
+            overview,rows,count,page=store.detail(owner(),month,'source',franchise=franchise,query=request.args.get('q',''),page=request.args.get('page',1,type=int),start=start,end=end)
+            products=store.product_insights(owner(),month if month!='all' else None,start=start,end=end,franchise=franchise)
+        except ValueError as exc:return str(exc),400
+        args=request.args.to_dict();args['month']=overview['month']
+        return render_template('direct_franchise.html',title=franchise,overview=overview,products=products,rows=rows,count=count,page=page,previous=url_for('direct_franchise',**{**args,'page':page-1}) if page>1 else '',next_page=url_for('direct_franchise',**{**args,'page':page+1}) if page*50<count else '')
 
     @app.get('/direct-data/analytics/record/<batch_id>/<int:row_number>')
     def direct_record(batch_id,row_number):

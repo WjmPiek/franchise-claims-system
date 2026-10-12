@@ -23,6 +23,7 @@
 <link rel="icon" type="image/png" href="/static/brand/icon-192.png?v=20260918-brand" sizes="192x192">
 <link rel="apple-touch-icon" href="/static/brand/icon-180.png?v=20260918-brand" sizes="180x180">
 <link rel="stylesheet" href="/static/module-shell.css?v=20260919-mobile-scroll">
+{% set range_args={'date_from':request.args.get('date_from'),'date_to':request.args.get('date_to')} if request.args.get('date_from') else {} %}
 {% if True %}
       <style>
         :root {
@@ -128,7 +129,7 @@
 
 
         html body .ms-sidebar .side-section-link{display:block!important;padding:12px 16px!important;color:#fff!important;text-decoration:none;border-radius:10px;margin:4px 0!important;background:rgba(255,255,255,.13)!important}html body .ms-sidebar .side-section-link:hover{background:rgba(255,255,255,.23)!important}html body .ms-sidebar .side-section-link strong{display:block!important;color:#fff!important;font:700 11.7px/1.2 Arial,sans-serif!important}html body .ms-sidebar .side-section-link small{display:block!important;font:400 9.1px/1.25 Arial,sans-serif!important;color:rgba(255,255,255,.75)!important;margin-top:3px!important}.status-mini[href]{display:block;text-decoration:none;color:inherit}.exec-card h2 a{color:inherit;text-decoration:none}.exec-card h2 a:hover{text-decoration:underline}
-        .topic-panel{padding:22px;border:1px solid #e1e6ee;border-radius:14px;background:#fff;margin:20px 0}.topic-panel h2{margin:0 0 10px;font-size:20px}.topic-panel>summary,.breakdown>summary{font-size:16px;font-weight:700;cursor:pointer;padding:12px 0}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:16px 0}.summary-link{display:block;text-decoration:none!important;color:#18202a!important;transition:box-shadow .15s}.summary-link:hover{box-shadow:0 8px 24px rgba(107,74,160,.13)}.summary-link .kpi-value{overflow-wrap:anywhere}.panel-heading{display:flex;justify-content:space-between;gap:18px;align-items:start;flex-wrap:wrap}.topic-actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.topic-button{display:inline-block;padding:11px 16px;border:1px solid #6950a1;border-radius:8px;background:#6950a1;color:white!important;text-decoration:none!important;font-weight:700;font-size:13px}.topic-button.secondary{background:white;color:#6950a1!important}.topic-filter{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:18px 0}.topic-filter label{display:flex;flex-direction:column;gap:6px;font-weight:700}.topic-filter select{padding:10px;min-width:180px;max-width:100%}.product-bar{display:grid;grid-template-columns:minmax(150px,1.3fr) minmax(70px,1fr) auto;gap:10px;align-items:center;font-size:12px}.product-bar span{overflow-wrap:anywhere}.section-title{font-size:20px;margin:24px 0 14px}.section-title small{font-size:13px;font-weight:400;color:#64707d}.side-section-link.active{outline:2px solid rgba(255,255,255,.65);outline-offset:-2px}.report-block{border:1px solid #e1e6ee;border-radius:12px;padding:18px;margin:12px 0;background:#fff}.report-block h3{margin:0 0 7px;font-size:17px}.report-block p{color:#64707d;margin:0 0 12px}.download-status{white-space:pre-line;padding:14px;background:#f1edf8;border-radius:8px}.download-status:empty{display:none}.report-download-actions{display:block!important;width:100%;flex-basis:100%!important}.report-download-group{width:100%;box-sizing:border-box;margin:12px 0}.report-download-group button{flex:0 1 auto!important}.reports-list{display:block!important}.prepared-catalog{margin-top:18px}@media(max-width:1100px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.summary-grid{grid-template-columns:1fr}.product-bar{grid-template-columns:1fr auto}.product-bar .bar-track{grid-column:1/-1;grid-row:2}.topic-panel{padding:16px}}
+        .topic-panel{padding:22px;border:1px solid #e1e6ee;border-radius:14px;background:#fff;margin:20px 0}.topic-panel h2{margin:0 0 10px;font-size:20px}.topic-panel>summary,.breakdown>summary{font-size:16px;font-weight:700;cursor:pointer;padding:12px 0}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:16px 0}.summary-link{display:block;text-decoration:none!important;color:#18202a!important;transition:box-shadow .15s}.summary-link:hover{box-shadow:0 8px 24px rgba(107,74,160,.13)}.summary-link .kpi-value{overflow-wrap:anywhere}.panel-heading{display:flex;justify-content:space-between;gap:18px;align-items:start;flex-wrap:wrap}.topic-actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.topic-button{display:inline-block;padding:11px 16px;border:1px solid #6950a1;border-radius:8px;background:#6950a1;color:white!important;text-decoration:none!important;font-weight:700;font-size:13px}.topic-button.secondary{background:white;color:#6950a1!important}.topic-filter{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin:18px 0}.topic-filter label{display:flex;flex-direction:column;gap:6px;font-weight:700}.topic-filter select{padding:10px;min-width:180px;max-width:100%}.product-bar{min-height:68px;display:grid;grid-template-columns:minmax(150px,1.3fr) minmax(70px,1fr) auto;gap:10px;align-items:center;font-size:12px}.product-bar span{overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.section-title{font-size:20px;margin:24px 0 14px}.section-title small{font-size:13px;font-weight:400;color:#64707d}.side-section-link.active{outline:2px solid rgba(255,255,255,.65);outline-offset:-2px}.report-block{border:1px solid #e1e6ee;border-radius:12px;padding:18px;margin:12px 0;background:#fff}.report-block h3{margin:0 0 7px;font-size:17px}.report-block p{color:#64707d;margin:0 0 12px}.download-status{white-space:pre-line;padding:14px;background:#f1edf8;border-radius:8px}.download-status:empty{display:none}.report-download-actions{display:block!important;width:100%;flex-basis:100%!important}.report-download-group{width:100%;box-sizing:border-box;margin:12px 0}.report-download-group button{flex:0 1 auto!important}.reports-list{display:block!important}.prepared-catalog{margin-top:18px}@media(max-width:1100px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.summary-grid{grid-template-columns:1fr}.product-bar{grid-template-columns:1fr auto}.product-bar .bar-track{grid-column:1/-1;grid-row:2}.topic-panel{padding:16px}}
         .report-download-form { display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
         .report-download-form label { display:flex; flex-direction:column; gap:8px; flex:1 1 180px; min-width:0; }
         .report-download-form [hidden] { display:none !important; }
@@ -139,6 +140,7 @@
         .executive-main .grid-form { grid-template-columns:repeat(3,minmax(0,1fr)); }
         .executive-main .grid-form label, .executive-main .grid-form input { min-width:0; max-width:100%; }
         @media(max-width:1100px){ .executive-main .grid-form { grid-template-columns:1fr; } }
+.product-ranking-grid{align-items:stretch}.product-ranking-grid .exec-card{height:100%;box-sizing:border-box}.product-ranking-grid .chart-bars{display:grid;grid-auto-rows:minmax(68px,auto)}
 </style>
 {% endif %}
 </head>
@@ -210,20 +212,24 @@
                 <select name="dashboard_period_view">
                   <option value="month" {% if dashboard_period_view == 'month' %}selected{% endif %}>Latest month</option>
                   <option value="six_months" {% if dashboard_period_view == 'six_months' %}selected{% endif %}>Latest 6 months</option>
-                  <option value="year" {% if dashboard_period_view == 'year' %}selected{% endif %}>Latest 12 months</option>
+                  <option value="custom" {% if dashboard_period_view=='custom' %}selected{% endif %}>Custom dates</option><option value="year" {% if dashboard_period_view == 'year' %}selected{% endif %}>Latest 12 months</option>
                 </select>
               </label>
+              <label class="custom-period">From date<input type="date" name="date_from" value="{{ request.args.get('date_from','') }}"></label><label class="custom-period">To date<input type="date" name="date_to" value="{{ request.args.get('date_to','') }}"></label>
               <input name="q" value="{{ search_text }}" placeholder="Search franchise">
               <button type="submit">Apply</button>
             </form>
           </div>
+          <p class="muted">Monthly figures use receipt months. Custom dates include every imported month between the selected dates.</p><script>(()=>{const form=document.querySelector('.dashboard-period-form.executive-filter');if(!form)return;const mode=form.elements.dashboard_period_view;function update(){form.querySelectorAll('.custom-period').forEach(label=>{label.hidden=mode.value!=='custom';label.querySelector('input').disabled=mode.value!=='custom';label.querySelector('input').required=mode.value==='custom';});}mode.addEventListener('change',update);update();})();</script>
           {% if home_section == 'dashboard' %}{% include 'overview_summary.html' %}
           {% elif home_section == 'risk' %}{% include 'risk_retail_section.html' %}
           {% elif home_section == 'commissions' %}{% include 'commissions_section.html' %}
           {% elif home_section == 'policies' %}{% include 'policies_products_section.html' %}
           {% elif home_section == 'top_franchise' %}{% include 'top_franchise_section.html' %}
           {% elif home_section == 'claims' %}{% include 'claims_section.html' %}
-          {% elif home_section == 'imports' %}{% include 'imports_section.html' %}{% include 'admin_tools_section.html' %}
+          {% elif home_section == 'imports' %}{% include 'import_guidance.html' %}{% include 'imports_section.html' %}
+{% elif home_section == 'admin' %}{% include 'admin_tools_section.html' %}
+{% elif home_section == 'commission_detail' %}{% include 'commission_detail.html' %}
           {% elif home_section == 'downloads' %}{% include 'reports_section.html' %}{% include 'prepared_downloads_section.html' %}
           {% elif home_section in ['graphs','claim_trend','policy_trend'] %}{% include 'graphs_section.html' %}
           {% endif %}

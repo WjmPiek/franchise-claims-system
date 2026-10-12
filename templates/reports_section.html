@@ -7,7 +7,7 @@
             <select name="report_period" id="reportPeriod">
               <option value="month">One month</option>
               <option value="range">Multiple months</option>
-              <option value="all">All imported data</option>
+              <option value="custom">Custom dates</option><option value="all">All imported data</option>
             </select>
           </label>
           <label data-report-field="month">Month
@@ -25,6 +25,7 @@
               {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.last %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
             </select>
           </label>
+          <label data-report-field="custom" hidden>From date<input name="report_from_date" type="date" value="{{ request.args.get('date_from','') }}" disabled required></label><label data-report-field="custom" hidden>To date<input name="report_to_date" type="date" value="{{ request.args.get('date_to','') }}" disabled required></label>
           <style>.report-download-group{border:1px solid #ddd;border-radius:8px;padding:12px;display:block;width:100%;margin:12px 0;box-sizing:border-box}.report-download-group legend{font-weight:700;padding:0 6px}</style>
           <input type="hidden" id="reportFormat" name="report_format" value="download">
           <div class="actions compact-actions report-download-actions">
@@ -47,7 +48,7 @@
           function updateFields(){
             form.querySelectorAll('[data-report-field]').forEach(label => {
               label.hidden = label.dataset.reportField !== mode.value;
-              label.querySelector('select').disabled = label.hidden;
+              label.querySelector('select,input').disabled = label.hidden;
             });
           }
           const analysisMonth = document.querySelector('select[name="premium_analysis_month"]');
@@ -60,6 +61,7 @@
               updateFields();
             }
           });
+          if({{ (dashboard_period_view=='custom')|tojson }})mode.value='custom';
           mode.addEventListener('change', updateFields);
           form.addEventListener('submit', event => {
             if(mode.value === 'range' && form.elements.report_start.value > form.elements.report_end.value){
@@ -72,5 +74,5 @@
           updateFields();
         })();
       </script>
-<section class="exec-card" style="margin-top:18px"><h2>Policy relation reports</h2><p>Monthly policy / premium import records, relation counts and reconciliation.</p><p><a class="topic-button" href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month) }}">View Policy Relations</a> <a class="topic-button" href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month,download='xlsx') }}">Policy Relations Excel</a> <a class="topic-button" href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month,download='pdf') }}">Policy Relations PDF</a></p></section>
-{% for section,title in [('compare','Premium / Parlour Fee Comparison'),('top_franchise','Top Franchise'),('claim_trend','Claim Amount Comparison Over Time'),('policy_trend','New Policy / Client Trend'),('relations','Current Relation Counts')] %}<section class="exec-card" style="margin-top:18px"><h2>{{ title }}</h2><p>Claims system report for the selected dashboard period.</p><p><a class="topic-button" href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month) }}">View {{ title }}</a> <a class="topic-button" href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month,download='xlsx') }}">{{ title }} Excel</a> <a class="topic-button" href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month,download='pdf') }}">{{ title }} PDF</a></p></section>{% endfor %}
+<section class="exec-card" style="margin-top:18px"><h2>Policy relation reports</h2><p>Monthly policy / premium import records, relation counts and reconciliation.</p><p><a class="topic-button" href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month,**range_args) }}">View Policy Relations</a> <a class="topic-button" href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month,download='xlsx',**range_args) }}">Policy Relations Excel</a> <a class="topic-button" href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month,download='pdf',**range_args) }}">Policy Relations PDF</a></p></section>
+{% for section,title in [('compare','Premium / Parlour Fee Comparison'),('top_franchise','Top Franchise'),('claim_trend','Claim Amount Comparison Over Time'),('policy_trend','New Policy / Client Trend'),('relations','Current Relation Counts')] %}<section class="exec-card" style="margin-top:18px"><h2>{{ title }}</h2><p>Claims system report for the selected dashboard period.</p><p><a class="topic-button" href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month,**range_args) }}">View {{ title }}</a> <a class="topic-button" href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month,download='xlsx',**range_args) }}">{{ title }} Excel</a> <a class="topic-button" href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month,download='pdf',**range_args) }}">{{ title }} PDF</a></p></section>{% endfor %}

@@ -1,1 +1,1 @@
-{% include 'relations_section.html' %}{% if current_user.role=='admin' %}{% set direct_mode='policies' %}{% include 'direct_dashboard.html' %}{% include 'product_mix_section.html' %}<section class="exec-grid" style="margin-top:24px">{% include 'age_panel.html' %}</section>{% endif %}
+{% include 'relations_section.html' %}{% if current_user.role=='admin' %}{% set direct_mode='policies' %}{% include 'direct_dashboard.html' %}<section class="exec-grid" style="margin-top:24px">{% include 'age_panel.html' %}</section>{% include 'product_mix_section.html' %}{% endif %}

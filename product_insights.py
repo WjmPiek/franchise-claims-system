@@ -21,9 +21,9 @@ def insights(rows,month,product=''):
     chosen=[row for row in converted if not product or row['product']==product]
     franchises={};mix={}
     for row in chosen:
-        item=franchises.setdefault(row['franchise'],{'label':row['franchise'],'value':0,'retail':Decimal(0),'products':set()})
-        item['value']+=row['policies'];item['retail']+=row['retail'];item['products'].add(row['product'])
+        item=franchises.setdefault(row['franchise'],{'label':row['franchise'],'value':0,'retail':Decimal(0),'risk':Decimal(0),'payover':Decimal(0),'products':set()})
+        item['value']+=row['policies'];item['retail']+=row['retail'];item['risk']+=row['risk'];item['payover']+=row['payover'];item['products'].add(row['product'])
         mix[row['product']]=mix.get(row['product'],0)+row['policies']
+    for row in franchises.values():row['products']=len(row['products'])
     top=sorted(franchises.values(),key=lambda row:(-row['value'],row['label']))[:10]
-    for row in top:row['products']=len(row['products'])
-    return {'month':month,'products':products,'product':product,'top':top,'mix':[{'label':key,'value':value} for key,value in sorted(mix.items(),key=lambda pair:(-pair[1],pair[0]))[:10]],'rows':sorted(chosen,key=lambda row:(row['franchise'],row['product']))}
+    return {'month':month,'products':products,'product':product,'top':top,'mix':[{'label':key,'value':value} for key,value in sorted(mix.items(),key=lambda pair:(-pair[1],pair[0]))[:10]],'franchises':sorted(franchises.values(),key=lambda row:row['label']),'rows':sorted(chosen,key=lambda row:(row['franchise'],row['product']))}

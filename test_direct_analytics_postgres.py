@@ -56,6 +56,10 @@ def run():
         assert store.row(900000001,'synthetic-a',1) is None
         fresh = TemporaryStore(Path('unused.sqlite'), lambda: engine)
         assert fresh.detail(900000001,None,'source')[2] == 1
+        fill('300.005');fresh.save(stage,'synthetic-c',900000001,'2026-08','synthetic.csv')
+        ranged=fresh.product_insights(900000001,start='2026-08',end='2026-09')
+        assert ranged['top'][0]['value']==1 and ranged['rows'][0]['risk']==Decimal('500.010')
+        assert fresh.detail(900000001,'all','source',start='2026-09',end='2026-09')[2]==1
         restored=sqlite3.connect(':memory:')
         batch=fresh.restore_stage(900000001,'synthetic-b',restored)
         assert batch['month']=='2026-09'

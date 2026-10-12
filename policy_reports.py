@@ -33,8 +33,14 @@ def register_policy_reports(app, get_engine, sql_text, get_memory, scope_fn=None
             return 'Choose an available imported month.', 400
         if franchise != 'All' and franchise not in franchises:
             return 'Choose an available franchise.', 400
+        from period_selection import month_bounds
+        try:start,end=month_bounds(request.args)
+        except ValueError as exc:return str(exc),400
         params = {'month': month + '-01'}
         where = ['import_month = :month']
+        if start:
+            params.update(start=start+'-01',end=end+'-01');where=['import_month BETWEEN :start AND :end']
+            month=start+' to '+end
         if scope_fn is not None:
             for i,f in enumerate(franchises): params[f'scope_{i}'] = f
             where.append('franchise_name IN (' + ','.join(f':scope_{i}' for i in range(len(franchises))) + ')' if franchises else '1=0')
@@ -51,7 +57,8 @@ def register_policy_reports(app, get_engine, sql_text, get_memory, scope_fn=None
         else:
             frame = memory.copy()
             if not frame.empty:
-                frame = frame[pd.to_datetime(frame.import_month).dt.strftime('%Y-%m') == month]
+                month_values=pd.to_datetime(frame.import_month).dt.strftime('%Y-%m')
+                frame=frame.loc[month_values.between(start,end) if start else month_values==month].copy()
                 if scope_fn is not None: frame = frame[frame.franchise.isin(franchises)]
                 if franchise != 'All': frame = frame[frame.franchise == franchise]
                 frame['relation'] = frame.relation.fillna('').str.strip().str.upper().replace('', '(Blanks)')
@@ -95,10 +102,10 @@ def register_policy_reports(app, get_engine, sql_text, get_memory, scope_fn=None
                     # Neutralize formulas when opening identifiers from untrusted workbooks in Excel.
                     def safe(v):
                         return "'"+v if isinstance(v,str) and v.startswith(('=','+','-','@','\t','\r')) else v
-                    writer.writerow([safe(r.get('source_file','')),r.get('row_number'),safe(r.get('franchise_name',r.get('franchise',''))),month,safe(r.get('relation') or '(Blanks)'),safe(str(policy)),*[r.get(c,0) for c in MONEY]])
+                    writer.writerow([safe(r.get('source_file','')),r.get('row_number'),safe(r.get('franchise_name',r.get('franchise',''))),str(r.get('import_month',month))[:7],safe(r.get('relation') or '(Blanks)'),safe(str(policy)),*[r.get(c,0) for c in MONEY]])
                 if engine is not None and month:
                     with engine.connect() as conn:
-                        query = 'SELECT source_file, row_number, franchise_name, relation, raw_data, ' + ', '.join(MONEY) + ' FROM policydata_detail_raw WHERE ' + ' AND '.join(where) + ' ORDER BY franchise_name, row_number'
+                        query = 'SELECT source_file, row_number, import_month, franchise_name, relation, raw_data, ' + ', '.join(MONEY) + ' FROM policydata_detail_raw WHERE ' + ' AND '.join(where) + ' ORDER BY franchise_name, row_number'
                         for r in conn.execution_options(stream_results=True).execute(sql_text(query),params).mappings(): write_record(dict(r))
                 elif not memory.empty:
                     for r in frame.to_dict('records'): write_record(r)

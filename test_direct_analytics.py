@@ -80,6 +80,8 @@ class DirectAnalyticsTest(unittest.TestCase):
         response=client.get('/direct-data/analytics/record/batch-one/1')
         self.assertEqual(response.status_code,200)
         self.assertIn(b'0012312345678',response.data)
+        franchise=client.get('/direct-data/franchise?franchise=MARTINS+FUNERALS+ERMELO&month=2026-09&date_from=2026-09-10&date_to=2026-09-20')
+        self.assertEqual(franchise.status_code,200);self.assertIn(b'Insured policy products',franchise.data);self.assertIn(b'POL000',franchise.data)
         who['id']=2;self.assertEqual(client.get('/direct-data/analytics/record/batch-one/1').status_code,404)
         who['role']='viewer';self.assertEqual(client.get('/direct-data/analytics').status_code,403)
 

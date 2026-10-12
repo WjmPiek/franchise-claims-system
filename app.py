@@ -776,6 +776,14 @@ def _dashboard_month_filter(monthly, period_view='six_months'):
     and the claim ratio becomes 0%.  We therefore choose the period from months that
     have policy premium data, then include the matching claims for those same months.
     """
+    if period_view=='custom':
+        from flask import has_request_context
+        from period_selection import month_bounds
+        start,end=month_bounds(request.args if has_request_context() else {})
+        if not start:raise ValueError('Choose start and end dates for the custom period.')
+        if monthly is None or monthly.empty:return pd.DataFrame(),start+' to '+end
+        months=pd.to_datetime(monthly['Month'],errors='coerce').dt.strftime('%Y-%m')
+        return monthly.loc[months.between(start,end)].copy(),start+' to '+end+' (receipt months)'
     if monthly is None or monthly.empty:
         return pd.DataFrame(), ''
     base = monthly.copy()
@@ -6134,8 +6142,13 @@ def dashboard(section='dashboard'):
         quick_filter = 'retail_minus_risk'
     if period_view not in {'month', 'six_months', 'year'}:
         period_view = 'month'
-    if dashboard_period_view not in {'month', 'six_months', 'year'}:
+    if dashboard_period_view not in {'month', 'six_months', 'year','custom'}:
         dashboard_period_view = 'six_months'
+    if dashboard_period_view=='custom':
+        from period_selection import month_bounds
+        try:
+            if not month_bounds(request.args)[0]:raise ValueError('Choose start and end dates.')
+        except ValueError as exc:return str(exc),400
     if traffic_filter not in {'All', 'Blue', 'Green', 'Red'}:
         traffic_filter = 'All'
     search_text = request.args.get('q', '').strip()
@@ -6183,10 +6196,22 @@ def dashboard(section='dashboard'):
     compare_view, compare_columns = build_scenario_comparison_view(monthly_view, request.args)
     configured_monthly, configured_periods, _configured_portfolio_all = apply_franchise_config(apply_user_franchise_scope(LAST_RESULT['monthly']), load_franchise_config())
     configured_portfolio = build_portfolio_for_period(configured_monthly, configured_periods, dashboard_period_view)
+    if dashboard_period_view=='custom':
+        from period_selection import month_bounds
+        try:month_bounds(request.args)
+        except ValueError as exc:return str(exc),400
     executive_dashboard = build_executive_dashboard_context(monthly_view, selected=selected, period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month)
-    home_titles={'dashboard':'Dashboard','risk':'Risk & Retail','commissions':'Commissions & Fees','policies':'Policies & Products','claims':'Claims','compare':'Compare','top_franchise':'Top Franchise','imports':'Admin & Imports','reports':'Reports & Downloads','downloads':'Reports & Downloads','graphs':'Graphs','claim_trend':'Claim Amount Comparison Over Time','policy_trend':'Policy / Client Trend','relations':'Policy Relation Counts'}
+    home_titles={'dashboard':'Dashboard','risk':'Risk & Retail','commissions':'Commissions & Fees','policies':'Policies & Products','claims':'Claims','compare':'Compare','top_franchise':'Top Franchise','imports':'Imports','admin':'Admin','commission_detail':'Commission supporting data','reports':'Reports & Downloads','downloads':'Reports & Downloads','graphs':'Graphs','claim_trend':'Claim Amount Comparison Over Time','policy_trend':'Policy / Client Trend','relations':'Policy Relation Counts'}
     topic_frame,_topic_label=_dashboard_month_filter(monthly_view,dashboard_period_view)
     topic_totals={key:_sum_col(topic_frame,key) for key in ('Total Commission','Total Paid Commissions','Total Book Value','BrightRock Month Total')}
+    topic_franchises=[]
+    if not topic_frame.empty:
+        for name,rows in topic_frame.groupby('Franchise',sort=True):
+            topic_franchises.append({'franchise':name,**{key:_sum_col(rows,key) for key in ['Retail Premium','Total Commission','Total Paid Commissions','Total Book Value']}})
+    commission_range_args={}
+    if not topic_frame.empty:
+        first=pd.to_datetime(topic_frame['Month']).min();last=pd.to_datetime(topic_frame['Month']).max()+pd.offsets.MonthEnd(0)
+        commission_range_args={'date_from':first.strftime('%Y-%m-%d'),'date_to':last.strftime('%Y-%m-%d')}
     topic_top=[]
     if not topic_frame.empty:
         grouped=topic_frame.groupby('Franchise',as_index=False).agg({'Retail Premium':'sum','Claims':'sum','Risk Premium':'sum','Policy Qty':'sum'}).sort_values('Retail Premium',ascending=False).head(10)
@@ -6207,14 +6232,15 @@ def dashboard(section='dashboard'):
             headers=['Relation','Description','Current Members'];values=[[row['code'],row['label'],row['count']] for row in executive_dashboard.get('relation_counts',{}).get('rows',[])]
         book=table_workbook(headers,values,home_titles[section]);kind=request.args['download']
         return send_file(workbook_pdf(book,home_titles[section]) if kind=='pdf' else book,as_attachment=True,download_name=section+'.'+kind,mimetype='application/pdf' if kind=='pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    return render_template('dashboard.html', workspace='home', home_section=section,home_title=home_titles.get(section,'Dashboard'),topic_monthly=topic_frame.to_dict('records'),topic_totals=topic_totals,topic_top=topic_top, portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
+    return render_template('dashboard.html', workspace='home', home_section=section,home_title=home_titles.get(section,'Dashboard'),commission_range_args=commission_range_args,topic_franchises=topic_franchises,topic_monthly=topic_frame.to_dict('records'),topic_totals=topic_totals,topic_top=topic_top, portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
 
 @app.route('/overview/<section>',methods=['GET'])
 def overview_page(section):
+    if section=='admin' and (getattr(g,'user',None) or {}).get('role')!='admin':return 'Admin access required.',403
     aliases={'compare':'risk','reports':'downloads','relations':'policies'}
     if section in aliases and not request.args.get('download'):
         return redirect(url_for('overview_page',section=aliases[section],**request.args.to_dict()))
-    if section not in {'risk','commissions','policies','claims','compare','top_franchise','imports','reports','downloads','graphs','claim_trend','policy_trend','relations'}:
+    if section not in {'risk','commissions','policies','claims','compare','top_franchise','imports','admin','commission_detail','reports','downloads','graphs','claim_trend','policy_trend','relations'}:
         return redirect(url_for('dashboard'))
     return dashboard(section)
 
@@ -8614,7 +8640,14 @@ def _select_report_months(monthly, args, default_period='all'):
         raise ValueError('No report data is available for this franchise.')
     selected_month = args.get('report_month') or args.get('premium_analysis_month')
     mode = args.get('report_period') or ('month' if selected_month else default_period)
-    if mode in {'month', 'range'} and (args.get('report_period') or selected_month):
+    if mode=='custom':
+        from period_selection import month_bounds
+        start,end=month_bounds({'date_from':args.get('report_from_date'),'date_to':args.get('report_to_date')})
+        if not start:raise ValueError('Choose report start and end dates.')
+        months=pd.to_datetime(work['Month'],errors='coerce').dt.strftime('%Y-%m')
+        work=work.loc[months.between(start,end)].copy()
+        label=start+' to '+end+' (receipt months)'
+    elif mode in {'month', 'range'} and (args.get('report_period') or selected_month):
         def parse_month(name):
             value = str((selected_month if name == 'report_month' else args.get(name, '')) or '').strip()
             if not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', value):

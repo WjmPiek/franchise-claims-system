@@ -15,6 +15,18 @@ class ProductInsightsTest(DirectAnalyticsTest):
         self.assertEqual(len(self.store.product_insights(1,product='Family')['rows']),1)
         self.save([record(product='Replacement')],batch='new')
         self.assertEqual(self.store.product_insights(1)['products'],['Replacement'])
+    def test_date_range_counts_unique_policies_and_includes_all_payments(self):
+        self.save([record(product='Family',risk='100')],month='2026-08',batch='aug')
+        self.save([record(product='Family',risk='120')],month='2026-09',batch='sep')
+        result=self.store.product_insights(1,start='2026-08',end='2026-09')
+        self.assertEqual(result['top'][0]['value'],1)
+        self.assertEqual(result['rows'][0]['paid_months'],2)
+        self.assertEqual(result['rows'][0]['risk'],220)
+        overview,rows,count,page=self.store.detail(1,'all','source',start='2026-09',end='2026-09')
+        self.assertEqual(count,1);self.assertEqual(rows[0]['month'],'2026-09')
+        self.assertEqual(overview['categories']['source']['original_risk'],120)
+        self.assertEqual(self.store.product_insights(2,start='2026-08',end='2026-09')['rows'],[])
+
     def test_top_ten_and_single_month_scope(self):
         self.save([record(franchise=f'Branch {i}',policy=f'P{j}',product='Family',cover='20000') for i in range(12) for j in range(i+1)])
         self.save([record(franchise='Old Branch',product='Old')],month='2026-08',batch='old')

@@ -46,6 +46,24 @@ class DashboardSectionsTest(unittest.TestCase):
                 response=self.client.get('/overview/'+section,follow_redirects=True);self.assertEqual(response.status_code,200,response.data[:500]);self.assertTrue(text in response.data,section)
         self.assertIn(b'Second date',self.client.get('/overview/compare',follow_redirects=True).data)
         self.assertIn(b'Difference',self.client.get('/overview/compare',follow_redirects=True).data)
+    def test_custom_period_commission_groups_and_admin_separation(self):
+        args='?dashboard_period_view=custom&date_from=2026-09-12&date_to=2026-10-18'
+        with claims.app.test_request_context('/overview/commissions'+args):
+            result,label=claims._dashboard_month_filter(claims.LAST_RESULT['monthly'],'custom')
+            self.assertEqual(len(result),2)
+            self.assertEqual(set(result.Month.dt.month),{9,10})
+        page=self.client.get('/overview/commissions'+args)
+        self.assertEqual(page.status_code,200)
+        self.assertNotIn(b'Commission calculation',page.data)
+        self.assertIn(b'/overview/commission_detail?',page.data)
+        self.assertIn(b'2026-09-01',page.data)
+        self.assertIn(b'Commission calculation',self.client.get('/overview/admin').data)
+        self.assertIn(b'Import complete Direct data',self.client.get('/overview/imports').data)
+        self.assertEqual(self.client.get('/overview/graphs?dashboard_period_view=custom&date_from=2026-10-01&date_to=2026-09-01').status_code,400)
+        for kind in ('view','download'):
+            result=self.client.get('/export?report_type=commissions&report_period=custom&report_from_date=2026-09-12&report_to_date=2026-10-18&report_format='+kind)
+            self.assertEqual(result.status_code,200);result.close()
+
     def test_comparison_values_dates_and_missing_prior_data(self):
         source=claims.LAST_RESULT['monthly'];current=source[source.Month==pd.Timestamp('2026-10-01')]
         analysis=claims.build_premium_parlour_analysis(source,current,'Example Franchise')
