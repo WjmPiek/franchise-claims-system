@@ -4875,7 +4875,7 @@ def load_logged_in_user():
             return '<h1>Maintenance Mode</h1><p>The Martins Direct analytics system is temporarily unavailable while maintenance is being performed.</p>', 503
     if endpoint in PUBLIC_ENDPOINTS or endpoint.startswith('static'):
         return None
-    ajax_import = endpoint == 'import_session' or (endpoint == 'dashboard' and request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+    ajax_import = endpoint == 'import_session' or (endpoint in {'dashboard', 'direct_data'} and request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest')
     if g.user is None:
         if ajax_import:
             return jsonify(ok=False, error='Your login session expired. Sign in again, then retry the failed and remaining files. Completed files stay saved.', login_url=url_for('login', next=url_for('dashboard'))), 401
@@ -10050,6 +10050,9 @@ def admin_policydata_current_members_status():
 
 # Start daily background scheduler only when the Flask server actually starts.
 # This avoids silent startup hangs during import/module loading.
+from direct_data import register_direct_data
+register_direct_data(app, EXPORT_DIR)
+
 from policy_reports import register_policy_reports
 register_policy_reports(app, get_db_engine, text, lambda: LAST_POLICY_DETAIL_DF, apply_user_franchise_scope)
 

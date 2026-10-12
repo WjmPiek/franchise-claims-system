@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Direct Data Preparation</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+<style>body{margin:0;background:#f4f6fa;color:#18202a;font:15px Arial,sans-serif}main{max-width:1040px;margin:30px auto;padding:24px;background:white;border-radius:12px}h1{margin-top:0}label{display:block;margin:16px 0 6px;font-weight:bold}input,select,button{font:inherit;padding:10px;max-width:100%;box-sizing:border-box}button{background:#6950a1;color:white;border:0;border-radius:6px;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px}.note{color:#596675;line-height:1.5}#status{padding:16px;background:#edf1f7;margin-top:18px;white-space:pre-line}#links a{display:block;padding:10px;border-bottom:1px solid #ddd}#status:empty{display:none}</style>
+</head><body><main><a href="{{ url_for('dashboard') }}">Back to Claims</a><h1>Direct Data Preparation</h1>
+<p class="note">Prepare the original Direct CSV/text export or converted Excel file. Dates become short dates, IDs and phone numbers stay text, and Risk/Retail become numbers. Downloads are separate from the Claims imports.</p>
+<form id="directForm" method="post" enctype="multipart/form-data" action="{{ url_for('direct_data') }}">
+<label for="directFile">Monthly source file</label><input id="directFile" name="direct_file" type="file" accept=".csv,.Csv,.txt,.xlsx" required>
+<div class="grid">
+<div><label for="encoding">CSV text encoding</label><select id="encoding" name="encoding"><option value="auto">Auto (UTF-8 / Direct OEM)</option><option value="cp850">Direct OEM (CP850)</option><option value="utf-8-sig">UTF-8</option><option value="cp1252">Windows-1252</option></select></div>
+<div><label for="excelSheet">Excel worksheet (optional)</label><input id="excelSheet" name="excel_sheet" placeholder="Auto-detect the Direct data sheet"></div>
+</div>
+<p class="note">Faithnet: R40 on MEM 1+ products and R10 on other MEM products, once for MPIA 1 or 2 and doubled above MPIA 2. Vouchers: R6.50  x  MPIA to the supplier. AUL: each policy follows its main-member plan. R1 and 2.1% apply to MEM rows only, after Faithnet's adjustment. The coupon product is excluded from every insurer file. Pretoria North, Hammanskraal and Soshanguve are combined. Other listed branches are separate; the remaining branches go to AUL.</p>
+<button id="prepare">Prepare downloads</button></form>
+<div id="status" role="status" aria-live="polite"></div><div id="links"></div>
+<p class="note">Vouchers contains only the eleven agreed supplier fields. Converted Source and Reconciliation are for your own checks. Download individual insurer files for the relevant insurer. Download links remain available for 12 hours and may expire sooner if the server is redeployed.</p>
+</main><script>
+const form=document.getElementById('directForm'),status=document.getElementById('status'),links=document.getElementById('links'),button=document.getElementById('prepare');
+form.addEventListener('submit',async event=>{
+ event.preventDefault();button.disabled=true;links.replaceChildren();status.textContent='Checking your login…';
+ let timer;
+ try{
+  const check=await fetch('{{ url_for("import_session") }}',{cache:'no-store',credentials:'same-origin'});
+  const auth=await check.json();if(!check.ok||!auth.ok)throw Error(auth.error||'Please sign in again.');
+  timer=setInterval(()=>fetch('{{ url_for("import_session") }}',{cache:'no-store',credentials:'same-origin'}).catch(()=>{}),60000);
+  status.textContent='Reading source data and preparing the downloads. Large files can take a few minutes. Please keep this tab open.';
+  const response=await fetch(form.action,{method:'POST',body:new FormData(form),headers:{'X-Requested-With':'XMLHttpRequest','X-Import-Progress':'stream'},credentials:'same-origin'});
+  let result;
+  if((response.headers.get('Content-Type')||'').includes('application/x-ndjson')){
+   const reader=response.body.getReader(),decoder=new TextDecoder();let pending='',stage='Preparing downloads';
+   while(true){const chunk=await reader.read();pending+=decoder.decode(chunk.value||new Uint8Array(),{stream:!chunk.done});const lines=pending.split('\n');pending=lines.pop();
+    for(const line of lines){if(!line.trim())continue;const update=JSON.parse(line);
+     if(update.type==='progress')stage=update.stage+(update.current!=null?' — '+Number(update.current).toLocaleString()+(update.total?' / '+Number(update.total).toLocaleString():'')+' rows':'');
+     if(update.type==='done')result=update;
+     status.textContent=stage+'\nElapsed: '+Math.floor((update.elapsed||0)/60)+'m '+((update.elapsed||0)%60)+'s.';
+    }
+    if(chunk.done)break;
+   }
+  }else result=await response.json();
+  if(!response.ok||!result?.ok)throw Error(result?.error||'Preparation was not confirmed.');
+  status.textContent=`Prepared ${Number(result.source.rows).toLocaleString()} source rows. Original Risk: ${result.source.risk}. Retail: ${result.source.retail}.\nReview items: ${result.issues}. Check Reconciliation and Review before sending files.`;
+  for(const file of result.files){const a=document.createElement('a');a.textContent=file;a.href='{{ url_for("direct_download",job="JOB",name="FILE") }}'.replace('JOB',encodeURIComponent(result.job)).replace('FILE',encodeURIComponent(file));links.appendChild(a);}
+ }catch(error){status.textContent=error.message||'Connection interrupted. Preparation was not confirmed.';}
+ finally{clearInterval(timer);button.disabled=false;}
+});
+</script></body></html>

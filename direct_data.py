@@ -1,0 +1,452 @@
+"""Independent preparation of Direct exports; never writes Claims premium tables."""
+import csv
+import io
+import json
+import re
+import sqlite3
+import shutil
+import threading
+import uuid
+import zipfile
+from collections import defaultdict
+from contextlib import closing
+from datetime import datetime, date, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from pathlib import Path
+from flask import g, request, render_template, send_file, jsonify, session
+from openpyxl import load_workbook
+import xlsxwriter
+from import_progress import report, active, stream_import
+
+HEADERS = ['Franchise', 'Group', 'Policy Number', 'Surname', 'Full Names', 'ID Number',
+           'Date of Birth', 'Passport Nr', 'Relation', 'Inception Date', 'Cover', 'Product',
+           'Risk', 'Retail', 'Address', 'Contact Number', 'System REF', 'MPIA', 'Area',
+           'Suburb', 'Code', 'Agent Name and Policy']
+VOUCHER_PRODUCT = 'GROCERY DISCOUNT COUPONS FOR MARTINS CLIENTS'
+VOUCHER_HEADERS = ['Franchise', 'Policy Number', 'Surname', 'Full Names', 'Date of Birth',
+                   'Relation', 'Inception Date', 'Product', 'Fee', 'Contact Number', 'MPIA']
+EXCEPTIONS = ['Alberton', 'Bethlehem', 'Carletonville', 'Frankfort', 'Reitz',
+              'Rustenburg', 'Katlehong']
+PRETORIA = {'PRETORIANOORD', 'PRETORIANORTH', 'HAMMANSKRAAL', 'SOSHANGUVE'}
+GROUP_NAME = 'Pretoria North Group'
+LOCK = threading.Lock()
+
+def norm(value):
+    return re.sub(r'[^A-Z0-9]', '', str(value or '').upper())
+
+def branch_key(value):
+    key = norm(value)
+    for prefix in ('MARTINSFUNERALS', 'MARTINSFUNERAL', 'MARTINS'):
+        if key.startswith(prefix):
+            return key[len(prefix):]
+    return key
+
+def allocation(franchise):
+    key = branch_key(franchise)
+    if key in PRETORIA:
+        return GROUP_NAME
+    if key in {'CARLETONVILLEKEMPTONPARK', 'CARLETONVILLEANDKEMPTONPARK'}:
+        return 'Carletonville'
+    for name in EXCEPTIONS:
+        if key == norm(name):
+            return name
+    return 'AUL'
+
+def number(value, label, row_number, blank_zero=True):
+    text = str(value if value is not None else '').strip().replace('\u00a0', '').replace(' ', '')
+    if text.upper() in {'', 'NULL'} and blank_zero:
+        return Decimal(0)
+    text = re.sub(r'^[Rr]', '', text)
+    if ',' in text and '.' not in text:
+        text = text.replace(',', '.')
+    elif ',' in text:
+        text = text.replace(',', '')
+    if text.startswith('(') and text.endswith(')'):
+        text = '-' + text[1:-1]
+    try:
+        value = Decimal(text)
+        if not value.is_finite():
+            raise InvalidOperation
+        return value
+    except InvalidOperation:
+        raise ValueError(f'Excel/source row {row_number}: {label} is not a valid number.') from None
+
+def cents(value):
+    return value.quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+
+def short_date(value, label, row_number):
+    if isinstance(value, (datetime, date)):
+        return value.strftime('%Y-%m-%d')
+    text = str(value or '').replace('\x00', '').strip()
+    if text.upper() in {'', 'NULL'}:
+        return ''
+    for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%d/%m/%Y', '%d-%m-%Y'):
+        try:
+            return datetime.strptime(text.split(' ')[0], fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            pass
+    raise ValueError(f'Excel/source row {row_number}: {label} is not a valid date.')
+
+def text_value(value):
+    if value is None:
+        return ''
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    text = str(value).replace('\x00', '').strip()
+    return '' if text.upper() == 'NULL' else text
+
+def mobile_number(value):
+    text = text_value(value)
+    digits = re.sub(r'\D', '', text)
+    if re.fullmatch(r'[678]\d{8}', digits):
+        return '0' + digits
+    if re.fullmatch(r'27[678]\d{8}', digits):
+        return '0' + digits[2:]
+    if re.fullmatch(r'0[678]\d{8}', digits):
+        return digits
+    return text
+
+def source_rows(path, encoding='auto', sheet_name=None):
+    """Headerless Direct text uses the verified 22-column example order."""
+    path = Path(path)
+    if path.suffix.lower() == '.xlsx':
+        book = load_workbook(path, read_only=True, data_only=True)
+        try:
+            candidates = [s for s in book if s.max_column == 22]
+            if sheet_name:
+                if sheet_name not in book.sheetnames:
+                    raise ValueError('The selected Excel worksheet does not exist.')
+                sheet = book[sheet_name]
+            elif len(candidates) == 1:
+                sheet = candidates[0]
+            else:
+                raise ValueError('Specify the original Direct worksheet name; more than one data sheet was found.')
+            for n, values in enumerate(sheet.iter_rows(values_only=True), 1):
+                yield n, list(values)
+        finally:
+            book.close()
+    else:
+        if encoding == 'auto':
+            encoding = 'utf-8-sig'
+            try:
+                with path.open(encoding=encoding) as handle:
+                    while handle.read(65536):
+                        pass
+            except UnicodeDecodeError:
+                # Direct's OEM export contains bytes invalid in Windows-1252.
+                encoding = 'cp850'
+        with path.open(encoding=encoding, newline='') as handle:
+            sample = handle.read(65536)
+            handle.seek(0)
+            if not sample.strip():
+                raise ValueError('The source file is empty.')
+            first = sample.splitlines()[0]
+            delimiter = '\t' if '\t' in first else ';' if first.count(';') > first.count(',') else ','
+            for n, values in enumerate(csv.reader(handle, delimiter=delimiter, strict=True), 1):
+                yield n, values
+
+def stage_source(path, conn, encoding='auto', sheet_name=None):
+    conn.execute('CREATE TABLE rows (n INTEGER PRIMARY KEY, branch TEXT, policy TEXT, relation TEXT, product TEXT, voucher INTEGER, destination TEXT, plan INTEGER, risk TEXT, retail TEXT, mpia TEXT, values_json TEXT)')
+    indices = list(range(22))
+    count = 0
+    totals = defaultdict(lambda: Decimal(0))
+    report('Reading and converting Direct source rows')
+    for n, values in source_rows(path, encoding, sheet_name):
+        if not any(text_value(v) for v in values):
+            continue
+        if n == 1 and norm(values[0]) == 'FRANCHISE':
+            keys = [norm(v).replace('INSEPTION', 'INCEPTION') for v in values]
+            try:
+                indices = [keys.index(norm(h)) for h in HEADERS]
+            except ValueError:
+                raise ValueError('The source headers do not match the October Direct example.') from None
+            continue
+        if len(values) != 22:
+            raise ValueError(f'Source row {n} has {len(values)} columns; the Direct layout needs 22.')
+        values = [values[i] for i in indices]
+        row = [text_value(v) for v in values]
+        if not row[0] or norm(row[0]) in {'TOTAL', 'GRANDTOTAL'}:
+            raise ValueError(f'Source row {n} has no franchise or is a total row. Export source detail only.')
+        for i in (6, 9):
+            row[i] = short_date(values[i], HEADERS[i], n)
+        risk, retail = (number(values[i], HEADERS[i], n) for i in (12, 13))
+        mpia = number(values[17], 'MPIA', n, blank_zero=False)
+        cover = number(values[10], 'Cover', n)
+        row[10], row[12], row[13], row[17] = str(cover), str(risk), str(retail), str(mpia)
+        row[8] = row[8].upper()
+        voucher = norm(row[11]) == norm(VOUCHER_PRODUCT)
+        # Product amount takes precedence over a dependent's smaller individual Cover.
+        product_plan = bool(re.search(r'(?<!\d)(?:40\s*000|50\s*000)(?!\d)', row[11]))
+        plan = int(product_plan or (row[8] == 'MEM' and cover in (40000, 50000)))
+        conn.execute('INSERT INTO rows VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                     (n, branch_key(row[0]), row[2], row[8], row[11], int(voucher), allocation(row[0]),
+                      plan, str(risk), str(retail), str(mpia), json.dumps(row, ensure_ascii=False)))
+        totals['risk'] += risk
+        totals['retail'] += retail
+        count += 1
+        if count % 2000 == 0:
+            report('Reading and converting Direct source rows', count)
+    if not count:
+        raise ValueError('The source has no data rows.')
+    conn.execute('CREATE INDEX policy_lookup ON rows(branch,policy)')
+    conn.commit()
+    report('Direct source read', count, count)
+    return {'rows': count, 'risk': totals['risk'], 'retail': totals['retail']}
+
+def row_fees(row, faithnet_basis, voucher_basis):
+    """Apply chosen timing only to this separate preparation workflow."""
+    risk, mpia = Decimal(row[12]), Decimal(row[17])
+    is_mem = row[8] == 'MEM'
+    deduction = Decimal(0)
+    if branch_key(row[0]) in {'FAITHNET', 'FAITHNETSA'} and is_mem:
+        rate = Decimal(40 if re.search(r'\b1\s*\+', row[11]) else 10)
+        multiplier = mpia if faithnet_basis == 'mpia' else Decimal(2) if faithnet_basis == 'over_two_double' and mpia > 2 else Decimal(1)
+        deduction = rate * multiplier
+    adjusted = cents(risk - deduction)
+    r1 = cents(mpia) if is_mem else Decimal(0)
+    adv = cents(max(adjusted - r1, Decimal(0)) * Decimal('.021')) if is_mem else Decimal(0)
+    after_r1 = max(adjusted - r1, Decimal(0)) if is_mem else risk
+    net = cents(after_r1 - adv) if is_mem else risk
+    voucher_multiplier = mpia if voucher_basis == 'mpia' else Decimal(1)
+    supplier = cents(Decimal('6.50') * voucher_multiplier)
+    retained = cents(risk - supplier)
+    return deduction, r1, adv, net, supplier, retained
+
+class SheetWriter:
+    def __init__(self, path, sheet, headers):
+        self.book = xlsxwriter.Workbook(str(path), {'constant_memory': True, 'strings_to_formulas': False, 'strings_to_urls': False})
+        self.sheet = self.book.add_worksheet(sheet[:31])
+        self.headers = headers
+        self.date_fmt = self.book.add_format({'num_format': 'dd/mm/yyyy'})
+        self.num_fmt = self.book.add_format({'num_format': '0.00########'})
+        self.count_fmt = self.book.add_format({'num_format': '#,##0'})
+        self.text_fmt = self.book.add_format({'num_format': '@'})
+        head = self.book.add_format({'bold': True, 'bg_color': '#e8edf5', 'text_wrap': True})
+        self.sheet.write_row(0, 0, headers, head)
+        self.sheet.set_row(0, 32)
+        for i, name in enumerate(headers):
+            self.sheet.set_column(i, i, {'Product': 60, 'Franchise': 48, 'Full Names': 36,
+                                        'Surname': 26, 'Date of Birth': 16, 'Inception Date': 16}.get(name, 22))
+        self.sheet.freeze_panes(1, 3)
+        self.n = 1
+
+    def append(self, values):
+        for i, value in enumerate(values):
+            if value is None or value == '':
+                continue
+            name = self.headers[i]
+            if name in ('Date of Birth', 'Inception Date'):
+                self.sheet.write_datetime(self.n, i, datetime.strptime(str(value), '%Y-%m-%d'), self.date_fmt)
+            elif name in ('Risk', 'Retail', 'Cover', 'MPIA', 'Fee', 'Original Risk', 'Faithnet Deduction', 'R1 Fee', 'ADV Fee', 'Payover') or isinstance(value, (Decimal, int, float)):
+                self.sheet.write_number(self.n, i, float(value), self.count_fmt if name in ('Rows','MPIA') else self.num_fmt)
+            else:
+                self.sheet.write_string(self.n, i, str(value), self.text_fmt)
+        self.n += 1
+
+    def close(self):
+        self.sheet.autofilter(0, 0, max(self.n - 1, 1), len(self.headers) - 1)
+        self.book.close()
+
+    def note(self, text):
+        fmt = self.book.add_format({'text_wrap': True, 'valign': 'top', 'font_color': '#596675'})
+        self.sheet.merge_range(self.n, 0, self.n, len(self.headers) - 1, text, fmt)
+        self.sheet.set_row(self.n, 32)
+        self.n += 1
+
+def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double', voucher_basis='mpia', plan_basis='policy'):
+    if faithnet_basis not in ('row', 'mpia', 'over_two_double') or voucher_basis not in ('row', 'mpia') or plan_basis not in ('policy', 'row'):
+        raise ValueError('Choose the fee timing and AUL policy split before preparing downloads.')
+    if plan_basis == 'policy':
+        missing = conn.execute("SELECT MIN(n) FROM rows WHERE destination='AUL' AND voucher=0 AND TRIM(policy)=''").fetchone()[0]
+        if missing:
+            raise ValueError(f'Source row {missing}: missing policy number prevents the AUL policy split.')
+        conflict = conn.execute("SELECT MIN(first_row) FROM (SELECT MIN(n) AS first_row FROM rows WHERE destination='AUL' AND voucher=0 AND relation='MEM' GROUP BY branch,policy HAVING MIN(plan)<>MAX(plan))").fetchone()[0]
+        if conflict:
+            raise ValueError(f'Source row {conflict}: one AUL policy has conflicting MEM plans. Resolve it before export.')
+    folder = Path(folder)
+    folder.mkdir(exist_ok=True, parents=True)
+    writers = {}
+    paths = {}
+    period = re.search(r'(\d{8}_to_\d{8})', source_name)
+    prefix = 'PolicyData_' + period.group(1) if period else 'Direct'
+    labels = {'AUL Plan 2 New': 'Martins Funeral Plan 2 (New)', 'AUL Historic': 'Martins Funeral Plan (Historic)'}
+    def writer(key, headers=HEADERS):
+        if key not in writers:
+            path = folder / (prefix + '_' + labels.get(key, key) + '.xlsx')
+            paths[key] = path
+            writers[key] = SheetWriter(path, key, headers)
+        return writers[key]
+    for key in EXCEPTIONS + [GROUP_NAME, 'AUL All Data', 'AUL Plan 2 New', 'AUL Historic', 'Vouchers', 'Converted Source']:
+        writer(key, VOUCHER_HEADERS if key == 'Vouchers' else HEADERS)
+    # Index only non-voucher MEM rows. Never match across franchises.
+    phones = defaultdict(set)
+    policy_plan = defaultdict(set)
+    available_plan = defaultdict(set)
+    for branch, policy, is_voucher, rel, plan, data in conn.execute('SELECT branch,policy,voucher,relation,plan,values_json FROM rows'):
+        row = json.loads(data)
+        if not is_voucher and policy:
+            available_plan[(branch, policy)].add(bool(plan))
+        if not is_voucher and rel == 'MEM' and policy:
+            if row[15]: phones[(branch, policy)].add(mobile_number(row[15]))
+            policy_plan[(branch, policy)].add(bool(plan))
+    totals = defaultdict(lambda: [0, *[Decimal(0) for _ in range(7)]])
+    aul_details = defaultdict(lambda: [0, *[Decimal(0) for _ in range(7)]])
+    issues = []
+    source_count = conn.execute('SELECT COUNT(*) FROM rows').fetchone()[0]
+    processed = 0
+    for n, branch, policy, rel, is_voucher, dest, plan, data in conn.execute('SELECT n,branch,policy,relation,voucher,destination,plan,values_json FROM rows ORDER BY n'):
+        row = json.loads(data)
+        writer('Converted Source').append(row)
+        risk, retail = Decimal(row[12]), Decimal(row[13])
+        deduction, r1, adv, net, supplier, retained = row_fees(row, faithnet_basis, voucher_basis)
+        if is_voucher:
+            # Supplier receives precisely the eleven approved fields, never IDs/risk/audit data.
+            contacts = phones.get((branch, policy), set())
+            phone = next(iter(contacts)) if len(contacts) == 1 else mobile_number(row[15]) if len(contacts) == 0 else ''
+            if len(contacts) > 1:
+                issues.append([n, row[0], policy, 'Conflicting MEM phone numbers; voucher contact left blank.'])
+            elif not phone:
+                issues.append([n, row[0], policy, 'No contact number for voucher.'])
+            elif not re.fullmatch(r'0[678]\d{8}', phone):
+                issues.append([n, row[0], policy, 'Voucher contact is not a recognised South African mobile number.'])
+            expected = cents(Decimal('8.50') * (Decimal(row[17]) if voucher_basis == 'mpia' else Decimal(1)))
+            if risk != expected:
+                issues.append([n, row[0], policy, 'Voucher risk differs from 8.50 under selected fee timing.'])
+            writer('Vouchers', VOUCHER_HEADERS).append([row[0], row[2], row[3], row[4], row[6], row[8], row[9], row[11], supplier, phone, row[17]])
+            key = 'Vouchers'
+            fees = (Decimal(0), Decimal(0), Decimal(0), supplier, retained)
+        else:
+            prepared = row.copy()
+            prepared[12] = str(net)
+            writer('AUL All Data' if dest == 'AUL' else dest).append(prepared)
+            if dest == 'AUL':
+                if plan_basis == 'row':
+                    plan = int(Decimal(row[10]) in (40000, 50000))
+                if plan_basis == 'policy':
+                    flags = policy_plan.get((branch, policy), set()) if policy else set()
+                    if len(flags) > 1:
+                        raise ValueError(f'Source row {n}: one AUL policy has conflicting MEM plans. Resolve it before export.')
+                    if flags:
+                        plan = int(next(iter(flags)))
+                    elif not policy:
+                        raise ValueError(f'Source row {n}: missing policy number prevents the AUL policy split.')
+                    else:
+                        plan = int(True in available_plan.get((branch, policy), set()))
+                        issues.append([n, row[0], policy, 'No MEM row in this source; policy split follows available product labels.'])
+                split = 'AUL Plan 2 New' if plan else 'AUL Historic'
+                writer(split).append(prepared)
+                t = aul_details[split]
+                t[0] += 1
+                for i, value in enumerate((risk, retail, deduction, r1, adv, net, Decimal(0)), 1):
+                    t[i] += value
+            key = dest
+            fees = (deduction, r1, adv, net, Decimal(0))
+        t = totals[key]
+        t[0] += 1
+        for i, value in enumerate((risk, retail, *fees), 1):
+            t[i] += value
+        processed += 1
+        if processed % 2000 == 0:
+            report('Preparing insurer and voucher reports', processed, source_count)
+    summary_headers = ['Destination', 'Rows', 'Original Risk', 'Retail', 'Faithnet Deduction', 'R1 Fee', 'ADV Fee', 'Payover', 'Voucher Retained']
+    summary = writer('Reconciliation', summary_headers)
+    summary.note('Source file: ' + source_name)
+    summary.note('Faithnet: MEM 1+ products 40.00; other MEM products 10.00; once at MPIA 1/2 and doubled above 2.' if faithnet_basis == 'over_two_double' else 'Faithnet timing: ' + faithnet_basis)
+    summary.note('Voucher supplier fee: 6.50 x MPIA; retained amount equals source risk minus the supplier fee.' if voucher_basis == 'mpia' else 'Voucher supplier fee: 6.50 once per row.')
+    summary.note('AUL split: whole policies follow the MEM plan; 40,000/50,000 plans are Plan 2 (New). All remaining plans are Historic.')
+    for key, values in sorted(totals.items()):
+        summary.append([key, *values])
+    summary.append(['TOTAL', *[sum(v[i] for v in totals.values()) for i in range(8)]])
+    summary.note('Risk rounding / zero-floor adjustment: ' + str(sum(v[1] - sum(v[3:]) for v in totals.values())))
+    summary.note('The risk difference shows fee rounding and the existing MEM zero floor. Original Risk and Retail retain source precision. All rows, including vouchers, are counted once in TOTAL. Review contains unmatched or ambiguous source records.')
+    aul = writer('AUL Totals', summary_headers)
+    aul.append(['AUL', *totals['AUL']])
+    for key in ('AUL Plan 2 New', 'AUL Historic'):
+        # The two loading files partition AUL All Data; counts are visible here.
+        aul.append([key, *aul_details[key]])
+    issue_writer = writer('Review', ['Source Row', 'Franchise', 'Policy Number', 'Issue'])
+    for issue in issues:
+        issue_writer.append(issue)
+    for w in writers.values():
+        w.close()
+    report('Creating the download ZIP', source_count, source_count)
+    archive = folder / 'Direct_reports.zip'
+    with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as pack:
+        for path in paths.values():
+            pack.write(path, path.name)
+    return paths, archive, totals, issues
+
+def register_direct_data(app, export_dir):
+    root = Path(export_dir) / 'direct_preparation'
+    root.mkdir(parents=True, exist_ok=True)
+
+    def cleanup():
+        for folder in root.iterdir():
+            if (folder.is_dir() and not folder.is_symlink() and re.fullmatch(r'[a-f0-9]{32}', folder.name)
+                    and folder.resolve().parent == root.resolve()
+                    and datetime.now() - datetime.fromtimestamp(folder.stat().st_mtime) > timedelta(hours=12)):
+                shutil.rmtree(folder)
+
+    @app.route('/direct-data', methods=['GET', 'POST'])
+    def direct_data():
+        user = getattr(g, 'user', None) or {}
+        if user.get('role') != 'admin':
+            return 'Admin access required.', 403
+        if request.method == 'GET':
+            return render_template('direct_data.html')
+        if request.headers.get('X-Import-Progress') == 'stream' and not active():
+            authenticated_user = dict(user)
+            def run_preparation():
+                g.user = authenticated_user
+                return direct_data()
+            return stream_import(run_preparation)
+        if not LOCK.acquire(blocking=False):
+            return jsonify(ok=False, error='Another Direct preparation is running. Wait for it to finish.'), 409
+        folder = root / uuid.uuid4().hex
+        folder.mkdir()
+        try:
+            cleanup()
+            upload = request.files.get('direct_file')
+            if not upload or not upload.filename:
+                raise ValueError('Select a Direct CSV, text file or converted Excel workbook.')
+            suffix = Path(upload.filename).suffix.lower()
+            if suffix not in ('.csv', '.txt', '.xlsx'):
+                raise ValueError('Use CSV, TXT or XLSX.')
+            path = folder / ('source' + suffix)
+            upload.save(path)
+            with closing(sqlite3.connect(folder / 'rows.db')) as conn:
+                source = stage_source(path, conn, request.form.get('encoding', 'auto'), request.form.get('excel_sheet') or None)
+                paths, archive, totals, issues = prepare_outputs(conn, folder, Path(upload.filename).name,
+                    'over_two_double', 'mpia', 'policy')
+            path.unlink()
+            (folder / 'rows.db').unlink()
+            # Keep no identifiers in cookies. Downloads require this admin's session and opaque job ID.
+            (folder / 'owner.json').write_text(json.dumps({'owner': user.get('id'), 'created': datetime.now().isoformat()}))
+            (folder / 'files.json').write_text(json.dumps([p.name for p in paths.values()] + [archive.name]))
+            source_json = {k: str(v) if isinstance(v, Decimal) else v for k, v in source.items()}
+            return jsonify(ok=True, source=source_json, issues=len(issues), job=folder.name,
+                           files=[p.name for p in paths.values()] + [archive.name])
+        except (ValueError, csv.Error, UnicodeError) as exc:
+            return jsonify(ok=False, error=str(exc)), 400
+        except Exception:
+            app.logger.exception('Direct data preparation failed')
+            return jsonify(ok=False, error='Direct preparation failed; check the server logs.'), 500
+        finally:
+            LOCK.release()
+
+    @app.get('/direct-data/download/<job>/<name>')
+    def direct_download(job, name):
+        user = getattr(g, 'user', None) or {}
+        if user.get('role') != 'admin' or not re.fullmatch(r'[a-f0-9]{32}', job):
+            return 'Not available.', 404
+        folder = root / job
+        owner = folder / 'owner.json'
+        if not owner.exists():
+            return 'Prepare the source again; these temporary downloads have expired.', 404
+        metadata = json.loads(owner.read_text())
+        if metadata['owner'] != user.get('id') or datetime.now() - datetime.fromisoformat(metadata['created']) > timedelta(hours=12):
+            return 'Not available.', 404
+        allowed = json.loads((folder / 'files.json').read_text()) if (folder / 'files.json').exists() else []
+        if name not in allowed:
+            return 'Not available.', 404
+        return send_file(folder / name, as_attachment=True, download_name=name, max_age=0)

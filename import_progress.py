@@ -36,7 +36,7 @@ def stream_import(view):
         try:
             response = app.make_response(view())
             result = response.get_json(silent=True) or {}
-            updates.put({'type': 'done', 'ok': response.status_code < 300 and result.get('ok') is True,
+            updates.put({**result, 'type': 'done', 'ok': response.status_code < 300 and result.get('ok') is True,
                          'error': result.get('error', 'The server did not confirm a successful import.')})
         except Exception as exc:
             app.logger.error('Streamed Excel import failed (%s)', type(exc).__name__)
