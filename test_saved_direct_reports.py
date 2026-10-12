@@ -68,9 +68,14 @@ class SavedDirectReportsTest(unittest.TestCase):
         self.assertIn('Direct_reports.zip',result.json['files'])
         downloaded=client.get('/direct-data/download/'+result.json['job']+'/Direct_reports.zip')
         self.assertEqual(downloaded.status_code,200);downloaded.close()
+        excel=next(name for name in result.json['files'] if name.endswith('Vouchers.xlsx'))
+        report='/direct-data/report/'+result.json['job']+'/'+excel
+        self.assertEqual(client.get(report).status_code,200)
+        pdf=client.get(report+'?format=pdf');self.assertEqual(pdf.status_code,200);self.assertTrue(pdf.data.startswith(b'%PDF'));pdf.close()
         self.assertIn(b'category=r1',client.get('/direct-data/analytics?category=r1').data)
         who['id']=2;self.assertNotIn(b'October.csv',client.get('/direct-data/reports').data)
         self.assertEqual(client.post('/direct-data/reports/'+batch).status_code,400)
+        self.assertEqual(client.get(report).status_code,404)
         who['role']='viewer';self.assertEqual(client.get('/direct-data/reports').status_code,403)
 
 if __name__=='__main__':unittest.main()

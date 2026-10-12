@@ -74,6 +74,15 @@ def register_policy_reports(app, get_engine, sql_text, get_memory, scope_fn=None
                 delta = external - Decimal(str(totals[key])).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
                 controls[field] = {'value':external, 'difference':delta if groups else None, 'status':('Balanced' if delta == 0 else 'Difference to investigate') if groups else 'No imported rows; comparison unavailable'}
         download = request.args.get('download')
+        if download in ('xlsx','pdf'):
+            from report_files import table_workbook,workbook_pdf
+            headers=['Month','Franchise','Relation','Rows','Risk before fees','Retail','R1 fee','2.1% fee','Net risk']
+            values=[[month,franchise,group['relation'],group['rows'],*[Decimal(str(group[c])) for c in MONEY]] for group in groups]
+            values.append([month,franchise,'TOTAL',totals['rows'],*[totals[c] for c in MONEY]])
+            checks=[[key,control['value'],totals['original_risk_premium' if key=='external_risk' else 'retail_premium'],control['difference'],control['status']] for key,control in controls.items()]
+            book=table_workbook(headers,values,'Policy Relations',[('Reconciliation',['Control','Other system','Imported','Difference','Status'],checks)] if checks else None)
+            if download=='pdf':return send_file(workbook_pdf(book,'Policy Relations - '+month),as_attachment=True,download_name=f'policy_relations_{month}.pdf',mimetype='application/pdf')
+            return send_file(book,as_attachment=True,download_name=f'policy_relations_{month}.xlsx',mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         if download:
             output = io.StringIO()
             writer = csv.writer(output)
@@ -102,3 +111,4 @@ def register_policy_reports(app, get_engine, sql_text, get_memory, scope_fn=None
             return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')),as_attachment=True,download_name=f'policy_{month}_{download}.csv',mimetype='text/csv')
         return render_template('policy_reports.html', groups=groups,totals=totals,controls=controls,months=months,franchises=franchises,month=month,franchise=franchise,relation=relation,
             relations=['DEP','DEPEXTRACHILD','EXT','MEM','MEMBEN','SPS','(Blanks)','EXTBEN','SPBEN','DEPBEN'],args=request.args)
+

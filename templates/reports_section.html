@@ -1,0 +1,77 @@
+      <section class="card report-download-card no-print" id="downloadReports">
+        <h2>Reports - View, Excel and PDF</h2>
+        <p class="small-note">Choose one month, multiple consecutive months, or all imported data. Reports use {{ 'all your franchises' if selected == 'All' else selected }}.</p>
+        <form method="get" action="{{ url_for('export') }}" id="reportDownloadForm" class="report-download-form">
+          <input type="hidden" name="franchise" value="{{ selected }}">
+          <label>Report period
+            <select name="report_period" id="reportPeriod">
+              <option value="month">One month</option>
+              <option value="range">Multiple months</option>
+              <option value="all">All imported data</option>
+            </select>
+          </label>
+          <label data-report-field="month">Month
+            <select name="report_month" required>
+              {% for m in report_month_options %}<option value="{{ m.value }}" {% if m.value == report_selected_month or (not report_selected_month and loop.last) %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label data-report-field="range" hidden>From month
+            <select name="report_start" disabled required>
+              {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.revindex == 6 or (report_month_options|length < 6 and loop.first) %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label data-report-field="range" hidden>To month
+            <select name="report_end" disabled required>
+              {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.last %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <style>.report-download-group{border:1px solid #ddd;border-radius:8px;padding:12px;display:flex;flex-wrap:wrap;gap:8px;flex:1 1 300px}.report-download-group legend{font-weight:700;padding:0 6px}</style>
+          <input type="hidden" id="reportFormat" name="report_format" value="download">
+          <div class="actions compact-actions report-download-actions">
+            {% for key,title in [('claims_analytics','Claims Analytics'),('commissions','Commissions'),('book_value','Book Value'),('claim_ratio','Claim Ratio'),('franchise_money','Franchise Money'),('underwriter_allocation','Underwriter Allocation')] %}
+            <fieldset class="report-download-group"><legend>{{ title }}</legend>
+              <button type="submit" name="report_type" value="{{ key }}" formaction="{{ url_for('export') }}" onclick="document.getElementById('reportFormat').value='view'" {% if not report_month_options %}disabled{% endif %}>View {{ title }}</button>
+              <button type="submit" name="report_type" value="{{ key }}" {% if not report_month_options %}disabled{% endif %}>{{ title }} Excel</button>
+              <button type="submit" name="report_type" value="{{ key }}" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>{{ title }} PDF</button>
+            </fieldset>{% endfor %}
+          </div>
+        </form>
+      </section>
+      <script>
+        (function(){
+          const form = document.getElementById('reportDownloadForm');
+          const mode = document.getElementById('reportPeriod');
+          form.addEventListener('submit', function(event){
+            document.getElementById('reportFormat').value = event.submitter && event.submitter.textContent.trim().startsWith('View ') ? 'view' : 'download';
+          });
+          function updateFields(){
+            form.querySelectorAll('[data-report-field]').forEach(label => {
+              label.hidden = label.dataset.reportField !== mode.value;
+              label.querySelector('select').disabled = label.hidden;
+            });
+          }
+          const analysisMonth = document.querySelector('select[name="premium_analysis_month"]');
+          if (analysisMonth) analysisMonth.addEventListener('change', function(){
+            if (!analysisMonth.value) return;
+            const reportMonth = form.elements.report_month;
+            if (Array.from(reportMonth.options).some(option => option.value === analysisMonth.value)) {
+              reportMonth.value = analysisMonth.value;
+              mode.value = 'month';
+              updateFields();
+            }
+          });
+          mode.addEventListener('change', updateFields);
+          form.addEventListener('submit', event => {
+            if(mode.value === 'range' && form.elements.report_start.value > form.elements.report_end.value){
+              event.preventDefault();
+              form.elements.report_end.setCustomValidity('Choose an end month on or after the start month.');
+              form.elements.report_end.reportValidity();
+            }
+          });
+          form.addEventListener('change', () => form.elements.report_end.setCustomValidity(''));
+          updateFields();
+        })();
+      </script>
+<section class="exec-card" style="margin-top:18px"><h2>Policy relation reports</h2><p><a href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month) }}">View Policy Relations</a> · <a href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month,download='xlsx') }}">Policy Relations Excel</a> · <a href="{{ url_for('policy_reports',franchise=selected,month=report_selected_month,download='pdf') }}">Policy Relations PDF</a></p></section>
+{% for section,title in [('compare','Premium / Parlour Fee Comparison'),('top_franchise','Top Franchise'),('claim_trend','Claim Amount Comparison Over Time'),('policy_trend','New Policy / Client Trend'),('relations','Current Relation Counts')] %}<section class="exec-card" style="margin-top:18px"><h2>{{ title }}</h2><p><a href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month) }}">View {{ title }}</a> · <a href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month,download='xlsx') }}">{{ title }} Excel</a> · <a href="{{ url_for('overview_page',section=section,franchise=selected,dashboard_period_view=dashboard_period_view,premium_analysis_month=premium_analysis_month,download='pdf') }}">{{ title }} PDF</a></p></section>{% endfor %}
+{% if current_user and current_user.role=='admin' %}<section class="exec-card" style="margin-top:18px"><h2>Direct insurer, AUL and voucher reports</h2><p>Recreate a saved month to view its individual reports and download Excel or PDF versions.</p><a class="btn" href="{{ url_for('direct_reports') }}">Saved Direct Reports</a></section>{% endif %}

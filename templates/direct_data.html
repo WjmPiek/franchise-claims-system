@@ -39,7 +39,7 @@ form.addEventListener('submit',async event=>{
   }else result=await response.json();
   if(!response.ok||!result?.ok)throw Error(result?.error||'Preparation was not confirmed.');
   status.textContent=`Prepared ${Number(result.source.rows).toLocaleString()} source rows. Original Risk: ${result.source.risk}. Retail: ${result.source.retail}.\nReview items: ${result.issues}. Monthly dashboard analytics have been saved. Check Reconciliation and Review before sending files.`;
-  for(const file of result.files){const a=document.createElement('a');a.textContent=file;a.href='{{ url_for("direct_download",job="JOB",name="FILE") }}'.replace('JOB',encodeURIComponent(result.job)).replace('FILE',encodeURIComponent(file));links.appendChild(a);}
+  for(const file of result.files){const a=document.createElement('a');a.textContent=file;a.href='{{ url_for("direct_download",job="JOB",name="FILE") }}'.replace('JOB',encodeURIComponent(result.job)).replace('FILE',encodeURIComponent(file));links.appendChild(a);if(file.toLowerCase().endsWith('.xlsx')){a.textContent=file+' - Excel';const view=document.createElement('a');view.textContent='View '+file;view.href='{{ url_for("direct_report_view",job="JOB",name="FILE") }}'.replace('JOB',encodeURIComponent(result.job)).replace('FILE',encodeURIComponent(file));links.appendChild(view);const pdf=document.createElement('a');pdf.textContent=file+' - PDF';pdf.href=view.href+'?format=pdf';links.appendChild(pdf);}}
  }catch(error){status.textContent=error.message||'Connection interrupted. Preparation was not confirmed.';}
  finally{clearInterval(timer);button.disabled=false;}
 });

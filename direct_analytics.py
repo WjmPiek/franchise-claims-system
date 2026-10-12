@@ -19,6 +19,7 @@ CATEGORIES = {'source':'All Direct source rows', 'insurers':'Insurer payover', '
               'plan2':'AUL Plan 2', 'historic':'AUL Historic', 'faithnet':'Faithnet MEM adjustments',
               'fees':'MEM fees', 'r1':'R1 fees', 'adv':'2.1% fees', 'supplier':'Voucher supplier fees',
               'retained':'Voucher retained amounts', 'vouchers':'Vouchers', 'review':'Records to review'}
+GRAPHS=[('risk','Risk','source','original_risk','money'),('retail','Retail','source','retail','money'),('insurers','Insurer Payover','insurers','payover','money'),('aul','AUL Payover','aul','payover','money'),('plan2','AUL Plan 2 rows','plan2','rows','rows'),('historic','AUL Historic Rows','historic','rows','rows'),('r1','R1 Fees','fees','r1','money'),('adv','2.1% Fees','fees','adv','money'),('faithnet','Faithnet Deductions','faithnet','faithnet','money'),('supplier','Voucher Supplier Payable','vouchers','supplier','money'),('retained','Voucher Retained','vouchers','retained','money')]
 
 def data_month(filename, chosen=''):
     match = re.search(r'(\d{8})_to_(\d{8})', filename)
@@ -256,9 +257,16 @@ def register_direct_analytics(app, store):
 
     @app.context_processor
     def direct_dashboard_context():
-        if not owner() or request.endpoint not in ('dashboard','workspace_page','direct_data'):
+        if not owner() or request.endpoint not in ('dashboard','overview_page','workspace_page','direct_data'):
             return {}
-        try:return {'direct_analytics_data':store.overview(owner(),request.args.get('direct_month'))}
+        try:
+            overview=store.overview(owner(),request.args.get('direct_month'))
+            graphs=[]
+            all_batches=store.batches(owner())
+            for key,label,category,field,unit in GRAPHS:
+                points=[{'label':batch['month'],'value':str(batch['summary']['categories'][category][field]),'url':url_for('direct_analytics',month=batch['month'],category=category if category not in ('fees','vouchers') else key)} for batch in reversed(all_batches)]
+                graphs.append({'key':key,'label':label,'unit':unit,'points':points,'category':category if category not in ('fees','vouchers') else key})
+            return {'direct_analytics_data':overview,'direct_graphs':graphs}
         except Exception as exc:
             app.logger.warning('Direct analytics unavailable (%s)',type(exc).__name__)
             return {'direct_analytics_data':{'available':False,'error':'Direct analytics could not be loaded. Please retry.'}}

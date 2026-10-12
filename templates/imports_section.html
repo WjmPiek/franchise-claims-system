@@ -1,0 +1,81 @@
+      <section class="card import-card bottom-import" id="importPanel">
+        <h2>Import Excel</h2>
+        <form method="post" action="{{ url_for('dashboard') }}" enctype="multipart/form-data" class="grid-form" id="importForm">
+          <input type="hidden" name="action" value="import">
+          <label>Policy / premium Excel files<input type="file" name="excel_file" accept=".xlsx,.xls" multiple></label>
+          <label>Claims paid Excel files<input type="file" name="claims_file" accept=".xlsx,.xls" multiple></label>
+          <button type="submit" id="importSubmitBtn">Import / Recalculate</button>
+        </form>
+        <div id="importProgress" class="import-progress" style="display:none;">
+          <div class="progress-head"><strong id="importProgressTextInline">Preparing import...</strong><span id="importProgressPctInline">0%</span></div>
+          <div class="progress-track"><div id="importProgressBarInline" class="progress-bar" style="width:0%"></div></div>
+          <p class="small-note">You can select multiple monthly PolicyData files at once. The system imports all files first, then recalculates once. Please keep this page open until the dashboard reloads.</p>
+        </div>
+
+        <div id="importProgressModal" class="import-modal" style="display:none;" aria-live="polite" aria-modal="true" role="dialog">
+          <div class="import-modal-card">
+            <h2>Importing Excel files</h2>
+            <p id="importModalFile" class="import-modal-file">Preparing selected files...</p>
+            <div class="progress-head"><strong id="importProgressText">Starting import...</strong><span id="importProgressPct">0%</span></div>
+            <div class="progress-track modal-track"><div id="importProgressBar" class="progress-bar" style="width:0%"></div></div>
+            <div class="import-step-grid">
+              <span id="importStepFiles">Files selected: 0</span>
+              <span id="importStepRows">Rows processed: calculating...</span>
+              <span id="importStepStatus">Please keep this page open.</span>
+            </div>
+            <p class="small-note">The import can take time for large PolicyData files. The page will reload automatically when finished.</p>
+          </div>
+        </div>
+
+        <p class="small-note">Claims are allocated by Participating Group and Date Of Claim Paid, then matched to the imported franchise/month.</p>
+
+        {% if policy_import_summary %}
+          <div class="claims-summary policy-summary">
+            <strong>Policy Import Summary</strong>
+            <span>File: {{ policy_import_summary.get('file_name', '') }}</span>
+            <span>Month: {{ policy_import_summary.get('month', '') }}</span>
+            <span>Total rows: {{ policy_import_summary.get('total_rows', 0)|int }}</span>
+            <span>Main Members: {{ policy_import_summary.get('mem_rows', 0)|int }}</span>
+            <span>Franchises allocated: {{ policy_import_summary.get('franchises_found', 0)|int }}</span>
+            <span>Policies paid: {{ policy_import_summary.get('total_policies', 0)|int }}</span>
+            <span>Retail: {{ policy_import_summary.get('total_retail', 0)|money }}</span>
+            <span>Risk after deductions: {{ policy_import_summary.get('total_risk', 0)|money }}</span>
+            <span>R1 Fee: {{ policy_import_summary.get('total_r1', 0)|money }}</span>
+            <span>2.1% Fee: {{ policy_import_summary.get('total_underwriter_fee', 0)|money }}</span>
+          </div>
+        {% endif %}
+        {% if claims_import_summary %}
+          <div class="claims-summary">
+            <strong>Claims Import Summary</strong>
+            <span>Imported: {{ claims_import_summary.get('total_claims_imported', 0)|money }}</span>
+            <span>Matched: {{ claims_import_summary.get('matched_claims', 0)|money }}</span>
+            <span>Written to Franchise Records: {{ claims_import_summary.get('written_claims', 0)|money }}</span>
+            <span>Difference: {{ claims_import_summary.get('difference_claims', 0)|money }}</span>
+            <span>Claims-only / Unmatched: {{ claims_import_summary.get('unmatched_claims', 0)|money }}</span>
+          </div>
+          {% if claims_import_summary.get('rows') %}
+            <details class="claims-details">
+              <summary>View top claims matches</summary>
+              <table>
+                <thead><tr><th>Claims Franchise</th><th>Matched Key</th><th>Status</th><th>Claims</th><th>Claim Count</th></tr></thead>
+                <tbody>
+                  {% for r in claims_import_summary.get('rows', []) %}
+                    <tr>
+                      <td>{{ r.claims_franchise if r.claims_franchise is defined else r.get('claims_franchise','') }}</td>
+                      <td>{{ r.matched_key }}</td>
+                      <td>{{ r.status }}</td>
+                      <td>{{ (r.claims if r.claims is defined else r.get('claims',0))|money }}</td>
+                      <td>{{ (r.claim_count if r.claim_count is defined else r.get('claim_count',0))|int }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </details>
+          {% endif %}
+        {% endif %}
+
+        <div class="actions compact-actions">
+          <a href="{{ url_for('sample') }}">Download sample Excel</a>
+          <a href="{{ url_for('overview_page',section='reports',franchise=selected) }}">Choose report months</a>
+        </div>
+      </section>

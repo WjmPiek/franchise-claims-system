@@ -20,7 +20,7 @@ for(const button of buttons)button.addEventListener('click',async()=>{
   }else result=await response.json();
   if(!response.ok||!result?.ok)throw Error(result?.error||'Downloads were not confirmed.');
   status.textContent='Downloads ready for '+result.month+'. Check Reconciliation and Review before sending insurer files.';
-  for(const file of result.files){const a=document.createElement('a');a.textContent=file;a.href='{{ url_for("direct_download",job="JOB",name="FILE") }}'.replace('JOB',encodeURIComponent(result.job)).replace('FILE',encodeURIComponent(file));links.appendChild(a);}
+  for(const file of result.files){const a=document.createElement('a');a.textContent=file;a.href='{{ url_for("direct_download",job="JOB",name="FILE") }}'.replace('JOB',encodeURIComponent(result.job)).replace('FILE',encodeURIComponent(file));links.appendChild(a);if(file.toLowerCase().endsWith('.xlsx')){a.textContent=file+' - Excel';const view=document.createElement('a');view.textContent='View '+file;view.href='{{ url_for("direct_report_view",job="JOB",name="FILE") }}'.replace('JOB',encodeURIComponent(result.job)).replace('FILE',encodeURIComponent(file));links.appendChild(view);const pdf=document.createElement('a');pdf.textContent=file+' - PDF';pdf.href=view.href+'?format=pdf';links.appendChild(pdf);}}
  }catch(error){status.textContent=error.message||'Could not recreate downloads.';}finally{clearInterval(timer);buttons.forEach(b=>b.disabled=false);}
 });
 </script></body></html>

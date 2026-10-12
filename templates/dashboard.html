@@ -127,6 +127,7 @@
     .premium-analysis-table .highlight-row{background:#f7f7f7}
 
 
+        html body .ms-sidebar .side-section-link{display:block!important;padding:12px 16px!important;color:#fff!important;text-decoration:none;border-radius:10px;margin:4px 0!important;background:rgba(255,255,255,.13)!important}html body .ms-sidebar .side-section-link:hover{background:rgba(255,255,255,.23)!important}html body .ms-sidebar .side-section-link strong{display:block!important;color:#fff!important;font:700 11.7px/1.2 Arial,sans-serif!important}html body .ms-sidebar .side-section-link small{display:block!important;font:400 9.1px/1.25 Arial,sans-serif!important;color:rgba(255,255,255,.75)!important;margin-top:3px!important}.status-mini[href]{display:block;text-decoration:none;color:inherit}.exec-card h2 a{color:inherit;text-decoration:none}.exec-card h2 a:hover{text-decoration:underline}
         .report-download-form { display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
         .report-download-form label { display:flex; flex-direction:column; gap:8px; flex:1 1 180px; min-width:0; }
         .report-download-form [hidden] { display:none !important; }
@@ -180,12 +181,13 @@
             <div class="ms-brand-copy"><strong class="ms-brand-title">Martin's Funerals</strong><span class="ms-brand-module">Claims</span></div>
           </div>
           <div class="side-tabs">
-            <details class="side-group" open>
-              <summary><span class="ms-nav-icon" aria-hidden="true">O</span><span><strong>Executive Overview</strong><small>Premium, claims and status KPIs</small></span></summary><div class="ms-nav-submenu">
-
-              <a href="{{ url_for('client_heatmap_page', franchise=selected) }}">Client heatmap</a>
-              <a href="#topFranchises">Top franchise table</a>
-            </div></details>
+            <a class="side-section-link" href="{{ url_for('dashboard') }}"><strong>Executive Overview</strong><small>Dashboard</small></a>
+            <a class="side-section-link" href="{{ url_for('client_heatmap_page', franchise=selected) }}"><strong>Heat Map</strong><small>Client Heatmap</small></a>
+            <a class="side-section-link" href="{{ url_for('overview_page', section='top_franchise', franchise=selected) }}"><strong>Top Franchise</strong><small>Franchise rankings and detail</small></a>
+            <a class="side-section-link" href="{{ url_for('overview_page', section='compare', franchise=selected) }}"><strong>Compare</strong><small>Premium / Parlour Fee Analysis</small></a>
+            <a class="side-section-link" href="{{ url_for('overview_page', section='graphs', franchise=selected) }}"><strong>Graphs</strong><small>Monthly trends and details</small></a>
+            <a class="side-section-link" href="{{ url_for('overview_page', section='downloads', franchise=selected) }}"><strong>Downloads</strong><small>Prepared files and saved months</small></a>
+            <a class="side-section-link" href="{{ url_for('overview_page', section='reports', franchise=selected) }}"><strong>Reports</strong><small>View, Excel and PDF reports</small></a>
             <details class="side-group">
               <summary><span class="ms-nav-icon" aria-hidden="true">C</span><span><strong>Claims</strong><small>Claims workflow and reports</small></span></summary><div class="ms-nav-submenu">
               <a href="{{ url_for('claims_workflow') }}">Claims Workflow</a>
@@ -208,12 +210,12 @@
               <a href="{{ url_for('workspace_page', workspace='underwriter_allocation') }}">Underwriter Allocation</a>
               <a href="{{ url_for('workspace_page', workspace='book_value') }}">Book Value Analysis</a>
               <a href="{{ url_for('workspace_page', workspace='scenario_comparison') }}">Scenario Comparison</a>
-              <a href="#premiumParlourAnalysis">Premium / Parlour Fee Analysis</a>
+              <a href="{{ url_for('overview_page', section='compare', franchise=selected) }}">Premium / Parlour Fee Analysis</a>
             </div></details>
             <details class="side-group">
               <summary><span class="ms-nav-icon" aria-hidden="true">S</span><span><strong>Admin & Imports</strong><small>Settings and data imports</small></span></summary><div class="ms-nav-submenu">
-              <a href="#importPanel">Import Excel</a>
-              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('direct_data') }}">Direct Data Preparation</a><a href="{{ url_for('direct_reports') }}">Saved Direct Reports</a>{% endif %}
+              <a href="{{ url_for('overview_page', section='imports') }}">Import Excel</a>
+              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('direct_data') }}">Direct Data Preparation</a>{% endif %}
               <a href="{{ url_for('workspace_page', workspace='franchise_configuration') }}">Franchise Configuration</a>
               {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_parlour_fee_settings') }}">Parlour Fee Settings</a>{% endif %}
               {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('admin_users') }}">Manage Users</a><a href="{{ url_for('admin_claims_rules') }}">Claims Rules</a><a href="{{ url_for('admin_map_cache_manager') }}">Map Cache Manager</a><a href="{{ url_for('admin_prepare_client_map_locations') }}">Prepare Client Map</a><a href="{{ url_for('database_health') }}">Database Health</a>{% endif %}
@@ -236,10 +238,10 @@
           </header>
           <div class="executive-topbar">
             <div>
-              <h1>Martins System</h1>
+              <h1>{{ home_title or 'Dashboard' }}</h1>
               <p>Claims · {{ ed.get('period_label','') }} · {{ 'All franchises' if selected == 'All' else selected }}</p>
             </div>
-            <form method="get" action="{{ url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
+            <form method="get" action="{{ url_for('overview_page',section=home_section) if home_section != 'dashboard' else url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
               <input type="hidden" name="period_view" value="{{ period_view }}">
               <input type="hidden" name="traffic_filter" value="{{ traffic_filter }}">
               <label>Franchise<br>
@@ -259,6 +261,8 @@
               <button type="submit">Apply</button>
             </form>
           </div>
+          {% if home_section in ['compare','top_franchise','claim_trend','policy_trend','relations'] %}{% include 'overview_report_links.html' %}{% endif %}
+          {% if home_section == 'dashboard' %}
           {% if current_user and current_user.role == 'admin' %}{% include 'direct_dashboard.html' %}{% endif %}
           <section class="exec-grid">
             <div class="exec-card span-3 hero-card"><span class="kpi-title">Premium Amount</span><strong class="kpi-value">{{ ek.get('premium_amount',0)|money }}</strong><div class="kpi-sub">Imported retail premium</div></div>
@@ -269,61 +273,28 @@
             <div class="exec-card span-3"><span class="kpi-title">Policies / Clients</span><strong class="kpi-value">{{ ek.get('policy_count',0)|int }}</strong><div class="kpi-sub">Policy quantity imported</div><p style="margin:6px 0 0"><a class="btn" href="{{ url_for('client_heatmap_page', franchise=selected) }}">Open client heatmap</a></p></div>
             <div class="exec-card span-3"><span class="kpi-title">Franchise Admin Fee</span><strong class="kpi-value">{{ ek.get('franchise_admin_fee',0)|money }}</strong><div class="kpi-sub">Retail premiums - risk premiums</div></div>
             <div class="exec-card span-3"><span class="kpi-title">Franchise Money</span><strong class="kpi-value">{{ ek.get('franchise_money',0)|money }}</strong><div class="kpi-sub">Retail - claims - paid commissions</div></div>
-            <div class="exec-card span-12 premium-parlour-analysis" id="premiumParlourAnalysis"><h2>Franchise Premium / Parlour Fee Analysis</h2>
-              <div class="kpi-sub" style="margin-bottom:10px">Current period compared with the same period last year. Fee percentages are editable per franchise.</div>
-              {% set ppa = ed.get('premium_parlour_analysis', {}) %}
-              <form method="get" action="{{ url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print" style="margin:0 0 10px;align-items:end">
-                <input type="hidden" name="franchise" value="{{ selected }}">
-                <input type="hidden" name="dashboard_period_view" value="{{ dashboard_period_view }}">
-                <label>Analysis month<br>
-                  <select name="premium_analysis_month">
-                    <option value="" {% if not ppa.get('selected_month') %}selected{% endif %}>Use dashboard period</option>
-                    {% for m in ppa.get('available_months', []) %}<option value="{{ m }}" {% if ppa.get('selected_month') == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
-                  </select>
-                </label>
-                <button type="submit">Compare</button>
-              </form>
-              <div class="table-wrap"><table class="exec-table premium-analysis-table"><thead><tr><th>Metric</th><th>{{ 'All Franchises' if selected == 'All' else selected }}</th></tr></thead><tbody>
-                {% for r in ppa.get('rows', []) %}
-                  <tr class="{% if 'Total to Parlour' in r.label %}highlight-row{% endif %}"><td>{{ r.label }}</td><td class="money-cell">
-                    {% if r.type == 'money' %}{{ r.value|money }}
-                    {% elif r.type == 'pct' %}{{ r.value|pct }}
-                    {% elif r.type == 'signed_money' %}{% if r.value > 0 %}+{% elif r.value < 0 %}-{% endif %}{{ (r.value|abs)|money }}
-                    {% elif r.type == 'signed_pct_points' %}{% if r.value > 0 %}+{% endif %}{{ r.value|round(2) }}
-                    {% else %}{{ r.value }}{% endif %}
-                  </td></tr>
-                {% else %}<tr><td colspan="2">No premium data available.</td></tr>{% endfor %}
-              </tbody></table></div>
-              {% if current_user and current_user.role == 'admin' %}<p style="margin-top:10px"><a class="btn" href="{{ url_for('admin_parlour_fee_settings', franchise=selected if selected != 'All' else None) }}">Edit Parlour Fee Percentages</a></p>{% endif %}
-            </div>
-            <div class="exec-card span-12"><h2>Google Map</h2>
-              <div class="client-mini-map-link" title="Open client heatmap" onclick="window.location.href='{{ url_for('client_heatmap_page', franchise=selected) }}'" style="cursor:pointer">
-                <div id="dashboardClientMiniMap" class="client-mini-map" data-franchise="{{ selected }}" style="height:300px"></div>
-                <div class="client-mini-map-footer"><span>Open client heatmap</span><span>Heatmap / pins</span></div>
-              </div>
-            </div>
-            <div class="exec-card span-6"><h2>Claim Amount Comparison Over Time</h2><svg class="line-chart" id="claimTrendChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg></div>
-            <div class="exec-card span-6"><h2>New Policy / Client Trend</h2><svg class="line-chart" id="policyTrendChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg></div>
-            <div class="exec-card span-12"><h2>Policy Relation Counts</h2>
+            <div class="exec-card span-6"><h2><a href="{{ url_for('overview_page',section='claim_trend',franchise=selected,dashboard_period_view=dashboard_period_view) }}">Claim Amount Comparison Over Time</a></h2><svg class="line-chart" id="claimTrendChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg></div>
+            <div class="exec-card span-6"><h2><a href="{{ url_for('overview_page',section='policy_trend',franchise=selected,dashboard_period_view=dashboard_period_view) }}">New Policy / Client Trend</a></h2><svg class="line-chart" id="policyTrendChart" viewBox="0 0 600 210" preserveAspectRatio="none"></svg></div>
+            <div class="exec-card span-12"><h2><a href="{{ url_for('overview_page',section='relations',franchise=selected) }}">Policy Relation Counts</a></h2>
               {% set rc = ed.get('relation_counts', {}) %}
               <div class="status-mini-grid">
                 {% for r in rc.get('rows', []) %}
-                  <div class="status-mini"><small>{{ r.code }} - {{ r.label }}</small><strong>{{ r.count|int }}</strong></div>
+                  <a class="status-mini" href="{{ url_for('current_relation_members',franchise=selected,relation=r.code) }}"><small>{{ r.code }} - {{ r.label }}</small><strong>{{ r.count|int }}</strong></a>
                 {% else %}
                   <div class="status-mini"><small>No PolicyData relation counts yet</small><strong>0</strong></div>
                 {% endfor %}
               </div>
             </div>
-            <div class="exec-card span-12"><h2>Age Limit Notifications</h2>
+            <div class="exec-card span-12"><h2><a href="{{ url_for('admin_age_notifications_franchise',franchise_name=selected) }}">Age Limit Notifications</a></h2>
               <p class="kpi-sub">Daily check from PolicyData Column I relation and Column F ID number. Click a franchise to list all affected members.</p>
               {% set ant = ed.get('age_notification_totals', {}) %}
               <div class="status-mini-grid" style="margin-bottom:10px">
-                <div class="status-mini"><small>Total to Fix</small><strong>{{ ant.get('total',0)|int }}</strong></div>
+                <a class="status-mini" href="{{ url_for('admin_age_notifications_franchise',franchise_name=selected) }}"><small>Total to Fix</small><strong>{{ ant.get('total',0)|int }}</strong></a>
                 <div class="status-mini"><small>Franchises</small><strong>{{ ant.get('franchises',0)|int }}</strong></div>
               </div>
               <div class="status-mini-grid" style="margin-bottom:10px">
                 {% for b in ed.get('age_notification_age_bands', []) %}
-                  <div class="status-mini"><small>{{ b.age_band }}</small><strong>{{ b.count|int }}</strong></div>
+                  <a class="status-mini" href="{{ url_for('admin_age_notifications_franchise_band',franchise_name=selected,age_band=b.age_band) }}"><small>{{ b.age_band }}</small><strong>{{ b.count|int }}</strong></a>
                 {% endfor %}
               </div>
               <form method="post" action="{{ url_for('admin_refresh_policy_age_notifications') }}" class="no-print" style="margin-bottom:10px">
@@ -366,13 +337,20 @@
               <div class="table-wrap"><table class="exec-table"><thead><tr><th>Month</th><th>Retail</th><th>Risk</th><th>Claims</th><th>No. Claims</th><th>Claim Ratio</th><th>Commission</th><th>Paid Comm.</th><th>Franchise Money</th><th>Book Value</th></tr></thead><tbody>{% for m in fd.monthly_rows %}<tr><td>{{ m.month }}</td><td>{{ m.retail|money }}</td><td>{{ m.risk|money }}</td><td>{{ m.claims|money }}</td><td>{{ m.claim_count|int }}</td><td>{{ m.ratio|pct }}</td><td>{{ m.commission|money }}</td><td>{{ m.paid_commission|money }}</td><td>{{ m.franchise_money|money }}</td><td>{{ m.book_value|money }}</td></tr>{% else %}<tr><td colspan="10">No monthly detail available.</td></tr>{% endfor %}</tbody></table></div>
             </div>
             {% endif %}
-            <div class="exec-card span-12" id="topFranchises"><h2>Top Franchise Claims Detail</h2><table class="exec-table"><thead><tr><th>Franchise</th><th>Premium</th><th>Claims</th><th>No. Claims</th><th>Loss Ratio</th></tr></thead><tbody>{% for r in ed.get('top_franchise_rows', []) %}<tr><td><a href="{{ url_for('dashboard', franchise=r.franchise, dashboard_period_view=dashboard_period_view) }}">{{ r.franchise }}</a></td><td>{{ r.premium|money }}</td><td>{{ r.claims|money }}</td><td>{{ r.claim_count|int }}</td><td>{{ r.ratio|pct }}</td></tr>{% else %}<tr><td colspan="5">No imported data yet.</td></tr>{% endfor %}</tbody></table></div>
           </section>
+          {% elif home_section == 'compare' %}{% include 'compare_section.html' %}
+          {% elif home_section == 'top_franchise' %}{% include 'top_franchise_section.html' %}
+          {% elif home_section == 'imports' %}{% include 'imports_section.html' %}
+          {% elif home_section == 'reports' %}{% include 'reports_section.html' %}
+          {% elif home_section == 'downloads' %}{% include 'downloads_section.html' %}
+          {% elif home_section in ['graphs','claim_trend','policy_trend'] %}{% include 'graphs_section.html' %}
+          {% elif home_section == 'relations' %}{% include 'relations_section.html' %}
+          {% endif %}
       <script id="execDashboardData" type="application/json">{{ executive_dashboard|tojson }}</script>
       <script>
         (function(){
           const data = JSON.parse(document.getElementById('execDashboardData').textContent || '{}');
-          const money = (v) => 'R' + Number(v || 0).toLocaleString(undefined,{maximumFractionDigits:0});
+          const money = (v) => 'R' + Number(v || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:8});
           const pct = (v) => Number(v || 0).toFixed(1) + '%';
           function renderBars(key, formatter){
             document.querySelectorAll('[data-bars="'+key+'"]').forEach(el => {
@@ -383,9 +361,9 @@
           }
           function renderLine(id, rows, valueKey, fmt){
             const svg = document.getElementById(id); if(!svg) return;
-            const w=600,h=210,p=28; const values=rows.map(r=>Number(r[valueKey]||0)); const max=Math.max(1,...values);
+            const w=600,h=210,p=28; const values=rows.map(r=>Number(r[valueKey]||0)); const max=Math.max(1,...values),min=Math.min(0,...values),range=max-min;
             const step = rows.length>1 ? (w-p*2)/(rows.length-1) : 0;
-            const pts = rows.map((r,i)=>[p+i*step, h-p-(Number(r[valueKey]||0)/max)*(h-p*2)]);
+            const pts = rows.map((r,i)=>[p+i*step, h-p-((Number(r[valueKey]||0)-min)/range)*(h-p*2)]);
             const line = pts.map((pt,i)=>(i?'L':'M')+pt[0].toFixed(1)+' '+pt[1].toFixed(1)).join(' ');
             const area = pts.length ? line + ' L '+(p+(rows.length-1)*step)+' '+(h-p)+' L '+p+' '+(h-p)+' Z' : '';
             svg.innerHTML = '<rect x="0" y="0" width="600" height="210" fill="#fff"/><g stroke="#e3e7f1" stroke-width="1">'+[0,1,2,3].map(i=>'<line x1="28" x2="590" y1="'+(p+i*(h-p*2)/3)+'" y2="'+(p+i*(h-p*2)/3)+'"/>').join('')+'</g><path d="'+area+'" fill="rgba(107,74,160,.12)"/><path d="'+line+'" fill="none" stroke="#64707d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>'+pts.map((pt,i)=>'<circle cx="'+pt[0]+'" cy="'+pt[1]+'" r="5" fill="#dce2e8" stroke="#64707d" stroke-width="2"><title>'+rows[i].label+': '+fmt(rows[i][valueKey])+'</title></circle>').join('')+'<g fill="#5e687d" font-size="11">'+rows.map((r,i)=> i%Math.ceil(rows.length/6||1)===0?'<text x="'+(p+i*step)+'" y="202" text-anchor="middle">'+r.label+'</text>':'').join('')+'</g>';
@@ -403,234 +381,10 @@
             legend.innerHTML = rows.map((r,i)=>'<span>'+r.label+': <strong>'+r.value+'</strong></span>').join('') || '<small>No workflow status data yet</small>';
           }
           renderBars('claims_by_franchise', money); renderBars('loss_ratio_by_franchise', pct); renderLine('claimTrendChart', data.claim_trend||[], 'claims', money); renderLine('policyTrendChart', data.policy_trend||[], 'value', v=>Number(v||0).toFixed(0)); renderDonut();
+          document.querySelectorAll('[data-direct-series]').forEach(svg=>{ const rows=JSON.parse(svg.dataset.directSeries); renderLine(svg.id,rows,'value',svg.dataset.unit==='rows'?v=>Number(v).toLocaleString():money); });
         })();
       </script>
 
-      {% if google_maps_api_key %}
-      <script>
-        window.initDashboardMiniClientMap = function(){
-          const el = document.getElementById('dashboardClientMiniMap');
-          if(!el || !window.google || !google.maps) return;
-          const selected = (el.getAttribute('data-franchise') || 'All').trim() || 'All';
-          const SA_CENTER = {lat:-30.5595,lng:22.9375};
-          const map = new google.maps.Map(el, {
-            center: SA_CENTER,
-            zoom: 5,
-            mapTypeId:'roadmap',
-            disableDefaultUI:true,
-            gestureHandling:'none',
-            clickableIcons:false,
-            draggable:false,
-            scrollwheel:false,
-            keyboardShortcuts:false
-          });
-          el.addEventListener('click', function(){
-            window.location.href = '{{ url_for('client_heatmap_page') }}?franchise=' + encodeURIComponent(selected);
-          });
-          function setFallback(){
-            const q = encodeURIComponent(selected === 'All' ? 'South Africa' : (selected + ', South Africa'));
-            const z = selected === 'All' ? 5 : 12;
-            el.innerHTML = '<iframe title="Dashboard Franchise Map" style="width:100%;height:100%;border:0;pointer-events:none" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q='+q+'&z='+z+'&output=embed"></iframe>';
-          }
-          // Dashboard rule: All = South Africa only. Selected franchise = franchise address only.
-          if(selected === 'All'){
-            map.setCenter(SA_CENTER);
-            map.setZoom(5);
-            return;
-          }
-          fetch('/api/franchise-map-locations?franchise=' + encodeURIComponent(selected), {cache:'no-store'})
-            .then(r => r.json())
-            .then(payload => {
-              const rows = payload.locations || [];
-              let first = null;
-              for(const row of rows){
-                const lat = Number(row.lat), lng = Number(row.lng);
-                if(!isFinite(lat) || !isFinite(lng)) continue;
-                first = {row: row, pos: {lat:lat, lng:lng}};
-                break;
-              }
-              if(!first){ setFallback(); return; }
-              map.setCenter(first.pos);
-              map.setZoom(12);
-              new google.maps.Marker({position:first.pos, map:map, title:first.row.franchise || selected});
-            })
-            .catch(() => setFallback());
-        };
-      </script>
-      <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initDashboardMiniClientMap"></script>
-      {% else %}
-      <script>
-        (function(){
-          const el=document.getElementById('dashboardClientMiniMap');
-          if(!el){ return; }
-          const selected=(el.getAttribute('data-franchise')||'All').trim() || 'All';
-          el.addEventListener('click', function(){ window.location.href='{{ url_for('client_heatmap_page') }}?franchise=' + encodeURIComponent(selected); });
-          const query=encodeURIComponent(selected === 'All' ? 'South Africa' : (selected + ', South Africa'));
-          const z=selected === 'All' ? 5 : 12;
-          el.innerHTML='<iframe title="Dashboard Franchise Map" style="width:100%;height:100%;border:0;pointer-events:none" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q='+query+'&z='+z+'&output=embed"></iframe>';
-        })();
-      </script>
-      {% endif %}
-
-      <section class="card import-card bottom-import" id="importPanel">
-        <h2>Import Excel</h2>
-        <form method="post" action="{{ url_for('dashboard') }}" enctype="multipart/form-data" class="grid-form" id="importForm">
-          <input type="hidden" name="action" value="import">
-          <label>Policy / premium Excel files<input type="file" name="excel_file" accept=".xlsx,.xls" multiple></label>
-          <label>Claims paid Excel files<input type="file" name="claims_file" accept=".xlsx,.xls" multiple></label>
-          <button type="submit" id="importSubmitBtn">Import / Recalculate</button>
-        </form>
-        <div id="importProgress" class="import-progress" style="display:none;">
-          <div class="progress-head"><strong id="importProgressTextInline">Preparing import...</strong><span id="importProgressPctInline">0%</span></div>
-          <div class="progress-track"><div id="importProgressBarInline" class="progress-bar" style="width:0%"></div></div>
-          <p class="small-note">You can select multiple monthly PolicyData files at once. The system imports all files first, then recalculates once. Please keep this page open until the dashboard reloads.</p>
-        </div>
-
-        <div id="importProgressModal" class="import-modal" style="display:none;" aria-live="polite" aria-modal="true" role="dialog">
-          <div class="import-modal-card">
-            <h2>Importing Excel files</h2>
-            <p id="importModalFile" class="import-modal-file">Preparing selected files...</p>
-            <div class="progress-head"><strong id="importProgressText">Starting import...</strong><span id="importProgressPct">0%</span></div>
-            <div class="progress-track modal-track"><div id="importProgressBar" class="progress-bar" style="width:0%"></div></div>
-            <div class="import-step-grid">
-              <span id="importStepFiles">Files selected: 0</span>
-              <span id="importStepRows">Rows processed: calculating...</span>
-              <span id="importStepStatus">Please keep this page open.</span>
-            </div>
-            <p class="small-note">The import can take time for large PolicyData files. The page will reload automatically when finished.</p>
-          </div>
-        </div>
-
-        <p class="small-note">Claims are allocated by Participating Group and Date Of Claim Paid, then matched to the imported franchise/month.</p>
-
-        {% if policy_import_summary %}
-          <div class="claims-summary policy-summary">
-            <strong>Policy Import Summary</strong>
-            <span>File: {{ policy_import_summary.get('file_name', '') }}</span>
-            <span>Month: {{ policy_import_summary.get('month', '') }}</span>
-            <span>Total rows: {{ policy_import_summary.get('total_rows', 0)|int }}</span>
-            <span>Main Members: {{ policy_import_summary.get('mem_rows', 0)|int }}</span>
-            <span>Franchises allocated: {{ policy_import_summary.get('franchises_found', 0)|int }}</span>
-            <span>Policies paid: {{ policy_import_summary.get('total_policies', 0)|int }}</span>
-            <span>Retail: {{ policy_import_summary.get('total_retail', 0)|money }}</span>
-            <span>Risk after deductions: {{ policy_import_summary.get('total_risk', 0)|money }}</span>
-            <span>R1 Fee: {{ policy_import_summary.get('total_r1', 0)|money }}</span>
-            <span>2.1% Fee: {{ policy_import_summary.get('total_underwriter_fee', 0)|money }}</span>
-          </div>
-        {% endif %}
-        {% if claims_import_summary %}
-          <div class="claims-summary">
-            <strong>Claims Import Summary</strong>
-            <span>Imported: {{ claims_import_summary.get('total_claims_imported', 0)|money }}</span>
-            <span>Matched: {{ claims_import_summary.get('matched_claims', 0)|money }}</span>
-            <span>Written to Franchise Records: {{ claims_import_summary.get('written_claims', 0)|money }}</span>
-            <span>Difference: {{ claims_import_summary.get('difference_claims', 0)|money }}</span>
-            <span>Claims-only / Unmatched: {{ claims_import_summary.get('unmatched_claims', 0)|money }}</span>
-          </div>
-          {% if claims_import_summary.get('rows') %}
-            <details class="claims-details">
-              <summary>View top claims matches</summary>
-              <table>
-                <thead><tr><th>Claims Franchise</th><th>Matched Key</th><th>Status</th><th>Claims</th><th>Claim Count</th></tr></thead>
-                <tbody>
-                  {% for r in claims_import_summary.get('rows', []) %}
-                    <tr>
-                      <td>{{ r.claims_franchise if r.claims_franchise is defined else r.get('claims_franchise','') }}</td>
-                      <td>{{ r.matched_key }}</td>
-                      <td>{{ r.status }}</td>
-                      <td>{{ (r.claims if r.claims is defined else r.get('claims',0))|money }}</td>
-                      <td>{{ (r.claim_count if r.claim_count is defined else r.get('claim_count',0))|int }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </details>
-          {% endif %}
-        {% endif %}
-
-        <div class="actions compact-actions">
-          <a href="{{ url_for('sample') }}">Download sample Excel</a>
-          <a href="#downloadReports">Choose report months</a>
-        </div>
-      </section>
-      <section class="card report-download-card no-print" id="downloadReports">
-        <h2>Download reports</h2>
-        <p class="small-note">Choose one month, multiple consecutive months, or all imported data. Reports use {{ 'all your franchises' if selected == 'All' else selected }}.</p>
-        <form method="get" action="{{ url_for('export') }}" id="reportDownloadForm" class="report-download-form">
-          <input type="hidden" name="franchise" value="{{ selected }}">
-          <label>Report period
-            <select name="report_period" id="reportPeriod">
-              <option value="month">One month</option>
-              <option value="range">Multiple months</option>
-              <option value="all">All imported data</option>
-            </select>
-          </label>
-          <label data-report-field="month">Month
-            <select name="report_month" required>
-              {% for m in report_month_options %}<option value="{{ m.value }}" {% if m.value == report_selected_month or (not report_selected_month and loop.last) %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
-            </select>
-          </label>
-          <label data-report-field="range" hidden>From month
-            <select name="report_start" disabled required>
-              {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.revindex == 6 or (report_month_options|length < 6 and loop.first) %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
-            </select>
-          </label>
-          <label data-report-field="range" hidden>To month
-            <select name="report_end" disabled required>
-              {% for m in report_month_options %}<option value="{{ m.value }}" {% if loop.last %}selected{% endif %}>{{ m.label }}</option>{% endfor %}
-            </select>
-          </label>
-          <style>.report-download-group{border:1px solid #ddd;border-radius:8px;padding:12px;display:flex;flex-wrap:wrap;gap:8px;flex:1 1 300px}.report-download-group legend{font-weight:700;padding:0 6px}</style>
-          <input type="hidden" id="reportFormat" name="report_format" value="download">
-          <div class="actions compact-actions report-download-actions">
-            <fieldset class="report-download-group"><legend>Commissions</legend>
-              <button type="submit" name="report_type" value="commissions" formaction="{{ url_for('export') }}" onclick="document.getElementById('reportFormat').value='view'" {% if not report_month_options %}disabled{% endif %}>View Commissions</button>
-              <button type="submit" name="report_type" value="commissions" {% if not report_month_options %}disabled{% endif %}>Commissions Excel</button>
-              <button type="submit" name="report_type" value="commissions" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Commissions PDF</button>
-            </fieldset>
-            <fieldset class="report-download-group"><legend>Book Value</legend>
-              <button type="submit" name="report_type" value="book_value" formaction="{{ url_for('export') }}" onclick="document.getElementById('reportFormat').value='view'" {% if not report_month_options %}disabled{% endif %}>View Book Value</button>
-              <button type="submit" name="report_type" value="book_value" {% if not report_month_options %}disabled{% endif %}>Book Value Excel</button>
-              <button type="submit" name="report_type" value="book_value" class="pdf-btn" formaction="{{ url_for('board_report') }}" {% if not report_month_options %}disabled{% endif %}>Book Value PDF</button>
-            </fieldset>
-          </div>
-        </form>
-      </section>
-      <script>
-        (function(){
-          const form = document.getElementById('reportDownloadForm');
-          const mode = document.getElementById('reportPeriod');
-          form.addEventListener('submit', function(event){
-            document.getElementById('reportFormat').value = event.submitter && event.submitter.textContent.trim().startsWith('View ') ? 'view' : 'download';
-          });
-          function updateFields(){
-            form.querySelectorAll('[data-report-field]').forEach(label => {
-              label.hidden = label.dataset.reportField !== mode.value;
-              label.querySelector('select').disabled = label.hidden;
-            });
-          }
-          const analysisMonth = document.querySelector('select[name="premium_analysis_month"]');
-          if (analysisMonth) analysisMonth.addEventListener('change', function(){
-            if (!analysisMonth.value) return;
-            const reportMonth = form.elements.report_month;
-            if (Array.from(reportMonth.options).some(option => option.value === analysisMonth.value)) {
-              reportMonth.value = analysisMonth.value;
-              mode.value = 'month';
-              updateFields();
-            }
-          });
-          mode.addEventListener('change', updateFields);
-          form.addEventListener('submit', event => {
-            if(mode.value === 'range' && form.elements.report_start.value > form.elements.report_end.value){
-              event.preventDefault();
-              form.elements.report_end.setCustomValidity('Choose an end month on or after the start month.');
-              form.elements.report_end.reportValidity();
-            }
-          });
-          form.addEventListener('change', () => form.elements.report_end.setCustomValidity(''));
-          updateFields();
-        })();
-      </script>
         </main>
       </div>
     {% else %}

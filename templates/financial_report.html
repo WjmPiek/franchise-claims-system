@@ -15,7 +15,7 @@ a{color:#6b4aa0}nav a{padding:10px;border:1px solid #6b4aa0;border-radius:6px;ba
 <body><main>
 <h1>{{ title }}</h1><p>{{ period }}</p>
 <nav>
-<a href="{{ url_for('dashboard') }}#downloadReports">Back to dashboard</a>
+<a href="{{ url_for('overview_page',section='reports') }}">Back to Reports</a>
 <a href="{{ excel_url }}">Download {{ title }} Excel</a>
 <a href="{{ pdf_url }}">Download {{ title }} PDF</a>
 <a href="{{ preview_url }}" target="_blank" rel="noopener">Open PDF preview</a>
@@ -24,3 +24,4 @@ a{color:#6b4aa0}nav a{padding:10px;border:1px solid #6b4aa0;border-radius:6px;ba
 <p><a href="{{ preview_url }}" target="_blank" rel="noopener">Open {{ title }} PDF preview</a></p>
 </object>
 </main></body></html>
+

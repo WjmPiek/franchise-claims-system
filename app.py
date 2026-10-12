@@ -4181,10 +4181,18 @@ def build_premium_parlour_analysis(source_df, current_df, selected='All'):
     facility_pct = float(settings.get('facility_fee_to_parlour_pct') or 0)
     total_pct = commission_pct + admin_pct + facility_pct
     total_amount = retail * total_pct / 100.0 if retail else 0.0
+    last_total_amount=last_retail*total_pct/100.0
+    def label(start,end):
+        if start is None:return 'No imported period'
+        return start.strftime('%b %Y') if start==end else start.strftime('%b %Y')+' - '+end.strftime('%b %Y')
+    comparison=[]
+    for name,kind,first,second in [('Gross Retail Premium','money',retail,last_retail),('Risk Premium','money',risk,last_risk),('Risk Premium %','pct',current_risk_pct,last_risk_pct),('Commission to Parlour %','pct',commission_pct,commission_pct),('Admin to Parlour %','pct',admin_pct,admin_pct),('Facility Fee to Parlour %','pct',facility_pct,facility_pct),('Total to Parlour %','pct',total_pct,total_pct),('Total to Parlour','money',total_amount,last_total_amount)]:
+        comparison.append({'label':name,'type':kind,'current':first,'previous':second if not last_df.empty else None,'difference':first-second if not last_df.empty else None})
     return {
         'settings': settings,
-        'current_period': '',
-        'last_year_period': '',
+        'current_period': label(start_month,end_month),
+        'last_year_period':label(start_month-pd.DateOffset(years=1) if start_month is not None else None,end_month-pd.DateOffset(years=1) if end_month is not None else None),
+        'comparison_rows':comparison,'has_previous':not last_df.empty,
         'rows': [
             {'label': 'Average Gross Premium p.m.', 'type': 'money', 'value': retail},
             {'label': 'Current Risk Premium %', 'type': 'pct', 'value': current_risk_pct},
@@ -4291,8 +4299,8 @@ def build_executive_dashboard_context(monthly_view, selected='All', period_view=
     loss_ratio_by_franchise = [{'label': str(r['Franchise']), 'value': float(r['Claim Ratio'])} for _,r in by_fr.sort_values('Claim Ratio', ascending=False).head(8).iterrows()]
     month_df = df.groupby(df['Month'].dt.to_period('M')).agg({'Claims':'sum','Claim Count':'sum','Retail Premium':'sum','Risk Premium':'sum','Policy Qty':'sum'}).reset_index()
     claims_by_month = [{'label': m.strftime('%b %Y'), 'value': float(v)} for m,v in zip(month_df['Month'], month_df['Claims'])]
-    claim_trend = [{'label': m.strftime('%b'), 'claims': float(c), 'risk': float(r), 'ratio': float((c/r*100) if r else 0)} for m,c,r in zip(month_df['Month'], month_df['Claims'], month_df['Risk Premium'])]
-    policy_trend = [{'label': m.strftime('%b'), 'value': float(v)} for m,v in zip(month_df['Month'], month_df['Policy Qty'])]
+    claim_trend = [{'label': m.strftime('%b %Y'), 'month':str(m), 'claims': float(c), 'risk': float(r), 'ratio': float((c/r*100) if r else 0)} for m,c,r in zip(month_df['Month'], month_df['Claims'], month_df['Risk Premium'])]
+    policy_trend = [{'label': m.strftime('%b %Y'), 'month':str(m), 'value': float(v)} for m,v in zip(month_df['Month'], month_df['Policy Qty'])]
     # status from workflow database, falls back to financial claim buckets where workflow is empty.
     status_breakdown = dict(empty['status_breakdown'])
     workflow_claims = []
@@ -4897,7 +4905,7 @@ def load_logged_in_user():
     record_user_activity(g.user.get('id'))
     # Check the committed import/mapping revision on every request. Reuse the
     # analytics snapshot only while that revision and calculation settings match.
-    reporting_endpoints = {'dashboard', 'workspace_page', 'export', 'export_payover',
+    reporting_endpoints = {'dashboard', 'overview_page', 'workspace_page', 'export', 'export_payover',
                            'board_report', 'client_heatmap_page'}
     if DATABASE_URL and request.endpoint in reporting_endpoints:
         try:
@@ -5995,7 +6003,7 @@ def index():
 
 
 @app.route('/dashboard', methods=['GET', 'POST'])
-def dashboard():
+def dashboard(section='dashboard'):
     global LAST_RESULT, LAST_CLAIMS_DF, LAST_POLICY_IMPORT_SUMMARY
     from import_progress import active, busy, report, stream_import
     if request.method == 'POST' and busy() and not active():
@@ -6176,7 +6184,30 @@ def dashboard():
     configured_monthly, configured_periods, _configured_portfolio_all = apply_franchise_config(apply_user_franchise_scope(LAST_RESULT['monthly']), load_franchise_config())
     configured_portfolio = build_portfolio_for_period(configured_monthly, configured_periods, dashboard_period_view)
     executive_dashboard = build_executive_dashboard_context(monthly_view, selected=selected, period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month)
-    return render_template('dashboard.html', workspace='home', portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
+    home_titles={'dashboard':'Dashboard','compare':'Compare','top_franchise':'Top Franchise','imports':'Admin & Imports','reports':'Reports','downloads':'Downloads','graphs':'Graphs','claim_trend':'Claim Amount Comparison Over Time','policy_trend':'New Policy / Client Trend','relations':'Policy Relation Counts'}
+    if request.args.get('download') in {'xlsx','pdf'} and section in {'compare','top_franchise','claim_trend','policy_trend','relations'}:
+        from report_files import table_workbook,workbook_pdf
+        if section=='compare':
+            comparison=executive_dashboard.get('premium_parlour_analysis',{})
+            headers=['Calculation',comparison.get('current_period','First date'),comparison.get('last_year_period','Second date'),'Difference (first minus second)']
+            values=[[row['label'],row['current'],row['previous'],row['difference']] for row in comparison.get('comparison_rows',[])]
+        elif section=='top_franchise':
+            headers=['Franchise','Retail Premium','Claims','Claim Count','Claim Ratio %'];values=[[row.get(key,0) for key in ('franchise','premium','claims','claim_count','ratio')] for row in executive_dashboard.get('top_franchise_rows',[])]
+        elif section=='claim_trend':
+            headers=['Month','Claims','Risk','Claim Ratio %'];values=[[row[key] for key in ('label','claims','risk','ratio')] for row in executive_dashboard.get('claim_trend',[])]
+        elif section=='policy_trend':
+            headers=['Month','Imported Policy / Client Quantity'];values=[[row['label'],row['value']] for row in executive_dashboard.get('policy_trend',[])]
+        else:
+            headers=['Relation','Description','Current Members'];values=[[row['code'],row['label'],row['count']] for row in executive_dashboard.get('relation_counts',{}).get('rows',[])]
+        book=table_workbook(headers,values,home_titles[section]);kind=request.args['download']
+        return send_file(workbook_pdf(book,home_titles[section]) if kind=='pdf' else book,as_attachment=True,download_name=section+'.'+kind,mimetype='application/pdf' if kind=='pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return render_template('dashboard.html', workspace='home', home_section=section,home_title=home_titles.get(section,'Dashboard'), portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
+
+@app.route('/overview/<section>',methods=['GET'])
+def overview_page(section):
+    if section not in {'compare','top_franchise','imports','reports','downloads','graphs','claim_trend','policy_trend','relations'}:
+        return redirect(url_for('dashboard'))
+    return dashboard(section)
 
 
 
@@ -8609,7 +8640,12 @@ FINANCIAL_REPORT_COLUMNS = {
                     'Franchise Money', 'Franchise Money Running Balance'],
     'book_value': ['Franchise', 'Month', 'Period', 'Retail Premium',
                    'MFF Book Value 2.5%', 'Franchise Book Value 2.5%', 'Total Book Value'],
+    'claims_analytics':['Franchise','Month','Period','Retail Premium','Risk Premium','Payover Less Comm.','Claims','Claim Count','Claim Ratio','Policy Qty','Total Commission','Franchise Money'],
+    'claim_ratio':['Franchise','Month','Period','Risk Premium','Claims','Claim Count','Average Claim','Claim Ratio','Claim Ratio Label','Recommendation'],
+    'franchise_money':['Franchise','Month','Period','Retail Premium','Claims','Total Commission','Total Paid Commissions','Franchise Money','Franchise Money Running Balance'],
+    'underwriter_allocation':['Franchise','Month','Period','Retail Premium','Risk Premium','R1 Policy Fee','Underwriter 2.1% Fee','Payover Less Comm.','Claims','Policy Qty'],
 }
+FINANCIAL_REPORT_TITLES={'commissions':'Commissions','book_value':'Book Value','claims_analytics':'Claims Analytics','claim_ratio':'Claim Ratio','franchise_money':'Franchise Money','underwriter_allocation':'Underwriter Allocation'}
 
 
 def _financial_report_frames(monthly, report_type):
@@ -8625,14 +8661,14 @@ def _financial_report_frames(monthly, report_type):
                 'total_underwriter_2_1_fee', 'total_commission', 'total_paid_commissions']
                if report_type == 'commissions' else
                ['total_franchises', 'total_retail', 'total_mff_book_value',
-                'total_franchise_book_value', 'total_book_value'])
+                'total_franchise_book_value', 'total_book_value'] if report_type=='book_value' else list(portfolio))
     frames.append(pd.DataFrame([{key: portfolio[key] for key in metrics if key in portfolio}]))
     return frames
 
 
 def _financial_download(output_format):
     report_type = request.args.get('report_type')
-    title = 'Commissions' if report_type == 'commissions' else 'Book Value'
+    title = FINANCIAL_REPORT_TITLES[report_type]
     try:
         monthly, label = _select_report_months(
             apply_user_franchise_scope(LAST_RESULT['monthly']), request.args)
@@ -10055,6 +10091,8 @@ register_direct_data(app, EXPORT_DIR, get_db_engine if DATABASE_URL else None)
 
 from policy_reports import register_policy_reports
 register_policy_reports(app, get_db_engine, text, lambda: LAST_POLICY_DETAIL_DF, apply_user_franchise_scope)
+from current_members import register_current_members
+register_current_members(app,get_db_engine,text,apply_user_franchise_scope)
 
 if __name__ == '__main__':
     print('Starting Franchise Claims Analytics System...', flush=True)

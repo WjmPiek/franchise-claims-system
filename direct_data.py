@@ -13,7 +13,7 @@ from contextlib import closing
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
-from flask import g, request, render_template, send_file, jsonify, session
+from flask import g, request, render_template, send_file, jsonify, session, url_for
 from openpyxl import load_workbook
 import xlsxwriter
 from import_progress import report, active, stream_import
@@ -532,19 +532,38 @@ def register_direct_data(app, export_dir, get_engine=None):
         finally:
             LOCK.release()
 
-    @app.get('/direct-data/download/<job>/<name>')
-    def direct_download(job, name):
+    def owned_file(job,name):
         user = getattr(g, 'user', None) or {}
         if user.get('role') != 'admin' or not re.fullmatch(r'[a-f0-9]{32}', job):
-            return 'Not available.', 404
+            return None
         folder = root / job
         owner = folder / 'owner.json'
         if not owner.exists():
-            return 'Prepare the source again; these temporary downloads have expired.', 404
+            return None
         metadata = json.loads(owner.read_text())
         if metadata['owner'] != user.get('id') or datetime.now() - datetime.fromisoformat(metadata['created']) > timedelta(hours=12):
-            return 'Not available.', 404
+            return None
         allowed = json.loads((folder / 'files.json').read_text()) if (folder / 'files.json').exists() else []
         if name not in allowed:
-            return 'Not available.', 404
-        return send_file(folder / name, as_attachment=True, download_name=name, max_age=0)
+            return None
+        path=folder/name
+        return path if path.is_file() else None
+
+    @app.get('/direct-data/download/<job>/<name>')
+    def direct_download(job,name):
+        path=owned_file(job,name)
+        if path is None:return 'Open Saved Direct Reports to recreate expired downloads.',404
+        return send_file(path,as_attachment=True,download_name=name,max_age=0)
+
+    @app.get('/direct-data/report/<job>/<name>')
+    def direct_report_view(job,name):
+        path=owned_file(job,name)
+        if path is None or path.suffix.lower()!='.xlsx':return 'Open Saved Direct Reports to recreate expired downloads.',404
+        from report_files import workbook_preview,workbook_pdf
+        title=path.stem
+        if request.args.get('format')=='pdf':
+            return send_file(workbook_pdf(path,title),as_attachment=True,download_name=title+'.pdf',mimetype='application/pdf',max_age=0)
+        try:preview=workbook_preview(path,request.args.get('sheet',''),request.args.get('page',1,type=int))
+        except ValueError as exc:return str(exc),400
+        def page_url(page):return url_for('direct_report_view',job=job,name=name,sheet=preview['sheet'],page=page)
+        return render_template('workbook_report.html',title=title,preview=preview,excel_url=url_for('direct_download',job=job,name=name),pdf_url=url_for('direct_report_view',job=job,name=name,format='pdf'),previous=page_url(preview['page']-1) if preview['page']>1 else '',next_page=page_url(preview['page']+1) if preview['page']*50<preview['count'] else '')

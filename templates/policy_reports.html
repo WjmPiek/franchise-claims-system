@@ -9,7 +9,7 @@
 <p>Enter the other system's raw premium totals for the same month, franchise and relation selection. Controls are used for this report only.</p>
 <label>Other system risk before fees <input name="external_risk" inputmode="decimal" value="{{ args.get('external_risk','') }}"></label>
 <label>Other system retail <input name="external_retail" inputmode="decimal" value="{{ args.get('external_retail','') }}"></label>
-<button type="submit">View report</button><button name="download" value="summary">Download summary CSV</button><button name="download" value="detail">Download row detail CSV</button></form>
+<button type="submit">View Policy Relations</button><button name="download" value="xlsx">Policy Relations Excel</button><button name="download" value="pdf">Policy Relations PDF</button><button name="download" value="summary">Download summary CSV</button><button name="download" value="detail">Download row detail CSV</button></form>
 <p>{{ month }} · {{ franchise }} · {{ relation }}</p>
 <table><thead><tr><th>Relation</th><th>Rows</th><th>Risk before fees</th><th>Retail</th><th>R1</th><th>ADV</th><th>Net risk</th></tr></thead><tbody>
 {% for g in groups %}<tr><td>{{ g.relation }}</td><td>{{ g.rows }}</td>{% for key in ['original_risk_premium','retail_premium','r1_policy_fee','adv_fund_2_1_fee','new_risk_premium'] %}<td>{{ '{:,.2f}'.format(g[key]) }}</td>{% endfor %}</tr>{% endfor %}
@@ -17,3 +17,4 @@
 {% if not groups %}<p>No imported rows for this selection.</p>{% endif %}
 {% for key,v in controls.items() %}<p><strong>{{ 'Risk before fees' if key=='external_risk' else 'Retail' }}: {{ v.status }}</strong>. Other system {{ '{:,.2f}'.format(v.value) }}. Difference (other system minus imported): {{ '{:,.2f}'.format(v.difference) if v.difference is not none else 'Unavailable' }}.</p>{% endfor %}
 </div></body></html>
+
