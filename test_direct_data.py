@@ -115,12 +115,12 @@ class DirectDataTest(unittest.TestCase):
             client=app.test_client()
             self.assertIn(b'Direct Data Preparation',client.get('/direct-data').data)
             content=io.StringIO();csv.writer(content,delimiter='\t').writerow(record())
-            response=client.post('/direct-data',data={'direct_file':(io.BytesIO(content.getvalue().encode()),'source.csv')})
+            response=client.post('/direct-data',data={'data_month':'2026-09','direct_file':(io.BytesIO(content.getvalue().encode()),'source.csv')})
             self.assertEqual(response.status_code,200,response.data)
             result=response.json;url=f"/direct-data/download/{result['job']}/{result['files'][0]}"
             download=client.get(url);self.assertEqual(download.status_code,200);download.close()
             stream=client.post('/direct-data',headers={'X-Import-Progress':'stream'},
-                               data={'direct_file':(io.BytesIO(content.getvalue().encode()),'source.csv')})
+                               data={'data_month':'2026-09','direct_file':(io.BytesIO(content.getvalue().encode()),'source.csv')})
             self.assertEqual(stream.mimetype,'application/x-ndjson')
             updates=[json.loads(line) for line in stream.data.splitlines()]
             self.assertTrue(updates[-1]['ok'])

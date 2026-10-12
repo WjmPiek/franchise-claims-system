@@ -17,6 +17,7 @@ from flask import g, request, render_template, send_file, jsonify, session
 from openpyxl import load_workbook
 import xlsxwriter
 from import_progress import report, active, stream_import
+from direct_analytics import DirectStore, data_month, register_direct_analytics
 
 HEADERS = ['Franchise', 'Group', 'Policy Number', 'Surname', 'Full Names', 'ID Number',
            'Date of Birth', 'Passport Nr', 'Relation', 'Inception Date', 'Cover', 'Product',
@@ -302,12 +303,17 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
     aul_details = defaultdict(lambda: [0, *[Decimal(0) for _ in range(7)]])
     issues = []
     source_count = conn.execute('SELECT COUNT(*) FROM rows').fetchone()[0]
+    conn.execute('DROP TABLE IF EXISTS prepared')
+    conn.execute('CREATE TABLE prepared (n INTEGER PRIMARY KEY,destination TEXT,plan TEXT,franchise TEXT,policy TEXT,relation TEXT,original_risk TEXT,retail TEXT,faithnet TEXT,r1 TEXT,adv TEXT,payover TEXT,supplier TEXT,retained TEXT,contact TEXT,data TEXT,issues TEXT)')
     processed = 0
     for n, branch, policy, rel, is_voucher, dest, plan, data in conn.execute('SELECT n,branch,policy,relation,voucher,destination,plan,values_json FROM rows ORDER BY n'):
+        issue_start = len(issues)
         row = json.loads(data)
         writer('Converted Source').append(row)
         risk, retail = Decimal(row[12]), Decimal(row[13])
         deduction, r1, adv, net, supplier, retained = row_fees(row, faithnet_basis, voucher_basis)
+        plan_name = ''
+        phone = row[15]
         if is_voucher:
             # Supplier receives precisely the eleven approved fields, never IDs/risk/audit data.
             contacts = phones.get((branch, policy), set())
@@ -344,6 +350,7 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
                         plan = int(True in available_plan.get((branch, policy), set()))
                         issues.append([n, row[0], policy, 'No MEM row in this source; policy split follows available product labels.'])
                 split = 'AUL Plan 2 New' if plan else 'AUL Historic'
+                plan_name = 'Plan 2' if plan else 'Historic'
                 writer(split).append(prepared)
                 t = aul_details[split]
                 t[0] += 1
@@ -355,6 +362,13 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
         t[0] += 1
         for i, value in enumerate((risk, retail, *fees), 1):
             t[i] += value
+        row_issues = [issue[3] for issue in issues[issue_start:]]
+        analytics_values = (n,key,plan_name,row[0],policy,rel,str(risk),str(retail),
+            str(deduction if not is_voucher else 0),str(r1 if not is_voucher else 0),
+            str(adv if not is_voucher else 0),str(net if not is_voucher else 0),
+            str(supplier if is_voucher else 0),str(retained if is_voucher else 0),phone,
+            json.dumps(row,ensure_ascii=False),json.dumps(row_issues,ensure_ascii=False))
+        conn.execute('INSERT INTO prepared VALUES ('+','.join('?' for _ in analytics_values)+')',analytics_values)
         processed += 1
         if processed % 2000 == 0:
             report('Preparing insurer and voucher reports', processed, source_count)
@@ -390,9 +404,11 @@ def prepare_outputs(conn, folder, source_name, faithnet_basis='over_two_double',
             pack.write(path, path.name)
     return paths, archive, totals, issues
 
-def register_direct_data(app, export_dir):
+def register_direct_data(app, export_dir, get_engine=None):
     root = Path(export_dir) / 'direct_preparation'
     root.mkdir(parents=True, exist_ok=True)
+    store = DirectStore(Path(export_dir)/'direct_analytics.sqlite',get_engine)
+    register_direct_analytics(app,store)
 
     def cleanup():
         for folder in root.iterdir():
@@ -426,19 +442,22 @@ def register_direct_data(app, export_dir):
             suffix = Path(upload.filename).suffix.lower()
             if suffix not in ('.csv', '.txt', '.xlsx'):
                 raise ValueError('Use CSV, TXT or XLSX.')
+            month = data_month(upload.filename,request.form.get('data_month',''))
             path = folder / ('source' + suffix)
             upload.save(path)
             with closing(sqlite3.connect(folder / 'rows.db')) as conn:
                 source = stage_source(path, conn, request.form.get('encoding', 'auto'), request.form.get('excel_sheet') or None)
                 paths, archive, totals, issues = prepare_outputs(conn, folder, Path(upload.filename).name,
                     'over_two_double', 'mpia', 'policy')
+                report('Saving Direct monthly analytics',source['rows'],source['rows'])
+                store.save(conn,folder.name,user.get('id'),month,Path(upload.filename).name)
             path.unlink()
             (folder / 'rows.db').unlink()
             # Keep no identifiers in cookies. Downloads require this admin's session and opaque job ID.
             (folder / 'owner.json').write_text(json.dumps({'owner': user.get('id'), 'created': datetime.now().isoformat()}))
             (folder / 'files.json').write_text(json.dumps([p.name for p in paths.values()] + [archive.name]))
             source_json = {k: str(v) if isinstance(v, Decimal) else v for k, v in source.items()}
-            return jsonify(ok=True, source=source_json, issues=len(issues), job=folder.name,
+            return jsonify(ok=True, source=source_json, issues=len(issues), job=folder.name, month=month,
                            files=[p.name for p in paths.values()] + [archive.name])
         except (ValueError, csv.Error, UnicodeError) as exc:
             return jsonify(ok=False, error=str(exc)), 400

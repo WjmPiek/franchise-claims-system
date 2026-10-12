@@ -199,6 +199,7 @@
               <a href="{{ url_for('workspace_page', workspace='move_recommendations') }}">Move Recommendations</a>
               <a href="{{ url_for('workspace_page', workspace='franchise_money') }}">Franchise Money</a>
               <a href="{{ url_for('workspace_page', workspace='advanced_analytics') }}">Advanced Analytics</a>
+              {% if current_user and current_user.role == 'admin' %}<a href="{{ url_for('dashboard') }}#directAnalytics">Direct Data Analytics</a>{% endif %}
             </div></details>
             <details class="side-group">
               <summary><span class="ms-nav-icon" aria-hidden="true">F</span><span><strong>Finance</strong><small>Commission and allocations</small></span></summary><div class="ms-nav-submenu">
@@ -258,6 +259,7 @@
               <button type="submit">Apply</button>
             </form>
           </div>
+          {% if current_user and current_user.role == 'admin' %}{% include 'direct_dashboard.html' %}{% endif %}
           <section class="exec-grid">
             <div class="exec-card span-3 hero-card"><span class="kpi-title">Premium Amount</span><strong class="kpi-value">{{ ek.get('premium_amount',0)|money }}</strong><div class="kpi-sub">Imported retail premium</div></div>
             <div class="exec-card span-3"><span class="kpi-title">Claim Amount</span><strong class="kpi-value">{{ ek.get('claim_amount',0)|money }}</strong><div class="kpi-sub">Paid/imported claims</div></div>

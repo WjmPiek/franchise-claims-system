@@ -10051,7 +10051,7 @@ def admin_policydata_current_members_status():
 # Start daily background scheduler only when the Flask server actually starts.
 # This avoids silent startup hangs during import/module loading.
 from direct_data import register_direct_data
-register_direct_data(app, EXPORT_DIR)
+register_direct_data(app, EXPORT_DIR, get_db_engine if DATABASE_URL else None)
 
 from policy_reports import register_policy_reports
 register_policy_reports(app, get_db_engine, text, lambda: LAST_POLICY_DETAIL_DF, apply_user_franchise_scope)
