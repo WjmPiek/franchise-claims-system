@@ -1,5 +1,6 @@
 """Durable Direct-only monthly data, dashboard summaries and paginated details."""
 import csv
+import calendar
 import io
 import json
 import re
@@ -291,6 +292,10 @@ def register_direct_analytics(app, store):
         try:
             from period_selection import month_bounds
             start,end=month_bounds(request.args)
+            batches_for_period=store.batches(owner())
+            if not start and not (request.args.get('direct_month') or request.args.get('product_month')) and request.args.get('dashboard_period_view') in ('six_months','year') and batches_for_period:
+                width=12 if request.args.get('dashboard_period_view')=='year' else 6
+                chosen=batches_for_period[:width];start=chosen[-1]['month'];end=chosen[0]['month']
             overview=store.overview(owner(),request.args.get('direct_month') or request.args.get('product_month'),start,end)
             graphs=[]
             all_batches=store.batches(owner())
@@ -302,7 +307,7 @@ def register_direct_analytics(app, store):
                 selected_product_month=request.args.get('product_month') or request.args.get('direct_month')
                 if selected_product_month=='all':selected_product_month=None
                 extra['product_insights']=store.product_insights(owner(),selected_product_month,request.args.get('product',''),start,end)
-            return {'direct_analytics_data':overview,'direct_graphs':graphs,'direct_batches':[b for b in all_batches if not start or start<=b['month']<=end],**extra}
+            return {'direct_range_args':{'date_from':start+'-01','date_to':end+'-'+str(calendar.monthrange(int(end[:4]),int(end[5:]))[1])} if start else {},'direct_analytics_data':overview,'direct_graphs':graphs,'direct_batches':[b for b in all_batches if not start or start<=b['month']<=end],**extra}
         except Exception as exc:
             app.logger.warning('Direct analytics unavailable (%s)',type(exc).__name__)
             return {'direct_analytics_data':{'available':False,'error':'Direct analytics could not be loaded. Please retry.'}}
