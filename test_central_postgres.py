@@ -10,7 +10,7 @@ from direct_data import stage_source,prepare_outputs
 from central_store import CentralStore
 from central_claims import publish_claims
 from central_identity import member_snapshot
-from central_reports import catalog,generate
+from central_reports import catalog_all as catalog,generate
 from central_ledger import publish as publish_ledger
 from test_direct_data import record
 

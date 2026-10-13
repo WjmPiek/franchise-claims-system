@@ -15,7 +15,7 @@ def safe(value):return re.sub(r'[^\w.-]+','_',str(value),flags=re.UNICODE).strip
 def period(month):
     y,m=map(int,month.split('-'));return f'{y}{m:02d}01',f'{y}{m:02d}{calendar.monthrange(y,m)[1]:02d}'
 
-def catalog(store,batch,allowed=None):
+def catalog_all(store,batch,allowed=None):
     start,end=period(batch['month']);stamp=batch['month'].replace('-','')
     sums=[r for r in store.summaries(batch['month'],batch['month'],allowed) if r['batch_id']==batch['id']]
     franchises=[r['franchise'] for r in sums];totals={r['franchise']:r['summary'] for r in sums}
@@ -67,6 +67,33 @@ def catalog(store,batch,allowed=None):
     # Report-specific counts/totals are replaced with actual generated-file metadata.
     return files
 
+APPROVED_BRANCHES=('Katlehong','Alberton','Pretoria North Group','Carletonville','Rustenburg')
+REPORT_FORMAT_VERSION='approved-two-sources-20261013-v1'
+
+def catalog(store,batch,allowed=None):
+    """Only the user's named report families are offered to users."""
+    files=catalog_all(store,batch,allowed);start,end=period(batch['month'])
+    result=[]
+    def combined(kind,name,title):
+        items=[i for i in files if i['kind']==kind]
+        if not items:return
+        result.append({**items[0],'name':name,'title':title,'franchise':'','source_rows':sum(i['source_rows'] for i in items),'total':str(sum((Decimal(i['total']) for i in items),Decimal(0)))})
+    combined('payover',f'Monthly Pay-over per Franchise (New) - {batch["month"]}.xlsx','Monthly Pay-over per Franchise')
+    result.extend(i for i in files if i['kind']=='product_claims')
+    for item in files:
+        if item['kind']!='policy' or item['destination'] not in (*APPROVED_BRANCHES,'AUL'):continue
+        if item['plan']=='Plan 2':item={**item,'name':f'PolicyData_{start}_to_{end}_Martins Funeral Plan 2 (New).xlsx'}
+        result.append(item)
+    voucher=next((i for i in files if i['kind']=='supplier'),None)
+    if voucher:result.append({**voucher,'name':f'{calendar.month_name[int(batch["month"][5:])]} {batch["month"][:4]} Vouchers.xlsx','title':'Monthly vouchers'})
+    from direct_data import allocation
+    sums=store.summaries(batch['month'],batch['month'],allowed)
+    for destination in APPROVED_BRANCHES:
+        subset=[r['summary'] for r in sums if allocation(r['franchise'])==destination]
+        label='PretoriaNorth_Soshanguve_Hammanskraal' if destination=='Pretoria North Group' else destination
+        result.append(dict(kind='branch_calculation',name=f'{label} - Calculation - {batch["month"]}.xlsx',title=label+' calculation',franchise='',destination=destination,plan='',batch_id=batch['id'],month=batch['month'],version=batch['version'],status='Generate on request',source_rows=sum(r['rows'] for r in subset),total=str(sum((Decimal(r['payover']) for r in subset),Decimal(0))),total_label='Net insurer Risk',internal=True))
+    return result
+
 def financial_rows(store,batch,allowed=None,franchise=''):
     summaries=store.summaries(batch['month'],batch['month'],allowed)
     claims=defaultdict(lambda:[Decimal(0),0])
@@ -110,7 +137,7 @@ def financial_rows(store,batch,allowed=None,franchise=''):
 def generate(store,batch,item,path,allowed=None):
     from direct_data import HEADERS,VOUCHER_HEADERS,SheetWriter
     kind=item['kind'];franchise=item['franchise'];dest=item['destination'];plan=item['plan']
-    if kind in ('product_claims','claims','internal') and batch['month'] not in store.verified_claim_months():
+    if kind in ('product_claims','claims','internal','branch_calculation') and batch['month'] not in store.verified_claim_months():
         raise ValueError('Paid claims for this month have not been verified. Import the complete paid-claims source or explicitly confirm a month with no paid claims in Admin.')
     allowed_scope={franchise} if franchise and (allowed is None or franchise in allowed) else allowed
     if franchise and allowed is not None and franchise not in allowed:raise ValueError('Franchise is outside your authorised scope.')
@@ -125,7 +152,17 @@ def generate(store,batch,item,path,allowed=None):
         w=sheet('Summary',['Item','Value'])
         for label,value in [('Report',item['title']),('Receipt month',batch['month']),('Franchise / group',franchise or dest or 'All authorised'),('Source file',batch['source_file']),('Source version',batch['version']),('Source batch',batch['id']),*notes]:w.append([label,value])
     try:
-        if kind=='reconciliation':
+        if kind=='branch_calculation':
+            from direct_data import allocation
+            rows=[r for r in financial_rows(store,batch,allowed_scope) if allocation(r['Franchise'])==dest]
+            fields=('Retail','BrightRock','Mkhulu','MFF','Original Risk','R1','ADV','Voucher Supplier','Voucher Retained','Claims')
+            sums={key:sum((Decimal(r[key]) for r in rows),Decimal(0)) for key in fields}
+            gross=sums['Original Risk']+sums['Voucher Supplier']+sums['Voucher Retained'];brokers=sums['Mkhulu']+sums['MFF'];fees=sums['R1']+sums['ADV'];vouchers=sums['Voucher Supplier']+sums['Voucher Retained']
+            due=sums['Claims']+brokers+sums['BrightRock']+fees+vouchers
+            headers=['Month','Retail','Bright Rock Fee (10%)','Brokers & Mkhulu','System Risk premium before COMS','Advertising Fund (2.1%) and MFF (R1.00) on System Risk premium','Voucher Coupons','Risk premium after all fees','Claims','Total fees and Claims payable to Brokers','Insurance pay-over money kept after claims and fees paid on Pay-over premium']
+            w=sheet(dest,headers);w.sheet.set_row(0,105);w.sheet.set_column(5,5,55);w.sheet.set_column(9,10,55);w.append([batch['month']+'-01',sums['Retail'],sums['BrightRock'],brokers,gross,fees,vouchers,gross-sums['BrightRock']-brokers,sums['Claims'],due,gross-due]);count=1;total=gross-due
+            summary([('Included franchises',', '.join(r['Franchise'] for r in rows)),('Source Risk',gross),('Paid claims use AM',sums['Claims']),('Reference column H','As in the example: E minus C minus D, before R1/ADV/vouchers. Final column K deducts those stored fees once.'),('Final calculation','K = E - (I + D + C + F + G). No external example amounts are used.')])
+        elif kind=='reconciliation':
             summary([('Note','Exact source conservation. Rounding and zero-floor adjustments are explicit, never extra fees.')])
             headers=['Franchise','Source Rows','Source Risk','Insurance Net Risk','Faithnet','R1','ADV','Voucher Supplier','Voucher Retained','Rounding / Zero Floor','Risk Difference','Source Retail','Insurance Retail','Voucher Retail','Retail Difference','Source Version'];w=sheet('Reconciliation',headers)
             for source in store.summaries(batch['month'],batch['month'],allowed_scope):
@@ -140,20 +177,22 @@ def generate(store,batch,item,path,allowed=None):
             ledger=controls(store,batch['month']) if kind=='payover' else {}
             summary([('Note','All amounts are stored calculations; R1/ADV are not deducted again.'),('Outstanding balances','Imported balance controls are compared with source totals; review each row status.' if ledger else 'Unavailable: external balances and bank payments have not been imported.')])
             if kind=='payover':
-                headers=['Franchise','Account Number / Reference Number','System Pay-over','MFF Commission (R1)','Advertising Fund (ADV)','Brokers & Mkhulu','Vouchers','Voucher COMS','Voucher Payment','AUL Pay-over','CURRENT PAYOVER','OUTSTANDING PAYOVER','TOTAL DUE','DATUM BETAAL','BETALING','TOTAL OUTSTANDING','Source Version','External System Control','Source / External Difference','Status']
+                headers=['Franchise','Account Number / Reference Number','System Pay-over','MFF Comission','Advertising Fund','Brokers & Mkhulu','Vouchers','Voucher COMS','Voucher Payment','AUL Pay-over','','CURRENT PAYOVER','OUTSTANDING PAYOVER','TOTAL DUE','DATUM BETAAL','BETALING','TOTAL OUTSTANDING']
                 w=sheet('Monthly Pay-over',headers)
                 for row in rows:
                     # Gross insurance Risk and voucher source Risk reconcile to System Pay-over;
                     # net insurer amount is read directly, never calculated by subtracting again.
-                    vals=next(x['summary'] for x in store.summaries(batch['month'],batch['month'],allowed_scope) if x['franchise']==row['Franchise'])
+                    vals=next((x['summary'] for x in store.summaries(batch['month'],batch['month'],allowed_scope) if x['franchise']==row['Franchise']),{'supplier':'0','retained':'0','original_risk':'0'})
                     gross_voucher=Decimal(vals['supplier'])+Decimal(vals['retained'])
                     gross_insurance=Decimal(vals['original_risk'])-gross_voucher
                     system=Decimal(vals['original_risk']);control=ledger.get(normal(row['Franchise']))
                     opening=Decimal(control['opening']) if control else None;payment=Decimal(control['payment']) if control else None
                     due=system+opening if opening is not None else None;outstanding=due-payment if due is not None else None
-                    external=Decimal(control['system_control']) if control else None;difference=system-external if external is not None else None
+                    external=Decimal(control['system_control']) if control and control.get('system_control') not in ('',None) else None;difference=system-external if external is not None else None
                     status='Draft — import opening balances and payment controls' if not control else 'Review — external system differs' if difference else 'Reconciled'
-                    w.append([row['Franchise'],control['account'] if control else 'Unconfirmed',system,row['R1'],row['ADV'],row['Mkhulu']+row['MFF'],gross_voucher,Decimal(vals['retained']),Decimal(vals['supplier']),row['Net Risk / Insurer Payover'],system,opening if opening is not None else 'Unconfirmed',due if due is not None else 'Unconfirmed',control['paid_on'] if control else '',payment if payment is not None else 'Unconfirmed',outstanding if outstanding is not None else 'Unconfirmed',batch['version'],external if external is not None else 'Unconfirmed',difference if difference is not None else 'Unconfirmed',status]);count+=1;total+=Decimal(row['Net Risk / Insurer Payover'])
+                    w.append([row['Franchise'],control['account'] if control else 'Unconfirmed',system,row['R1'],row['ADV'],row['Mkhulu']+row['MFF'],gross_voucher,Decimal(vals['retained']),Decimal(vals['supplier']),row['Net Risk / Insurer Payover'],'',system,opening if opening is not None else 'Unconfirmed',due if due is not None else 'Unconfirmed',control['paid_on'] if control else '',payment if payment is not None else 'Unconfirmed',outstanding if outstanding is not None else 'Unconfirmed']);count+=1;total+=Decimal(row['Net Risk / Insurer Payover'])
+                    control_notes=sheet('Control Review',['Franchise','Source Version','External System Control','Source / External Difference','Status']) if count==1 else control_notes
+                    control_notes.append([row['Franchise'],batch['version'],external if external is not None else 'Unconfirmed',difference if difference is not None else 'Unconfirmed',status if external is not None or not control else 'Manual balances — no external System control'])
                 detail=sheet('Insurer Calculation',['Franchise','Retail','BrightRock 10%','Brokers & Mkhulu 5%','Original Insurance Risk','Faithnet','R1 + ADV','Voucher Risk (separate)','Net Insurance Risk','Claims Paid Via Bank','Commissions + Bank Claims','Insurer Remaining After Commissions And Claims','Claims Verification'])
                 for row in rows:
                     ready=batch['month'] in store.verified_claim_months()
@@ -183,7 +222,7 @@ def generate(store,batch,item,path,allowed=None):
             r=ratio(sum(claim_totals.values()),sum(premiums.values()));w.append(['TOTAL',sum(claim_totals.values()),sum(premiums.values()),r['value']/100 if r['value'] is not None else r['status']])
         else:
             policy=kind in ('policy','complete','combine','unclassified')
-            if kind=='supplier':headers=VOUCHER_HEADERS
+            if kind=='supplier':headers=['Franchise','Policy Number','Surname','Full Names','Date of Birth','Passport Nr','Relation','Inseption Date','Product','Fee x MPIA','Contact Number','MPIA']
             elif kind=='vouchers_internal':headers=['Source Row','Franchise','Policy Number','Product','Calculation MPIA','Voucher Units','Risk / Gross','Martins Retained','Supplier Fee','Contact Number','Issue','Source Version']
             elif kind=='review':headers=['Source Row','Franchise','Policy Number','Issue','Source Version']
             elif kind in ('complete','combine','unclassified'):headers=HEADERS+['Original Franchise','Original Risk','Calculation MPIA','Faithnet Deduction','R1','ADV','Net Risk','BrightRock','Mkhulu','MFF','Paid Commissions','Admin / Scenario 1','Book Value','Plan','Issue','Source Version']
@@ -198,7 +237,7 @@ def generate(store,batch,item,path,allowed=None):
                     continue
                 if kind=='supplier':
                     if not record['contact'] or any('contact' in s.lower() or 'phone' in s.lower() or 'voucher risk differs' in s.lower() for s in notes):raise ValueError('Voucher contacts or fee reconciliation require review before supplier export.')
-                    values=[data[0],data[2],data[3],data[4],data[6],data[8],data[9],data[11],Decimal(record['supplier']),record['contact'],calc['calculation_mpia']];total+=Decimal(record['supplier'])
+                    values=[data[0],data[2],data[3],data[4],data[6],'',data[8],data[9],data[11],Decimal(record['supplier']),record['contact'],Decimal(calc['calculation_mpia'])];total+=Decimal(record['supplier'])
                 elif kind=='vouchers_internal':values=[record['n'],data[0],data[2],data[11],Decimal(calc['calculation_mpia']),Decimal(calc['voucher_units']),Decimal(record['original_risk']),Decimal(record['retained']),Decimal(record['supplier']),record['contact'],'; '.join(notes),batch['version']];total+=Decimal(record['supplier'])
                 elif kind=='source':
                     values=calc['source'].copy();values[6]=data[6];values[9]=data[9];total+=Decimal(record['original_risk'])
@@ -212,7 +251,7 @@ def generate(store,batch,item,path,allowed=None):
                     else:values=data
                     total+=Decimal(record['payover'])
                 w.append(values);count+=1;issues+=bool(notes)
-            if kind!='supplier':summary([('Exported records',count),('Relevant total',total),('Records with review notes',issues),('Note','Original franchise retained; combined view is an alternative, never additional premiums.')])
+            summary([('Exported records',count),('Relevant total',total),('Records with review notes',issues),('Note','Voucher Passport column is blank: the supplier receives the approved limited fields.' if kind=='supplier' else 'Original franchise retained; all amounts come from stored source calculations.')])
         for w in writers:w.close()
         book.close();temporary.replace(path)
         return {'rows':count,'total':str(total),'review_rows':issues,'version':batch['version'],'name':path.name}

@@ -11,6 +11,21 @@ BRANCHES={'PARTICIPATINGGROUP','FRANCHISE','FRANCHISENAME','BRANCH'}
 VERIFIED_AMOUNT_HEADER='Net amount paid via bank'
 VERIFIED_NET_OFF_HEADER='Amount net off against claim'
 VERIFIED_BANK_HEADER='Net amount paid via bank'
+ANNUAL_HEADERS=('Claim Number','Participating Group','Claim Reported Date','Policy Number','Policyholder Gender','Product','Incident Cause','Relationship of Life Assured/Member','Date Of Claim Paid','Claim Status','Final Amount','Amount net off against claim','Net amount paid via bank','Number of days between Incident Date/Entry Date','Age Category','PayableTo')
+
+def verified_annual_sheet(path):
+    required={normal(h) for h in ANNUAL_HEADERS};matches=[]
+    book=load_workbook(path,read_only=True,data_only=True)
+    try:
+        for sheet in book:
+            for row in sheet.iter_rows(max_row=25,values_only=True):
+                keys=[normal(v) for v in row]
+                if required.issubset(keys):
+                    if any(keys.count(k)!=1 for k in required):raise ValueError('Duplicate required annual claims headings; no current month was replaced.')
+                    matches.append(sheet.title);break
+    finally:book.close()
+    if len(matches)!=1:raise ValueError('Use the annual Martins Funeral All Claims transaction format, including AM bank amounts, AL net-offs, paid/reported dates, status, relationship, Age Category, AN duration and PayableTo. Exactly one matching transaction worksheet is required.')
+    return matches[0]
 
 def component(source,heading):
     values=[v for k,v in source.items() if normal(k)==normal(heading)]

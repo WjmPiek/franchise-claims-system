@@ -1,5 +1,5 @@
 """Durable database-backed jobs and chunked private source storage."""
-import csv,hashlib,json,sqlite3,threading,time,uuid
+import csv,hashlib,json,sqlite3,threading,time,uuid,re
 from contextlib import closing
 from datetime import datetime,timedelta
 from pathlib import Path
@@ -133,7 +133,8 @@ class JobQueue:
                             result={'ok':True,'batch_id':identifier,'month':month,'source':source,'issues':len(issues),'version':VERSION}
                     elif job['kind']=='claims':
                         path=self.restore_source(job)
-                        from central_claims import read_transactions,publish_claims
+                        from central_claims import read_transactions,publish_claims,verified_annual_sheet,VERIFIED_AMOUNT_HEADER
+                        annual_sheet=verified_annual_sheet(path)
                         with closing(sqlite3.connect(self.root/(identifier+'.sqlite'))) as stage:
                             stage.execute('CREATE TABLE claims(n INTEGER PRIMARY KEY,month TEXT,franchise TEXT,product TEXT,amount TEXT,source TEXT,issues TEXT)')
                             stage.execute('CREATE TABLE claim_events(n INTEGER PRIMARY KEY,source TEXT)')
@@ -142,7 +143,7 @@ class JobQueue:
                             for name in known:aliases.setdefault(franchise_match_key(name),set()).add(name)
                             count=0;amount=Decimal(0);paid_count=0
                             claims_controls={}
-                            for record in read_transactions(path,job['args']['amount_header'],job['args'].get('sheet',''),claims_controls,lambda n,source:stage.execute('INSERT INTO claim_events VALUES (?,?)',(n,json.dumps(source)))):
+                            for record in read_transactions(path,VERIFIED_AMOUNT_HEADER,annual_sheet,claims_controls,lambda n,source:stage.execute('INSERT INTO claim_events VALUES (?,?)',(n,json.dumps(source)))):
                                 issues=[];franchise=record['franchise'];matches=aliases.get(franchise_match_key(franchise),set())
                                 if franchise not in known:
                                     if len(matches)==1:franchise=next(iter(matches));issues.append('Franchise resolved by the existing normalised alias; original source retained.')
@@ -154,7 +155,7 @@ class JobQueue:
                                 if count%1000==0:self.update(identifier,'Validating paid claim transactions',count)
                             stage.commit();months=[r[0] for r in stage.execute('SELECT DISTINCT month FROM claims')]
                             chosen=job['args'].get('replace_months') or months
-                            result=publish_claims(self.store,stage,job['args']['filename'],job['owner_id'],job['args']['amount_header'],chosen,batch_id=identifier)
+                            result=publish_claims(self.store,stage,job['args']['filename'],job['owner_id'],VERIFIED_AMOUNT_HEADER,chosen,batch_id=identifier)
                             result.update(ok=True,issues=claims_controls.get('undated_netoff_rows',0),source={'rows':count,'claims':str(amount),'claim_count':paid_count,**claims_controls},month=','.join(result['months']))
                     elif job['kind']=='claim_analysis':
                         from claim_insights import backfill
@@ -219,14 +220,24 @@ def register_jobs(app,store,export_dir,audit,resolver=None):
         upload=request.files.get('file');kind=request.form.get('kind','direct')
         if kind not in ('direct','claims') or not upload or not upload.filename:return jsonify(ok=False,error='Select a monthly Direct file or a paid-claims workbook.'),400
         suffix=Path(upload.filename).suffix.lower()
-        if suffix not in ('.xlsx','.csv','.txt') or kind=='claims' and suffix!='.xlsx':return jsonify(ok=False,error='Unsupported source format.'),400
+        if suffix not in ('.xlsx','.csv') or kind=='claims' and suffix!='.xlsx':return jsonify(ok=False,error='Unsupported source format.'),400
         args={'filename':Path(upload.filename).name,'month':request.form.get('month','')}
+        if kind=='direct' and not re.match(r'^PolicyData_DTSTAMP_RECEIPTSFOR_\d{8}_to_\d{8}',args['filename'],re.I):return jsonify(ok=False,error='Use the Direct PolicyData_DTSTAMP_RECEIPTSFOR monthly source, in the October example format. Insurer exports and older policy/premium files are not import sources.'),400
+        if kind=='direct':
+            match=re.match(r'^PolicyData_DTSTAMP_RECEIPTSFOR_(\d{8})_to_(\d{8})',args['filename'],re.I)
+            try:
+                first,last=(datetime.strptime(v,'%Y%m%d') for v in match.groups())
+                import calendar
+                if first.day!=1 or (first.year,first.month)!=(last.year,last.month) or last.day!=calendar.monthrange(last.year,last.month)[1]:raise ValueError
+            except ValueError:return jsonify(ok=False,error='The Direct source must contain one complete named calendar month.'),400
+        if kind=='claims' and not re.match(r'^Martins Funeral All Claims\b',args['filename'],re.I):return jsonify(ok=False,error='Use the Martins Funeral All Claims annual source workbook.'),400
         if kind=='claims':
             from central_claims import VERIFIED_AMOUNT_HEADER
-            args.update(amount_header=request.form.get('amount_header',VERIFIED_AMOUNT_HEADER).strip(),sheet=request.form.get('sheet','').strip(),replace_months=[s.strip() for s in request.form.get('replace_months','').split(',') if s.strip()])
+            args.update(amount_header=VERIFIED_AMOUNT_HEADER,sheet='',replace_months=[])
             from central_calculations import normal
             if normal(args['amount_header'])!=normal(VERIFIED_AMOUNT_HEADER):return jsonify(ok=False,error='Paid claims must use the approved Net amount paid via bank heading.'),400
-            if request.form.get('replace_present')!='yes' and not args['replace_months']:return jsonify(ok=False,error='Choose the paid-month replacement scope.'),400
+            # The approved annual source retains every actual paid month, including
+            # payments beyond its reported-date window; no month is forced from its filename.
         try:identifier=jobs.create(user['id'],kind,args,upload)
         except Exception:
             app.logger.exception('Could not save source job');return jsonify(ok=False,error='The source could not be stored safely. No monthly data was replaced.'),500

@@ -30,6 +30,28 @@ def register_admin(app,store):
         from pathlib import Path
         app.extensions['central_jobs'].create(user['id'],'ledger',{'filename':Path(upload.filename).name,'month':month,'sheet':sheet},upload)
         return redirect(url_for('overview_page',section='admin'))
+    @app.post('/admin/payover/save-controls')
+    def central_save_balance_controls():
+        user=getattr(g,'user',None) or {}
+        if user.get('role')!='admin':abort(403)
+        month=request.form.get('month','');franchise=request.form.get('franchise','')
+        if not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])',month) or franchise not in {r['franchise'] for r in store.summaries(month,month)}:abort(400,'Choose an imported month and franchise.')
+        from direct_data import number
+        from central_calculations import normal
+        from central_ledger import controls,publish
+        from app import log_audit
+        try:
+            record={key:str(number(request.form.get(key,''),key,0)) for key in ('opening','payment')}
+            if any(request.form.get(key,'').strip()=='' for key in ('opening','payment')):raise ValueError('Enter verified opening balance and payment, including zero when applicable.')
+            raw=request.form.get('system_control','').strip();record['system_control']=str(number(raw,'External System control',0)) if raw else None
+            record.update(franchise=franchise,account=request.form.get('account','').strip(),paid_on=request.form.get('paid_on','').strip())
+            if not record['account']:raise ValueError('Enter the verified account/reference number.')
+            if record['paid_on']:datetime.strptime(record['paid_on'],'%Y-%m-%d')
+        except ValueError as exc:abort(400,str(exc))
+        previous=controls(store,month);previous[normal(franchise)]=record
+        publish(store,uuid.uuid4().hex,user['id'],month,'Manual administrator balance/payment controls',list(previous.values()))
+        log_audit('payover_controls_saved',f'Claims monthly control: {month}, {franchise}; existing franchises and archived versions retained')
+        return redirect(url_for('overview_page',section='admin'))
     @app.context_processor
     def monthly_controls():
         if (getattr(g,'user',None) or {}).get('role')!='admin':return {}
@@ -39,7 +61,7 @@ def register_admin(app,store):
         legacy=[b for b in store.direct.batches(g.user['id']) if b['id'] not in {p['id'] for p in pubs}]
         with store.direct.connection() as conn:
             legacy=[b for b in legacy if store.direct.execute(conn,'SELECT COUNT(*) FROM direct_data_rows WHERE batch_id=:id',{'id':b['id']}).fetchone()[0]]
-        return {'central_admin_months':pubs,'central_verified_claim_months':verified,'central_legacy_convertible':legacy}
+        return {'central_admin_months':pubs,'central_verified_claim_months':verified,'central_legacy_convertible':legacy,'central_control_franchises':sorted({r['franchise'] for r in store.summaries()})}
 
     @app.post('/admin/claims/confirm-zero')
     def central_confirm_zero_claims():

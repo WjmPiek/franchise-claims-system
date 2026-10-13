@@ -9,7 +9,7 @@ from direct_data import register_direct_data,stage_source,prepare_outputs
 from direct_analytics import DirectStore
 from central_calculations import effective_mpia,fees,ratio,retail_rank,VERSION
 from central_store import CentralStore
-from central_reports import catalog,generate
+from central_reports import catalog_all as catalog,generate
 from central_claims import read_transactions,publish_claims
 from central_jobs import JobQueue,register_jobs
 from central_routes import register_central

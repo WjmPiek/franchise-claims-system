@@ -51,9 +51,10 @@ def register_central(app,export_dir,scope):
     register_claim_insights(app,store,access)
 
     def export_arguments(batch,item,allowed):
-        args={'batch':batch['id'],'name':item['name'],'allowed':sorted(allowed) if allowed is not None else None}
+        from central_reports import REPORT_FORMAT_VERSION
+        args={'batch':batch['id'],'name':item['name'],'allowed':sorted(allowed) if allowed is not None else None,'report_format_version':REPORT_FORMAT_VERSION}
         with store.direct.connection() as conn:
-            if item['kind'] in ('claims','product_claims','internal','payover'):
+            if item['kind'] in ('claims','product_claims','internal','payover','branch_calculation'):
                 row=store.direct.execute(conn,'SELECT batch_id FROM central_claim_publications WHERE month=:month',{'month':batch['month']}).fetchone()
                 args['claims_version']=row[0] if row else None
             if item['kind']=='payover':
@@ -92,6 +93,8 @@ def register_central(app,export_dir,scope):
         batch=next((b for b in store.publications() if b['id']==args.get('batch')),None)
         return bool(batch and any(i['name']==args.get('name') and args==export_arguments(batch,i,allowed) for i in allowed_catalog(batch,allowed)))
     app.extensions['central_export_access']=permitted_export
+    from report_workflow import register as register_report_workflow
+    register_report_workflow(app)
 
     def selected():
         from period_selection import selected_dates,month_bounds

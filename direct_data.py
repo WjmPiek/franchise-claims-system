@@ -113,7 +113,11 @@ def source_rows(path, encoding='auto', sheet_name=None):
     if path.suffix.lower() == '.xlsx':
         book = load_workbook(path, read_only=True, data_only=True)
         try:
-            candidates = [s for s in book if s.max_column >= 22]
+            def embedded_tabs(sheet):
+                for row in sheet.iter_rows(max_row=5,values_only=True):
+                    if sum(str(v or '').count('\t') for v in row)>=21:return True
+                return False
+            candidates = [s for s in book if s.max_column >= 22 or embedded_tabs(s)]
             if sheet_name:
                 if sheet_name not in book.sheetnames:
                     raise ValueError('The selected Excel worksheet does not exist.')
@@ -123,6 +127,13 @@ def source_rows(path, encoding='auto', sheet_name=None):
             else:
                 raise ValueError('Specify the original Direct worksheet name; more than one data sheet was found.')
             for n, values in enumerate(sheet.iter_rows(values_only=True), 1):
+                if sum(str(v or '').count('\t') for v in values)>=21:
+                    # Excel opened the Direct export with comma separators. Rejoin those
+                    # fragments before reading its actual tabs, preserving commas in addresses.
+                    fragments=list(values)
+                    while fragments and fragments[-1] is None:fragments.pop()
+                    line=','.join('' if v is None else str(v) for v in fragments)
+                    values=next(csv.reader([line],delimiter='\t',strict=True))
                 yield n, list(values)
         finally:
             book.close()
@@ -260,8 +271,10 @@ class SheetWriter:
             if value is None or value == '':
                 continue
             name = self.headers[i]
-            if name in ('Date of Birth', 'Inception Date','Date Of Claim Paid'):
-                self.sheet.write_datetime(self.n, i, datetime.strptime(str(value), '%Y-%m-%d'), self.date_fmt)
+            if name in ('Date of Birth','Inception Date','Inseption Date','Date Of Claim Paid','Month','DATUM BETAAL'):
+                date_text=str(value).split(' ')[0]
+                if name=='Month' and re.fullmatch(r'\d{4}-\d{2}',date_text):date_text+='-01'
+                self.sheet.write_datetime(self.n, i, datetime.strptime(date_text, '%Y-%m-%d'), self.date_fmt)
             elif name in ('ID Number','Passport Nr','Policy Number','System REF','Contact Number'):
                 self.sheet.write_string(self.n,i,str(value),self.text_fmt)
             elif name in ('Risk', 'Retail', 'Cover', 'MPIA', 'Fee', 'Original Risk', 'Faithnet Deduction', 'R1 Fee', 'ADV Fee', 'Payover') or isinstance(value, (Decimal, int, float)):

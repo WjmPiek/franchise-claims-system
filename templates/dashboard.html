@@ -226,7 +226,7 @@
           {% elif home_section == 'imports' %}{% if current_user.role=='admin' %}{% include 'central_imports.html' %}{% endif %}
 {% elif home_section == 'admin' %}{% include 'admin_tools_section.html' %}
 {% elif home_section == 'commission_detail' %}{% include 'commission_detail.html' %}
-          {% elif home_section == 'downloads' %}{% if central_ready %}{% set entries=central_catalog %}{% include 'central_catalog_block.html' %}{% else %}<p>Historical reports use the previous calculation workflow. Convert saved Direct months or import complete monthly sources to publish the new version.</p>{% include 'reports_section.html' %}{% include 'prepared_downloads_section.html' %}{% endif %}
+          {% elif home_section == 'downloads' %}{% set entries=central_catalog|default([]) %}{% include 'central_catalog_block.html' %}
           {% elif home_section in ['graphs','claim_trend','policy_trend'] %}{% if central_ready and home_section=='graphs' %}{% include 'central_graphs.html' %}{% else %}{% include 'graphs_section.html' %}{% endif %}
           {% endif %}
       <script id="execDashboardData" type="application/json">{{ executive_dashboard|tojson }}</script>

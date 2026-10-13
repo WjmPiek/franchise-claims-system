@@ -1,5 +1,5 @@
 {
-  "source": "User supplied September 2026 AUL Historic and Plan 2 reports",
+  "source": "User supplied September 2026 AUL reports and October 2025 Direct old policies; non-R40,000/R50,000 main plans use the approved Historic rule.",
   "plans": {
     "FAMILYBENEFITPLAN18UPTO64YEARS": "Historic",
     "DIAMONDFAMILYPLAN18TO64R30000": "Historic",
@@ -220,7 +220,28 @@
     "PLATINUMSINGLEPLAN31TO55YEARSR50000": "Plan 2",
     "PLATINUMFAMILYPLAN18TO30YEARSR50000": "Plan 2",
     "PLATINUMFAMILYPLAN31TO55YEARSR50000": "Plan 2",
-    "GOLDFAMILYPLAN18TO30YEARSR40000": "Plan 2"
+    "GOLDFAMILYPLAN18TO30YEARSR40000": "Plan 2",
+    "F1664600000": "Historic",
+    "F6585900000": "Historic",
+    "FAMILY16649000": "Historic",
+    "SINGLE1664R11000": "Historic",
+    "SINGLE1664R13000": "Historic",
+    "FAMILYPLANGOLD": "Historic",
+    "HERITAGEGOLD6584A": "Historic",
+    "FAMILY1664R4000": "Historic",
+    "GOLDSINGLER13000": "Historic",
+    "FAMILY65TO84R10000PLAN": "Historic",
+    "FAMILYPLANPLUS2": "Historic",
+    "SINGLE1664R6000": "Historic",
+    "FAMILY6584R5000": "Historic",
+    "FAMILYGOLDPLAN": "Historic",
+    "PLANE": "Historic",
+    "FAMILYSUPERPLAN": "Historic",
+    "LAZARUSPLANC3": "Historic",
+    "JOSIAHPLANF1": "Historic",
+    "MARTINSGOLDENFUNERALPLANFAMILY": "Historic",
+    "APFM": "Historic",
+    "113MEMBERAND13NOMINATEDFAMILYMEMBERS": "Historic"
   },
   "franchises": [
     "MARTINS DRIE RIVIERE",
@@ -266,5 +287,70 @@
     "MARTINS FUNERALS VOSLOORUS",
     "MARTINS FUNERALS VRYBURG",
     "MARTINS FUNERALS WELKOM"
-  ]
+  ],
+  "legacy_main_covers": {
+    "F1664600000": [
+      "6000.00"
+    ],
+    "F6585900000": [
+      "9000.00"
+    ],
+    "FAMILY16649000": [
+      "9000.00"
+    ],
+    "SINGLE1664R11000": [
+      "11000.00"
+    ],
+    "SINGLE1664R13000": [
+      "13000.00"
+    ],
+    "FAMILYPLANGOLD": [
+      "10000.00"
+    ],
+    "HERITAGEGOLD6584A": [
+      "10000.00"
+    ],
+    "FAMILY1664R4000": [
+      "4000.00"
+    ],
+    "GOLDSINGLER13000": [
+      "13000.00"
+    ],
+    "FAMILY65TO84R10000PLAN": [
+      "10000.00"
+    ],
+    "FAMILYPLANPLUS2": [
+      "8000.00"
+    ],
+    "SINGLE1664R6000": [
+      "6000.00"
+    ],
+    "FAMILY6584R5000": [
+      "5000.00"
+    ],
+    "FAMILYGOLDPLAN": [
+      "12000.00"
+    ],
+    "PLANE": [
+      "6000.00"
+    ],
+    "FAMILYSUPERPLAN": [
+      "12000.00"
+    ],
+    "LAZARUSPLANC3": [
+      "8000.00"
+    ],
+    "JOSIAHPLANF1": [
+      "8000.00"
+    ],
+    "MARTINSGOLDENFUNERALPLANFAMILY": [
+      "18000.00"
+    ],
+    "APFM": [
+      "15000.00"
+    ],
+    "113MEMBERAND13NOMINATEDFAMILYMEMBERS": [
+      "30000.00"
+    ]
+  }
 }

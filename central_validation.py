@@ -38,11 +38,18 @@ def plan_assignments(conn):
                 except Exception:altered=True
                 if altered:messages.append('Source MPIA was blank/nonpositive; calculation MPIA normalised to 1. Original value retained.')
         if destination=='AUL' and not voucher:
+            approved_covers=registry.get('legacy_main_covers',{}).get(normal(product))
+            if rel=='MEM' and approved_covers:
+                from decimal import Decimal
+                if Decimal(row[10]) not in {Decimal(v) for v in approved_covers}:messages.append('[BLOCK] Legacy product main cover differs from the supplied October example; confirm its approved plan mapping before export.')
             if normal(row[0]) not in known:messages.append('Franchise is not in the supplied September AUL examples; confirm its AUL allocation.')
             group=members.get((branch,policy,row[16]),set()) if row[16] else set()
             if not group:group=policies.get((branch,policy),set())
             explicit=products.get(normal(product),'Unclassified')
-            plan=next(iter(group)) if len(group)==1 else explicit if explicit in group else 'Unclassified'
+            if not group and explicit!='Unclassified':
+                plan=explicit
+                messages.append('No MEM row for this policy in the source; approved product mapping used. Verify the missing main-member source record. All related source rows retained.')
+            else:plan=next(iter(group)) if len(group)==1 else explicit if explicit in group else 'Unclassified'
             if rel=='MEM':plan=explicit
             if plan=='Unclassified':messages.append('[BLOCK] AUL product or related policy plan is unclassified; record retained in AUL Unclassified.')
             assignments[n]=plan
