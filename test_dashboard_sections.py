@@ -44,7 +44,7 @@ class DashboardSectionsTest(unittest.TestCase):
         self.assertNotIn(b'name="direct_month"',response.data)
         self.assertNotIn(b'id="claimTrendChart"',response.data)
     def test_independent_pages_render_their_own_content(self):
-        expected={'imports':b'id="importForm"','reports':b'View Book Value','compare':b'First date','top_franchise':b'id="topFranchises"','downloads':b'Prepared Direct files','graphs':b'data-direct-series','claim_trend':b'Claim ratio','policy_trend':b'Policy / client quantity','relations':b'latest active member snapshot'}
+        expected={'imports':b'id="centralImportForm"','reports':b'View Book Value','compare':b'First date','top_franchise':b'id="topFranchises"','downloads':b'Prepared Direct files','graphs':b'data-direct-series','claim_trend':b'Claim ratio','policy_trend':b'Policy / client quantity','relations':b'latest active member snapshot'}
         for section,text in expected.items():
             with self.subTest(section=section):
                 response=self.client.get('/overview/'+section,follow_redirects=True);self.assertEqual(response.status_code,200,response.data[:500]);self.assertTrue(text in response.data,section)
@@ -62,7 +62,7 @@ class DashboardSectionsTest(unittest.TestCase):
         self.assertIn(b'/overview/commission_detail?',page.data)
         self.assertIn(b'2026-09-12',page.data)
         self.assertIn(b'Commission calculation',self.client.get('/overview/admin').data)
-        self.assertIn(b'Import Direct files',self.client.get('/overview/imports').data)
+        self.assertIn(b'Upload and process files',self.client.get('/overview/imports').data)
         self.assertEqual(self.client.get('/overview/graphs?dashboard_period_view=custom&date_from=2026-10-01&date_to=2026-09-01').status_code,400)
         for kind in ('view','download'):
             result=self.client.get('/export?report_type=commissions&report_period=custom&report_from_date=2026-09-12&report_to_date=2026-10-18&report_format='+kind)

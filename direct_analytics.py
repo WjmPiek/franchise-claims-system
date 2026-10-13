@@ -106,8 +106,9 @@ class DirectStore:
             self.execute(conn, 'CREATE INDEX IF NOT EXISTS direct_data_rows_franchise ON direct_data_rows(batch_id,franchise)')
         self.ready = True
 
-    def save(self, stage, batch_id, owner, month, filename):
+    def save(self, stage, batch_id, owner, month, filename,central_only=False):
         self.ensure()
+        if getattr(self,'central',None):self.central.ensure()
         summaries = {'categories':{k:metric() for k in CATEGORIES}, 'destinations':{}, 'franchises':{}}
         stage.row_factory = sqlite3.Row
         for raw in stage.execute('SELECT * FROM prepared ORDER BY n'):
@@ -116,7 +117,8 @@ class DirectStore:
             if row['destination'] == 'Vouchers': categories.append('vouchers')
             else: categories.append('insurers')
             if row['destination'] == 'AUL':
-                categories.extend(['aul', 'plan2' if row['plan']=='Plan 2' else 'historic'])
+                categories.append('aul')
+                if row['plan'] in ('Plan 2','Historic'):categories.append('plan2' if row['plan']=='Plan 2' else 'historic')
             if Decimal(row['faithnet']) != 0: categories.append('faithnet')
             if row['relation']=='MEM' and row['destination']!='Vouchers': categories.append('fees')
             if json.loads(row['issues']): categories.append('review')
@@ -128,6 +130,7 @@ class DirectStore:
                 self.execute(conn, 'SELECT pg_advisory_xact_lock(hashtext(:key))', {'key':f'direct:{owner}:{month}'})
             old = self.records(self.execute(conn,'SELECT id FROM direct_data_batches WHERE owner_id=:owner AND month=:month',{'owner':owner,'month':month}))
             for batch in old:
+                if getattr(self,'central',None):self.central.archive_legacy(conn,batch['id'])
                 self.execute(conn,'DELETE FROM direct_data_rows WHERE batch_id=:id',batch)
                 self.execute(conn,'DELETE FROM direct_data_batches WHERE id=:id',batch)
             self.execute(conn,'INSERT INTO direct_data_batches VALUES (:id,:owner,:month,:source,:created,:summary)',
@@ -135,6 +138,7 @@ class DirectStore:
                           'created':datetime.utcnow().isoformat(),'summary':encode(summaries)})
             cursor = stage.execute('SELECT '+','.join(FIELDS)+' FROM prepared ORDER BY n')
             while True:
+                if central_only:break
                 rows = cursor.fetchmany(2000)
                 if not rows: break
                 values = [(batch_id,*tuple(r)) for r in rows]
@@ -146,6 +150,7 @@ class DirectStore:
                         raw_cursor.copy_expert('COPY direct_data_rows (batch_id,'+','.join(FIELDS)+') FROM STDIN WITH (FORMAT CSV)',buffer)
                 else:
                     conn.executemany('INSERT INTO direct_data_rows VALUES ('+','.join('?' for _ in range(len(FIELDS)+1))+')',values)
+            if getattr(self,'central',None):self.central.publish(stage,conn,batch_id,owner,month,filename)
         return summaries
 
     def batches(self, owner):

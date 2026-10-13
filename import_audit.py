@@ -17,7 +17,9 @@ class ImportAudit:
         with self.store.connection() as conn:self.store.execute(conn,'INSERT INTO import_audit_log VALUES (:id,:owner,:kind,:name,:month,:hash,:started,:finished,:status,:details)',dict(id=identifier,owner=owner,kind=kind,name=name,month=month,hash=digest,started=datetime.now(timezone.utc).isoformat(),finished='',status='processing',details=''))
         return identifier
     def finish(self,identifier,result,status=None):
-        source=result.get('source') or {};details={key:source[key] for key in ('rows','risk','retail') if key in source}
+        source=result.get('source') or {};details={key:source[key] for key in ('rows','source_rows','nonfinancial_rows','risk','retail','claims','claim_count','unpaid_rows','unpaid_final_amount','netoff_only_rows','undated_netoff_rows','undated_netoff_amount','undated_netoff_source_rows') if key in source}
+        for key in ('version','months','issues'):
+            if key in result:details[key]=result[key]
         if result.get('error'):details['error']=str(result['error'])[:2000]
         if result.get('month'):details['saved_month']=result['month']
         with self.store.connection() as conn:self.store.execute(conn,"UPDATE import_audit_log SET status=:status,finished_at=:time,details=:details,receipt_month=COALESCE(NULLIF(:month,''),receipt_month) WHERE id=:id",dict(month=result.get('month',''),status=status or ('saved / replaced' if result.get('ok') else 'failed / review'),time=datetime.now(timezone.utc).isoformat(),details=json.dumps(details,ensure_ascii=False),id=identifier))

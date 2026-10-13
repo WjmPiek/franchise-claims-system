@@ -20,6 +20,8 @@ def amount(value):
 def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None):
     """Monthly is scoped *before* grouping; never fetch outside those exact pairs."""
     config = config or {}
+    central=bool(monthly.attrs.get('central_dataset'))
+    if central:config={}
     work = monthly.copy()
     work = work[~work.Franchise.isin(config.get('excluded', []))]
     mapping = config.get('groups', {}) if config.get('use_groups', False) else {}
@@ -27,7 +29,16 @@ def reconciliation(monthly, engine=None, sql_text=None, memory=None, config=None
     pairs = {(str(r.Franchise), pd.Timestamp(r.Month).strftime('%Y-%m'))
              for r in work.itertuples()}
     detail = []
-    if pairs and engine is not None:
+    if central and pairs:
+        from flask import current_app
+        store=current_app.extensions['central_store']
+        publications={b['id']:b for b in store.publications()}
+        for item in store.summaries(allowed={f for f,m in pairs}):
+            if (item['franchise'],item['month']) not in pairs:continue
+            value=item['summary']
+            detail.append(dict(franchise_name=item['franchise'],import_month=item['month']+'-01',source_file=publications[item['batch_id']]['source_file'],rows=int(value['rows'])-int(value['voucher_rows']),
+                original_risk_premium=value['insurance_original_risk'],retail_premium=value['retail'],r1_policy_fee=value['r1'],adv_fund_2_1_fee=value['adv'],new_risk_premium=value['payover']))
+    elif pairs and engine is not None:
         names = sorted({f for f, m in pairs})
         months = sorted({m for f, m in pairs})
         params = {f'f{i}': f for i, f in enumerate(names)}
@@ -166,3 +177,4 @@ def add_excel_summary(writer, result):
     ws.set_landscape()
     ws.fit_to_pages(1, 0)
     ws.freeze_panes(6, 3)
+

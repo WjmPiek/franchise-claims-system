@@ -66,9 +66,9 @@ class SavedDirectReportsTest(unittest.TestCase):
         self.assertIn('/overview/downloads#preparedDownloads',client.get('/direct-data/reports').location)
         result=client.post('/direct-data/reports/'+batch)
         self.assertEqual(result.status_code,200,result.data)
-        self.assertEqual(result.json['job'],batch)
+        cached_job=result.json['job']
         with patch('direct_data.prepare_outputs',side_effect=AssertionError('Cached files should be reused')):
-            self.assertEqual(client.post('/direct-data/reports/'+batch).json['job'],batch)
+            self.assertEqual(client.post('/direct-data/reports/'+batch).json['job'],cached_job)
         self.assertIn('Direct_reports.zip',result.json['files'])
         downloaded=client.get('/direct-data/download/'+result.json['job']+'/Direct_reports.zip')
         self.assertEqual(downloaded.status_code,200);downloaded.close()

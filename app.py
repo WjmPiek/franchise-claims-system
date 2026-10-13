@@ -726,8 +726,8 @@ def reload_dashboard_from_postgres(strict=False):
     global LAST_RESULT
     raw = load_raw_from_postgres(strict=strict)
     if raw is not None and not raw.empty:
-        monthly, periods, portfolio = analyse(raw, LAST_RESULT.get('rates', DEFAULT_RATES.copy()), LAST_RESULT.get('book_rates', DEFAULT_BOOK_VALUE.copy()))
-        LAST_RESULT = {'raw': raw, 'monthly': monthly, 'periods': periods, 'portfolio': portfolio, 'rates': LAST_RESULT.get('rates', DEFAULT_RATES.copy()), 'book_rates': LAST_RESULT.get('book_rates', DEFAULT_BOOK_VALUE.copy())}
+        monthly, periods, portfolio = analyse(raw, effective_result().get('rates', DEFAULT_RATES.copy()), effective_result().get('book_rates', DEFAULT_BOOK_VALUE.copy()))
+        LAST_RESULT = {'raw': raw, 'monthly': monthly, 'periods': periods, 'portfolio': portfolio, 'rates': effective_result().get('rates', DEFAULT_RATES.copy()), 'book_rates': effective_result().get('book_rates', DEFAULT_BOOK_VALUE.copy())}
         return True
     if strict:
         LAST_RESULT = {**LAST_RESULT, 'raw': pd.DataFrame(), 'monthly': pd.DataFrame(),
@@ -765,7 +765,7 @@ def average_claim_ratio_for(df):
         return 0.0
     risk = pd.to_numeric(df.get('Risk Premium', pd.Series(dtype=float)), errors='coerce').fillna(0).sum()
     claims = pd.to_numeric(df.get('Claims', pd.Series(dtype=float)), errors='coerce').fillna(0).sum()
-    return float((claims / risk * 100) if risk else 0.0)
+    return float((claims / risk * 100) if risk else float('nan'))
 
 
 def _dashboard_month_filter(monthly, period_view='six_months'):
@@ -833,7 +833,7 @@ def build_portfolio_for_period(monthly, periods, period_view='six_months'):
 
     total_claims = colsum('Claims')
     total_risk = colsum('Risk Premium')
-    claim_ratio = float((total_claims / total_risk * 100) if total_risk else 0.0)
+    claim_ratio = float((total_claims / total_risk * 100) if total_risk else float('nan'))
 
     p = {
         'total_franchises': int(base['Franchise'].nunique()) if 'Franchise' in base.columns else 0,
@@ -864,7 +864,7 @@ def build_portfolio_for_period(monthly, periods, period_view='six_months'):
     # Recommendation counts are calculated per franchise over the same selected period.
     if 'Franchise' in base.columns:
         grouped = base.groupby('Franchise', as_index=False).agg({'Claims': 'sum', 'Risk Premium': 'sum'})
-        grouped['Claim Ratio'] = grouped.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r['Risk Premium'] else 0, axis=1)
+        grouped['Claim Ratio'] = grouped.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r['Risk Premium'] else float('nan'), axis=1)
         rec = grouped['Claim Ratio'].apply(lambda r: 'Move to BrightRock' if r < 50 else ('Can move to BrightRock' if r < 70 else 'High Risk - stay on 100%'))
     else:
         rec = pd.Series(dtype=str)
@@ -887,7 +887,7 @@ def yearly_view_from_monthly(monthly):
     out = base.groupby(['Franchise', 'Year'], as_index=False)[numeric_cols].sum()
     out['Period'] = out['Year']
     if 'Risk Premium' in out.columns and 'Claims' in out.columns:
-        out['Claim Ratio'] = out.apply(lambda r: (r.get('Claims', 0) / r.get('Risk Premium', 0) * 100) if r.get('Risk Premium', 0) else 0, axis=1)
+        out['Claim Ratio'] = out.apply(lambda r: (r.get('Claims', 0) / r.get('Risk Premium', 0) * 100) if r.get('Risk Premium', 0) else float('nan'), axis=1)
         out['Average Claim Ratio'] = out['Claim Ratio']
         out['Claim Ratio Label'] = out['Claim Ratio'].apply(status_label) if 'status_label' in globals() else ''
         out['Recommendation'] = out['Claim Ratio'].apply(lambda r: 'Move to BrightRock' if r < 50 else ('Can move to BrightRock' if r < 70 else 'High Risk - stay on 100%'))
@@ -909,7 +909,7 @@ def rebuild_periods_and_portfolio(monthly):
     work['Period Start'] = work.groupby(['Franchise','Period Index'])['Month'].transform('min')
     work['Period End'] = work.groupby(['Franchise','Period Index'])['Month'].transform('max')
     work['Period'] = work.apply(lambda r: r['Period Start'].strftime('%b %Y') if r['Period Start'].to_period('M') == r['Period End'].to_period('M') else f"{r['Period Start'].strftime('%b %Y')} - {r['Period End'].strftime('%b %Y')}", axis=1)
-    work['Claim Ratio'] = work.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r.get('Risk Premium', 0) else 0, axis=1)
+    work['Claim Ratio'] = work.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r.get('Risk Premium', 0) else float('nan'), axis=1)
     work['Claim Ratio Status'] = work['Claim Ratio'].apply(status_colour)
     work['Claim Ratio Label'] = work['Claim Ratio'].apply(status_label)
     work['Recommendation'] = work['Claim Ratio'].apply(lambda r: 'Move to BrightRock' if r < 50 else ('Can move to BrightRock' if r < 70 else 'High Risk - stay on 100%'))
@@ -920,8 +920,9 @@ def rebuild_periods_and_portfolio(monthly):
     if 'BrightRock Running Balance' in agg:
         agg['BrightRock Running Balance'] = 'last'
     periods = work.groupby(['Franchise', 'Period'], as_index=False).agg(agg)
+    periods['Claim Ratio'] = periods.apply(lambda r: r['Claims']/r['Risk Premium']*100 if r.get('Risk Premium',0) else float('nan'),axis=1)
     periods['Average Claim'] = periods.apply(lambda r: (r['Claims'] / r['Claim Count']) if r.get('Claim Count', 0) else 0, axis=1)
-    periods['Weighted Claim Ratio'] = periods.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r.get('Risk Premium', 0) else 0, axis=1)
+    periods['Weighted Claim Ratio'] = periods.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r.get('Risk Premium', 0) else float('nan'), axis=1)
     periods['Claim Ratio Status'] = periods['Weighted Claim Ratio'].apply(status_colour)
     periods['Claim Ratio Label'] = periods['Weighted Claim Ratio'].apply(status_label)
     periods['Recommendation'] = periods.apply(lambda r: 'Move to BrightRock' if bool(r.get('BrightRock Eligible', False)) else ('Can move to BrightRock - needs 5 months below 75%' if float(r.get('Weighted Claim Ratio', 0) or 0) < 75 else 'High Risk - stay on 100%'), axis=1)
@@ -958,6 +959,11 @@ def rebuild_periods_and_portfolio(monthly):
     return periods, portfolio
 
 
+
+def effective_result():
+    from central_routes import financial_result
+    return financial_result(app,LAST_RESULT)
+
 def apply_franchise_config(monthly, config=None):
     """Apply include/exclude and grouping rules to the monthly dataset."""
     if config is None:
@@ -966,9 +972,9 @@ def apply_franchise_config(monthly, config=None):
         return pd.DataFrame(), pd.DataFrame(), {'total_franchises': 0}
     work = monthly.copy()
     excluded = set(config.get('excluded', []))
-    if excluded:
+    if excluded and not monthly.attrs.get('central_dataset'):
         work = work[~work['Franchise'].isin(excluded)].copy()
-    if config.get('use_groups', True):
+    if config.get('use_groups', True) and not monthly.attrs.get('central_dataset'):
         groups = {k: v for k, v in config.get('groups', {}).items() if str(v).strip()}
         if groups:
             work['Franchise'] = work['Franchise'].map(lambda x: groups.get(x, x))
@@ -2887,6 +2893,7 @@ def read_excel_file(path):
     return df.sort_values(['franchise', 'month']).reset_index(drop=True)
 
 def status_colour(ratio):
+    if pd.isna(ratio):return 'Grey'
     if ratio < 50:
         return 'Blue'
     if ratio < 70:
@@ -2895,6 +2902,7 @@ def status_colour(ratio):
 
 
 def status_label(ratio):
+    if pd.isna(ratio):return 'Undefined / no premium basis'
     if ratio < 50:
         return 'Move to BrightRock'
     if ratio < 70:
@@ -3017,7 +3025,7 @@ def analyse(df, rates, book_rates):
             separate_paid_commissions = r1_policy_fee + underwriter_2_1_fee
             total_paid_commissions = total_commission + separate_paid_commissions
             admin_fee = retail - total_paid_commissions - risk
-            claim_ratio = (claims / risk * 100) if risk else 0.0
+            claim_ratio = (claims / risk * 100) if risk else float('nan')
             scenario_one_value = retail - risk - total_paid_commissions
             brightrock_month_total = retail - claims - total_paid_commissions
             scenario_two_value = brightrock_month_total
@@ -3140,8 +3148,9 @@ def analyse(df, rates, book_rates):
         agg[f'{name} Amount'] = 'sum'
 
     periods = monthly.groupby(['Franchise', 'Period'], as_index=False).agg(agg)
+    periods['Claim Ratio'] = periods.apply(lambda r: r['Claims']/r['Risk Premium']*100 if r.get('Risk Premium',0) else float('nan'),axis=1)
     periods['Average Claim'] = periods.apply(lambda r: (r['Claims'] / r['Claim Count']) if r.get('Claim Count', 0) else 0, axis=1)
-    periods['Weighted Claim Ratio'] = periods.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r['Risk Premium'] else 0, axis=1)
+    periods['Weighted Claim Ratio'] = periods.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r['Risk Premium'] else float('nan'), axis=1)
     periods['Claim Ratio Status'] = periods['Weighted Claim Ratio'].apply(status_colour)
     periods['Claim Ratio Label'] = periods['Weighted Claim Ratio'].apply(status_label)
     periods['100% Move Status'] = periods['Weighted Claim Ratio'].apply(can_move_to_brightrock)
@@ -4262,7 +4271,7 @@ def build_executive_dashboard_context(monthly_view, selected='All', period_view=
     total_retail = float(df['Retail Premium'].sum())
     total_policy_qty = float(df['Policy Qty'].sum())
     avg_claim_value = float(total_claims / total_claim_count) if total_claim_count else 0.0
-    loss_ratio = float(total_claims / total_risk * 100) if total_risk else 0.0
+    loss_ratio = float(total_claims / total_risk * 100) if total_risk else float('nan')
     hit_ratio = float((df['Claims'] > 0).sum() / max(1, len(df)) * 100)
     kpis = {
         'premium_amount': total_retail,
@@ -4302,12 +4311,12 @@ def build_executive_dashboard_context(monthly_view, selected='All', period_view=
     premium_parlour_analysis['using_dashboard_period'] = not bool(selected_premium_month)
     # imported monthly claims by franchise
     by_fr = df.groupby('Franchise', as_index=False).agg({'Claims':'sum','Claim Count':'sum','Risk Premium':'sum','Retail Premium':'sum','Policy Qty':'sum'}).sort_values('Claims', ascending=False)
-    by_fr['Claim Ratio'] = by_fr.apply(lambda r: (r['Claims']/r['Risk Premium']*100) if r['Risk Premium'] else 0, axis=1)
+    by_fr['Claim Ratio'] = by_fr.apply(lambda r: (r['Claims']/r['Risk Premium']*100) if r['Risk Premium'] else float('nan'), axis=1)
     claims_by_franchise = [{'label': str(r['Franchise']), 'value': float(r['Claims']), 'count': float(r['Claim Count']), 'ratio': float(r['Claim Ratio'])} for _,r in by_fr.head(12).iterrows()]
     loss_ratio_by_franchise = [{'label': str(r['Franchise']), 'value': float(r['Claim Ratio'])} for _,r in by_fr.sort_values('Claim Ratio', ascending=False).head(8).iterrows()]
     month_df = df.groupby(df['Month'].dt.to_period('M')).agg({'Claims':'sum','Claim Count':'sum','Retail Premium':'sum','Risk Premium':'sum','Policy Qty':'sum'}).reset_index()
     claims_by_month = [{'label': m.strftime('%b %Y'), 'value': float(v)} for m,v in zip(month_df['Month'], month_df['Claims'])]
-    claim_trend = [{'label': m.strftime('%b %Y'), 'month':str(m), 'claims': float(c), 'risk': float(r), 'ratio': float((c/r*100) if r else 0)} for m,c,r in zip(month_df['Month'], month_df['Claims'], month_df['Risk Premium'])]
+    claim_trend = [{'label': m.strftime('%b %Y'), 'month':str(m), 'claims': float(c), 'risk': float(r), 'ratio': float((c/r*100) if r else float('nan'))} for m,c,r in zip(month_df['Month'], month_df['Claims'], month_df['Risk Premium'])]
     policy_trend = [{'label': m.strftime('%b %Y'), 'month':str(m), 'value': float(v)} for m,v in zip(month_df['Month'], month_df['Policy Qty'])]
     # status from workflow database, falls back to financial claim buckets where workflow is empty.
     status_breakdown = dict(empty['status_breakdown'])
@@ -4496,7 +4505,7 @@ def build_scenario_comparison_view(monthly_view, args):
     from flask import has_request_context
     if has_request_context() and getattr(g,'period_dates',None):
         monthly_view,_=_dashboard_month_filter(monthly_view,'custom')
-        period_view='month'
+        period_view='custom'
     base = monthly_view.copy().sort_values(['Franchise', 'Month'])
     base['Month'] = pd.to_datetime(base['Month'], errors='coerce')
     base = base.dropna(subset=['Month'])
@@ -4522,7 +4531,9 @@ def build_scenario_comparison_view(monthly_view, args):
         available_months = sorted(base['Month'].dt.to_period('M').unique())
     if not available_months:
         return pd.DataFrame(), []
-    if period_view == 'month':
+    if period_view == 'custom':
+        selected_months = available_months
+    elif period_view == 'month':
         selected_months = available_months[-1:]
     elif period_view == 'year':
         selected_months = available_months[-12:]
@@ -4564,7 +4575,7 @@ def build_scenario_comparison_view(monthly_view, args):
     out['Best Additional Benefit'] = out[['Scenario A vs Current', 'Scenario B vs Current']].max(axis=1)
 
     if 'Risk Premium' in out.columns and 'Claims' in out.columns:
-        out['Claim Ratio'] = out.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r.get('Risk Premium', 0) else 0, axis=1)
+        out['Claim Ratio'] = out.apply(lambda r: (r['Claims'] / r['Risk Premium'] * 100) if r.get('Risk Premium', 0) else float('nan'), axis=1)
 
     cols = [
         'Franchise', 'Period View', 'Retail Premium', 'Risk Premium', 'Claims', 'Claim Count', 'Policy Qty', 'Claim Ratio',
@@ -4587,6 +4598,7 @@ def money(value):
 @app.template_filter('pct')
 def pct(value):
     try:
+        if pd.isna(value):return 'Undefined / no premium basis'
         return '{:,.2f}%'.format(float(value))
     except Exception:
         return value
@@ -4621,9 +4633,11 @@ def _upsert_unified_launch_user(payload):
     if engine is None:
         raise RuntimeError("Claims database is unavailable.")
     with engine.begin() as conn:
-        existing = conn.execute(text("SELECT id FROM app_users WHERE LOWER(TRIM(email)) = :email"), {"email": email}).mappings().first()
+        existing = conn.execute(text("SELECT id,role FROM app_users WHERE LOWER(TRIM(email)) = :email"), {"email": email}).mappings().first()
         if existing:
             user_id = existing["id"]
+            if existing['role'] in ('underwriter','voucher_supplier'):
+                role=existing['role'];is_admin=False
             conn.execute(text("UPDATE app_users SET name=:name, role=:role, is_active=true, is_super_admin=:is_admin WHERE id=:id"), {"name": name, "role": role, "is_admin": is_admin, "id": user_id})
         else:
             user_id = conn.execute(text("INSERT INTO app_users (name, email, password_hash, role, is_active, is_super_admin) VALUES (:name, :email, :password_hash, :role, true, :is_admin) RETURNING id"), {"name": name, "email": email, "password_hash": generate_password_hash(os.urandom(24).hex()), "role": role, "is_admin": is_admin}).scalar_one()
@@ -4906,6 +4920,8 @@ def load_logged_in_user():
             return jsonify(ok=False, error='Your account is inactive. Contact the administrator.'), 403
         flash('Your account is waiting for admin approval or has been disabled. Contact the system administrator.', 'danger')
         return redirect(url_for('login'))
+    if g.user.get('role') in {'underwriter','voucher_supplier'} and endpoint not in {'central_catalog_page','central_report','central_report_download','central_job_status','logout','login','import_session'}:
+        return redirect(url_for('central_catalog_page'))
     if endpoint in ADMIN_ENDPOINTS and g.user.get('role') != 'admin':
         flash('Admin access required.', 'danger')
         return redirect(url_for('dashboard'))
@@ -4922,8 +4938,8 @@ def load_logged_in_user():
     if DATABASE_URL and request.endpoint in reporting_endpoints:
         try:
             from report_cache import refresh_reporting_data
-            settings = (tuple(sorted(LAST_RESULT.get('rates', {}).items())),
-                        tuple(sorted(LAST_RESULT.get('book_rates', {}).items())),
+            settings = (tuple(sorted(effective_result().get('rates', {}).items())),
+                        tuple(sorted(effective_result().get('book_rates', {}).items())),
                         os.stat(CONFIG_FILE).st_mtime_ns if os.path.exists(CONFIG_FILE) else None)
             refresh_reporting_data(get_db_engine(), text,
                                    lambda: reload_dashboard_from_postgres(strict=True),
@@ -5405,7 +5421,7 @@ def admin_users():
           <td colspan="2">
             <form method="post" action="/admin/users/{u.get('id')}/update" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               {hidden_locked_fields}
-              <select name="role" {lock_attrs}><option value="admin" {admin_selected}>Admin</option><option value="user" {user_selected}>User</option><option value="viewer" {viewer_selected}>View only</option></select>
+              <select name="role" {lock_attrs}><option value="admin" {admin_selected}>Admin</option><option value="user" {user_selected}>User</option><option value="viewer" {viewer_selected}>View only</option><option value="underwriter" {'selected' if u.get('role')=='underwriter' else ''}>Underwriter</option><option value="voucher_supplier" {'selected' if u.get('role')=='voucher_supplier' else ''}>Voucher supplier</option></select>
               <select name="is_active" {lock_attrs}><option value="1" {active_selected}>Approved / Active</option><option value="0" {disabled_selected}>Pending / Disabled</option></select>
               <input name="allowed_franchises" value="{u.get('allowed_franchises','')}" placeholder="Allowed franchises, comma separated" style="width:320px" {'disabled' if is_super_admin else ''}>
               <input name="new_password" type="password" placeholder="New password (optional)" style="width:210px">
@@ -5446,7 +5462,7 @@ def admin_update_user(user_id):
 
         user = dict(user)
         current_user_id = (g.user or {}).get('id')
-        role = request.form.get('role') if request.form.get('role') in {'admin', 'user', 'viewer'} else 'user'
+        role = request.form.get('role') if request.form.get('role') in {'admin', 'user', 'viewer','underwriter','voucher_supplier'} else 'user'
         is_active = request.form.get('is_active') == '1'
         new_password = request.form.get('new_password') or ''
         allowed_franchises_text = request.form.get('allowed_franchises') or ''
@@ -6016,6 +6032,8 @@ def index():
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard(section='dashboard'):
+    if request.method=='POST' and request.files and app.extensions.get('central_jobs'):
+        return jsonify(ok=False,error='Use the Imports tab for verified Direct and paid-claims source files.'),410
     if request.method=='GET' and section=='dashboard':return redirect(url_for('overview_page',section='risk',**request.args.to_dict()))
     global LAST_RESULT, LAST_CLAIMS_DF, LAST_POLICY_IMPORT_SUMMARY
     from import_progress import active, busy, report, stream_import
@@ -6034,7 +6052,7 @@ def dashboard(section='dashboard'):
             'Franchise Book Value': safe_float(request.form.get('franchise_book_rate'), DEFAULT_BOOK_VALUE['Franchise Book Value']),
         }
         imported_any = False
-        raw = LAST_RESULT['raw']
+        raw = effective_result()['raw']
         try:
             policy_files = []
             for field_name in ('excel_file', 'excel_files'):
@@ -6135,11 +6153,11 @@ def dashboard(section='dashboard'):
         # Post/Redirect/Get prevents the browser from asking to resubmit the large import on refresh/back.
         return redirect(url_for('dashboard', dashboard_period_view=request.args.get('dashboard_period_view', 'six_months')))
 
-    if request.method == 'GET' and (LAST_RESULT.get('raw') is None or LAST_RESULT['raw'].empty):
+    if request.method == 'GET' and (effective_result().get('raw') is None or effective_result()['raw'].empty):
         reload_dashboard_from_postgres()
 
     from period_selection import selected_dates
-    source_months=pd.to_datetime(LAST_RESULT.get('monthly',pd.DataFrame()).get('Month',pd.Series(dtype=object)),errors='coerce').dropna()
+    source_months=pd.to_datetime(effective_result().get('monthly',pd.DataFrame()).get('Month',pd.Series(dtype=object)),errors='coerce').dropna()
     fallback={'date_from':source_months.min().strftime('%Y-%m-%d'),'date_to':(source_months.max()+pd.offsets.MonthEnd(0)).strftime('%Y-%m-%d')} if len(source_months) else None
     try:selected_dates(request.args,fallback)
     except ValueError as exc:return str(exc),400
@@ -6169,8 +6187,8 @@ def dashboard(section='dashboard'):
     # A typed search should not override an explicit franchise selection.
     if selected and selected != 'All':
         search_text = ''
-    monthly = apply_user_franchise_scope(LAST_RESULT['monthly'])
-    periods = apply_user_franchise_scope(LAST_RESULT['periods'])
+    monthly = apply_user_franchise_scope(effective_result()['monthly'])
+    periods = apply_user_franchise_scope(effective_result()['periods'])
     franchises = sorted(monthly['Franchise'].unique()) if not monthly.empty else []
 
     if search_text and not monthly.empty:
@@ -6206,9 +6224,9 @@ def dashboard(section='dashboard'):
         'claims': float(monthly_view['Claims'].sum()) if not monthly_view.empty else 0,
         'commission': float(monthly_view['Total Commission'].sum()) if not monthly_view.empty else 0,
     }
-    quick_view, quick_columns = build_quick_filter_view(monthly_view, periods_view, LAST_RESULT['rates'], LAST_RESULT['book_rates'], quick_filter, period_view, traffic_filter)
+    quick_view, quick_columns = build_quick_filter_view(monthly_view, periods_view, effective_result()['rates'], effective_result()['book_rates'], quick_filter, period_view, traffic_filter)
     compare_view, compare_columns = build_scenario_comparison_view(monthly_view, request.args)
-    configured_monthly, configured_periods, _configured_portfolio_all = apply_franchise_config(apply_user_franchise_scope(LAST_RESULT['monthly']), load_franchise_config())
+    configured_monthly, configured_periods, _configured_portfolio_all = apply_franchise_config(apply_user_franchise_scope(effective_result()['monthly']), load_franchise_config())
     configured_portfolio = build_portfolio_for_period(configured_monthly, configured_periods, dashboard_period_view)
     if dashboard_period_view=='custom':
         from period_selection import month_bounds
@@ -6246,7 +6264,7 @@ def dashboard(section='dashboard'):
             headers=['Relation','Description','Current Members'];values=[[row['code'],row['label'],row['count']] for row in executive_dashboard.get('relation_counts',{}).get('rows',[])]
         book=table_workbook(headers,values,home_titles[section]);kind=request.args['download']
         return send_file(workbook_pdf(book,home_titles[section]) if kind=='pdf' else book,as_attachment=True,download_name=section+'.'+kind,mimetype='application/pdf' if kind=='pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    return render_template('dashboard.html', workspace='home', home_section=section,home_title=home_titles.get(section,'Dashboard'),commission_range_args=commission_range_args,topic_franchises=topic_franchises,topic_monthly=topic_frame.to_dict('records'),topic_totals=topic_totals,topic_top=topic_top, portfolio=configured_portfolio, rates=LAST_RESULT['rates'], book_rates=LAST_RESULT['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
+    return render_template('dashboard.html', workspace='home', home_section=section,home_title=home_titles.get(section,'Dashboard'),commission_range_args=commission_range_args,topic_franchises=topic_franchises,topic_monthly=topic_frame.to_dict('records'),topic_totals=topic_totals,topic_top=topic_top, portfolio=configured_portfolio, rates=effective_result()['rates'], book_rates=effective_result()['book_rates'], franchises=franchises, selected=selected, search_text=search_text, selected_scenario=selected_scenario, selected_summary=selected_summary, period_view=period_view, traffic_filter=traffic_filter, claims_import_summary=LAST_CLAIMS_IMPORT_SUMMARY, policy_import_summary=LAST_POLICY_IMPORT_SUMMARY, dashboard_period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month, executive_dashboard=executive_dashboard, report_selected_month=request.args.get('report_month') or premium_analysis_month, report_month_options=_report_month_options(monthly_view), google_maps_api_key=get_google_maps_api_key())
 
 @app.context_processor
 def editable_period_context():
@@ -7416,7 +7434,7 @@ def _filter_by_franchise(monthly, periods, selected):
 def _period_base(monthly_view, periods_view, period_view, traffic_filter='All'):
     """Return the selected analysis base with real month/year/6-month labels."""
     if period_view=='custom':monthly_view,_=_dashboard_month_filter(monthly_view,'custom')
-    rates = LAST_RESULT.get('rates', DEFAULT_RATES.copy())
+    rates = effective_result().get('rates', DEFAULT_RATES.copy())
     if monthly_view is None or monthly_view.empty:
         return pd.DataFrame()
 
@@ -7479,7 +7497,7 @@ def _period_base(monthly_view, periods_view, period_view, traffic_filter='All'):
 
     if base.empty:
         return base
-    base['Claim Ratio'] = base.apply(lambda r: (r.get('Claims', 0) / r.get('Risk Premium', 0) * 100) if r.get('Risk Premium', 0) else 0, axis=1)
+    base['Claim Ratio'] = base.apply(lambda r: (r.get('Claims', 0) / r.get('Risk Premium', 0) * 100) if r.get('Risk Premium', 0) else float('nan'), axis=1)
     base['Average Claim'] = base.apply(lambda r: (r.get('Claims', 0) / r.get('Claim Count', 0)) if r.get('Claim Count', 0) else 0, axis=1)
     base['Claim Ratio Status'] = base['Claim Ratio'].apply(status_colour)
     base['Claim Ratio Label'] = base['Claim Ratio'].apply(status_label)
@@ -7535,7 +7553,7 @@ def _advanced_view(periods_view):
     if periods_view.empty:
         return periods_view
     out = periods_view.copy().sort_values(['Franchise','Period'])
-    out['Weighted Claim Ratio'] = out.apply(lambda r: (r.get('Claims', 0) / r.get('Risk Premium', 0) * 100) if r.get('Risk Premium', 0) else 0, axis=1)
+    out['Weighted Claim Ratio'] = out.apply(lambda r: (r.get('Claims', 0) / r.get('Risk Premium', 0) * 100) if r.get('Risk Premium', 0) else float('nan'), axis=1)
     out['Claim Ratio'] = out['Weighted Claim Ratio']
     out['Period View'] = out.get('Period', '')
     out['Risk Score'] = (out['Weighted Claim Ratio'] / 10).round(1)
@@ -7549,7 +7567,7 @@ def _advanced_view(periods_view):
 
 def _ai_answer(question):
     q=(question or '').lower()
-    periods=LAST_RESULT['periods']
+    periods=effective_result()['periods']
     if not question:
         return None
     if periods.empty:
@@ -7955,7 +7973,7 @@ def _claims_reconciliation_view():
     the same franchise/month records used by the dashboard and claim ratio calculations.
     """
     claims_df = LAST_CLAIMS_DF.copy() if LAST_CLAIMS_DF is not None else pd.DataFrame()
-    raw_monthly = LAST_RESULT.get('monthly', pd.DataFrame()).copy()
+    raw_monthly = effective_result().get('monthly', pd.DataFrame()).copy()
     if claims_df.empty and raw_monthly.empty:
         return {
             'summary': {'workbook_total':0.0,'system_total':0.0,'matched_total':0.0,'unmatched_total':0.0,'difference':0.0,'status':'No claims imported'},
@@ -8123,7 +8141,7 @@ def _safe_claims_reconciliation_view():
 
 def _workspace_context(workspace):
     config = load_franchise_config()
-    original_monthly = apply_user_franchise_scope(LAST_RESULT.get('monthly', pd.DataFrame()))
+    original_monthly = apply_user_franchise_scope(effective_result().get('monthly', pd.DataFrame()))
     monthly, periods, configured_portfolio = apply_franchise_config(original_monthly, config)
     franchises = sorted(monthly['Franchise'].unique()) if not monthly.empty and 'Franchise' in monthly.columns else []
     original_franchises = sorted(original_monthly['Franchise'].unique()) if not original_monthly.empty and 'Franchise' in original_monthly.columns else []
@@ -8268,7 +8286,7 @@ def _workspace_context(workspace):
     return dict(
         workspace=workspace, workspace_title=title, workspace_subtitle=subtitle,
         current_timestamp=datetime.now().strftime('%d %B %Y %H:%M'),
-        portfolio=configured_portfolio, rates=LAST_RESULT.get('rates', DEFAULT_RATES.copy()), book_rates=LAST_RESULT.get('book_rates', DEFAULT_BOOK_VALUE.copy()),
+        portfolio=configured_portfolio, rates=effective_result().get('rates', DEFAULT_RATES.copy()), book_rates=effective_result().get('book_rates', DEFAULT_BOOK_VALUE.copy()),
         franchises=franchises, selected=selected, period_view=period_view, traffic_filter=traffic_filter,
         commission_focus=commission_focus, scenario_filter=scenario_filter,
         quick_view=base, money_view=money_view, commission_view=commission_view, book_view=book_view,
@@ -8305,11 +8323,11 @@ def workspace_page(workspace):
         recalculated_pg = recalculate_claims_summary_from_postgres()
         # Re-apply latest claims file immediately when available. Start from clean
         # PolicyData rows only so old claims-only rows cannot duplicate totals.
-        if LAST_CLAIMS_DF is not None and not LAST_CLAIMS_DF.empty and LAST_RESULT.get('raw') is not None and not LAST_RESULT['raw'].empty:
-            clean_policy_raw = policy_rows_only(LAST_RESULT['raw'])
+        if LAST_CLAIMS_DF is not None and not LAST_CLAIMS_DF.empty and effective_result().get('raw') is not None and not effective_result()['raw'].empty:
+            clean_policy_raw = policy_rows_only(effective_result()['raw'])
             raw = merge_claims_into_raw(clean_policy_raw, LAST_CLAIMS_DF)
-            monthly, periods, portfolio = analyse(raw, LAST_RESULT['rates'], LAST_RESULT['book_rates'])
-            LAST_RESULT = {'raw': raw, 'monthly': monthly, 'periods': periods, 'portfolio': portfolio, 'rates': LAST_RESULT['rates'], 'book_rates': LAST_RESULT['book_rates']}
+            monthly, periods, portfolio = analyse(raw, effective_result()['rates'], effective_result()['book_rates'])
+            LAST_RESULT = {'raw': raw, 'monthly': monthly, 'periods': periods, 'portfolio': portfolio, 'rates': effective_result()['rates'], 'book_rates': effective_result()['book_rates']}
             flash('Claims mappings saved, PostgreSQL summary rebuilt, and claims were re-applied.', 'success')
         elif recalculated_pg:
             reload_dashboard_from_postgres()
@@ -8573,12 +8591,12 @@ def export_payover():
     Payover Premium = Original Risk Premium - R1 Policy Fee - ADV Fee 2.1%.
     Retail Less Payover is included for reconciliation against all retail premiums paid.
     """
-    if LAST_RESULT['monthly'].empty:
+    if effective_result()['monthly'].empty:
         flash('No data to export.', 'warning')
         return redirect(url_for('dashboard'))
     insurer = request.args.get('insurer', 'All') or 'All'
     config = load_franchise_config()
-    source_monthly = apply_user_franchise_scope(LAST_RESULT['monthly'])
+    source_monthly = apply_user_franchise_scope(effective_result()['monthly'])
     monthly, periods, _ = apply_franchise_config(source_monthly, config)
     from period_selection import selected_dates
     selected_dates(request.args)
@@ -8739,7 +8757,7 @@ def _financial_download(output_format):
     title = FINANCIAL_REPORT_TITLES[report_type]
     try:
         monthly, label = _select_report_months(
-            apply_user_franchise_scope(LAST_RESULT['monthly']), request.args)
+            apply_user_franchise_scope(effective_result()['monthly']), request.args)
     except ValueError as exc:
         flash(str(exc), 'warning')
         return redirect(url_for('dashboard'))
@@ -8786,13 +8804,13 @@ def _financial_download(output_format):
 def export():
     if request.args.get('report_type') in FINANCIAL_REPORT_COLUMNS:
         return _financial_download('view' if request.args.get('report_format') == 'view' else 'xlsx')
-    if LAST_RESULT['monthly'].empty:
+    if effective_result()['monthly'].empty:
         flash('No data to export.', 'warning')
         return redirect(url_for('dashboard'))
     commissions = request.args.get('report_type') == 'commissions'
     filename = 'commissions' if commissions else 'claims_analytics_export'
     path = os.path.join(EXPORT_DIR, f'{filename}_{uuid.uuid4().hex}.xlsx')
-    monthly_scoped = apply_user_franchise_scope(LAST_RESULT['monthly'])
+    monthly_scoped = apply_user_franchise_scope(effective_result()['monthly'])
     try:
         monthly_scoped, report_label = _select_report_months(monthly_scoped, request.args)
     except ValueError as exc:
@@ -8822,7 +8840,7 @@ def export():
 def board_report():
     if request.args.get('report_type') in FINANCIAL_REPORT_COLUMNS:
         return _financial_download('pdf')
-    if LAST_RESULT['periods'].empty:
+    if effective_result()['periods'].empty:
         flash('No data to report.', 'warning')
         return redirect(url_for('dashboard'))
     period_choice = (request.args.get('dashboard_period_view') or request.args.get('period_view') or 'six_months')
@@ -8831,7 +8849,7 @@ def board_report():
     period_text_map = {'month': 'Monthly', 'six_months': 'Every 6 Months', 'year': '12 Months / Yearly'}
     config = load_franchise_config()
     try:
-        report_monthly, report_label = _select_report_months(apply_user_franchise_scope(LAST_RESULT['monthly']), request.args, period_choice)
+        report_monthly, report_label = _select_report_months(apply_user_franchise_scope(effective_result()['monthly']), request.args, period_choice)
     except ValueError as exc:
         flash(str(exc), 'warning')
         return redirect(url_for('dashboard'))
@@ -9327,7 +9345,7 @@ def _available_franchises_for_user():
     if user.get('role') == 'admin' or user.get('is_super_admin'):
         names = []
         try:
-            monthly = LAST_RESULT.get('monthly', pd.DataFrame())
+            monthly = effective_result().get('monthly', pd.DataFrame())
             if monthly is not None and not monthly.empty and 'Franchise' in monthly.columns:
                 names = sorted({str(x).strip() for x in monthly['Franchise'].dropna().tolist() if str(x).strip()})
         except Exception:
@@ -9919,7 +9937,7 @@ def admin_required(func):
 @admin_required
 def admin_parlour_fee_settings():
     ensure_parlour_fee_settings_table()
-    monthly = apply_user_franchise_scope(LAST_RESULT.get('monthly', pd.DataFrame()))
+    monthly = apply_user_franchise_scope(effective_result().get('monthly', pd.DataFrame()))
     franchises = sorted(monthly['Franchise'].dropna().unique()) if monthly is not None and not monthly.empty and 'Franchise' in monthly.columns else []
     selected = request.values.get('franchise') or (franchises[0] if franchises else 'All')
     if request.method == 'POST':
@@ -10156,13 +10174,19 @@ def admin_policydata_current_members_status():
 # This avoids silent startup hangs during import/module loading.
 from direct_data import register_direct_data
 register_direct_data(app, EXPORT_DIR, get_db_engine if DATABASE_URL else None)
+from central_routes import register_central
+register_central(app,EXPORT_DIR,apply_user_franchise_scope)
 
 from policy_reports import register_policy_reports
 register_policy_reports(app, get_db_engine, text, lambda: LAST_POLICY_DETAIL_DF, apply_user_franchise_scope)
 from current_members import register_current_members
 register_current_members(app,get_db_engine,text,apply_user_franchise_scope)
 from import_audit import register_import_audit
-register_import_audit(app,EXPORT_DIR,get_db_engine if DATABASE_URL else None)
+central_audit=register_import_audit(app,EXPORT_DIR,get_db_engine if DATABASE_URL else None)
+from central_jobs import register_jobs
+register_jobs(app,app.extensions['central_store'],EXPORT_DIR,central_audit,get_user_by_id if DATABASE_URL else None)
+from central_admin import register_admin
+register_admin(app,app.extensions['central_store'])
 
 if __name__ == '__main__':
     print('Starting Franchise Claims Analytics System...', flush=True)

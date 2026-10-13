@@ -117,7 +117,8 @@ class DirectDataTest(unittest.TestCase):
             content=io.StringIO();csv.writer(content,delimiter='\t').writerow(record())
             response=client.post('/direct-data',data={'data_month':'2026-09','direct_file':(io.BytesIO(content.getvalue().encode()),'source.csv')})
             self.assertEqual(response.status_code,200,response.data)
-            result=response.json;url=f"/direct-data/download/{result['job']}/{result['files'][0]}"
+            result=client.post('/direct-data/reports/'+response.json['job']).json
+            url=f"/direct-data/download/{result['job']}/{result['files'][0]}"
             download=client.get(url);self.assertEqual(download.status_code,200);download.close()
             stream=client.post('/direct-data',headers={'X-Import-Progress':'stream'},
                                data={'data_month':'2026-09','direct_file':(io.BytesIO(content.getvalue().encode()),'source.csv')})
@@ -125,7 +126,7 @@ class DirectDataTest(unittest.TestCase):
             updates=[json.loads(line) for line in stream.data.splitlines()]
             self.assertTrue(updates[-1]['ok'])
             self.assertEqual(updates[-1]['source']['rows'],1)
-            self.assertIn('Direct_reports.zip',updates[-1]['files'])
+            self.assertEqual(updates[-1]['files'],[])
             self.assertIn('job',updates[-1])
             who['id']=2;self.assertEqual(client.get(url).status_code,404)
             who['role']='viewer';self.assertEqual(client.get('/direct-data').status_code,403)
