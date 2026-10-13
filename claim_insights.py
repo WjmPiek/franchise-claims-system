@@ -166,6 +166,7 @@ def analyse(store,dates,allowed=None):
     for key,label in SPECS.items():
         rows=tables[key];count=sum(r['count'] for r in rows)
         value=len(red) if key=='risk' else sum(r['netoff'] for r in rows) if key=='netoff' else count
+        if key=='risk' and (not complete or not whole_months):value=None
         unit='money' if key=='netoff' else 'count'
         if key=='duration':
             valid=sum(r['days_count'] for r in rows);value=sum((r['days_total'] for r in rows),Decimal(0))/valid if valid else None;unit='days'

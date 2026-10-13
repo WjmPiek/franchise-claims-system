@@ -52,6 +52,7 @@ class ClaimInsightsTest(unittest.TestCase):
         self.publish([self.source()]);a=analyse(self.store,dict(date_from='2026-09-11',date_to='2026-09-30'))
         self.assertEqual(a['paid_count'],0);self.assertEqual(a['reported_count'],0)
         self.assertIsNone(a['tables']['risk'][0]['ratio'])
+        self.assertIsNone(next(c['value'] for c in a['cards'] if c['key']=='risk'))
     def test_newest_source_snapshot_replaces_status_without_double_counting(self):
         self.publish([self.source()],'first');self.publish([self.source(**{'Net amount paid via bank':'100'})],'second')
         a=analyse(self.store,self.dates);self.assertEqual(a['reported_count'],1);self.assertEqual(a['bank'],100)
