@@ -30,6 +30,8 @@ class CentralStore:
                 'CREATE INDEX IF NOT EXISTS central_claim_scope ON central_claims(month,franchise,product)',
                 'CREATE TABLE IF NOT EXISTS central_claim_components (batch_id TEXT NOT NULL,n INTEGER NOT NULL,net_off TEXT NOT NULL,bank_paid TEXT NOT NULL,PRIMARY KEY(batch_id,n))',
                 'CREATE TABLE IF NOT EXISTS central_claim_publications (month TEXT PRIMARY KEY,batch_id TEXT NOT NULL)',
+                'CREATE TABLE IF NOT EXISTS central_claim_events (batch_id TEXT NOT NULL,n INTEGER NOT NULL,franchise TEXT NOT NULL,source_json TEXT NOT NULL,PRIMARY KEY(batch_id,n))',
+                'CREATE TABLE IF NOT EXISTS central_claim_event_versions (batch_id TEXT PRIMARY KEY,version TEXT NOT NULL,source_rows INTEGER NOT NULL)',
                 'CREATE TABLE IF NOT EXISTS central_recipient_access (user_id INTEGER NOT NULL,kind TEXT NOT NULL,value TEXT NOT NULL,PRIMARY KEY(user_id,kind,value))',
                 'CREATE TABLE IF NOT EXISTS central_legacy_archive (batch_id TEXT NOT NULL,n INTEGER NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(batch_id,n))',
                 'CREATE TABLE IF NOT EXISTS central_legacy_batches (batch_id TEXT PRIMARY KEY,metadata TEXT NOT NULL)',

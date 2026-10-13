@@ -136,12 +136,13 @@ class JobQueue:
                         from central_claims import read_transactions,publish_claims
                         with closing(sqlite3.connect(self.root/(identifier+'.sqlite'))) as stage:
                             stage.execute('CREATE TABLE claims(n INTEGER PRIMARY KEY,month TEXT,franchise TEXT,product TEXT,amount TEXT,source TEXT,issues TEXT)')
+                            stage.execute('CREATE TABLE claim_events(n INTEGER PRIMARY KEY,source TEXT)')
                             known={r['franchise'] for r in self.store.summaries()};aliases={}
                             from app import franchise_match_key
                             for name in known:aliases.setdefault(franchise_match_key(name),set()).add(name)
                             count=0;amount=Decimal(0);paid_count=0
                             claims_controls={}
-                            for record in read_transactions(path,job['args']['amount_header'],job['args'].get('sheet',''),claims_controls):
+                            for record in read_transactions(path,job['args']['amount_header'],job['args'].get('sheet',''),claims_controls,lambda n,source:stage.execute('INSERT INTO claim_events VALUES (?,?)',(n,json.dumps(source)))):
                                 issues=[];franchise=record['franchise'];matches=aliases.get(franchise_match_key(franchise),set())
                                 if franchise not in known:
                                     if len(matches)==1:franchise=next(iter(matches));issues.append('Franchise resolved by the existing normalised alias; original source retained.')
@@ -155,6 +156,9 @@ class JobQueue:
                             chosen=job['args'].get('replace_months') or months
                             result=publish_claims(self.store,stage,job['args']['filename'],job['owner_id'],job['args']['amount_header'],chosen,batch_id=identifier)
                             result.update(ok=True,issues=claims_controls.get('undated_netoff_rows',0),source={'rows':count,'claims':str(amount),'claim_count':paid_count,**claims_controls},month=','.join(result['months']))
+                    elif job['kind']=='claim_analysis':
+                        from claim_insights import backfill
+                        result=backfill(self.store,self,identifier)
                     elif job['kind']=='ledger':
                         from central_ledger import read_ledger,publish
                         path=self.restore_source(job)

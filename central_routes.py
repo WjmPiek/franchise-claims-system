@@ -47,6 +47,8 @@ def register_central(app,export_dir,scope):
         frame=scope(pd.DataFrame({'Franchise':names}))
         return set(frame['Franchise']) if 'Franchise' in frame else set()
     app.extensions['central_scope']=access
+    from claim_insights import register as register_claim_insights
+    register_claim_insights(app,store,access)
 
     def export_arguments(batch,item,allowed):
         args={'batch':batch['id'],'name':item['name'],'allowed':sorted(allowed) if allowed is not None else None}
@@ -102,7 +104,12 @@ def register_central(app,export_dir,scope):
         selected_franchise=request.args.get('franchise','All')
         if selected_franchise!='All':allowed={selected_franchise} if allowed is None or selected_franchise in allowed else set()
         summaries=store.summaries(start,end,allowed)
-        if not summaries:return {'central_batches':pubs,'central_ready':False}
+        insights={}
+        if (request.view_args or {}).get('section')=='claims' or request.args.get('section')=='claims':
+            from claim_insights import analyse
+            from period_selection import selected_dates
+            insights={'claim_insights':analyse(store,selected_dates(request.args),allowed)}
+        if not summaries:return {'central_batches':pubs,'central_ready':False,**insights}
         from decimal import Decimal
         totals={}
         for row in summaries:
@@ -139,7 +146,7 @@ def register_central(app,export_dir,scope):
             name=COMBINE.get(normal(row['franchise']),row['franchise']) if combined else row['franchise']
             item=aul_groups.setdefault(name,dict(franchise=name,rows=0,payover=Decimal(0)))
             item['rows']+=int(value['aul_rows']);item['payover']+=Decimal(value['aul_payover'])
-        return {'central_ready':True,'central_totals':totals,'central_batches':pubs,
+        return {**insights,'central_ready':True,'central_totals':totals,'central_batches':pubs,
           'central_rankings':rankings,'central_missing_months':[m for m in expected if m not in present],
           'central_catalog':[{'batch':{**b,'source_rows':sum(r['summary']['rows'] for r in summaries if r['month']==b['month'])},'files':allowed_catalog(b,allowed)} for b in pubs],
           'central_source_version':VERSION,'central_identity_pending':False,

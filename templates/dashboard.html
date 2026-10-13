@@ -222,7 +222,7 @@
           {% elif home_section == 'commissions' %}{% if central_ready %}{% include 'central_fees.html' %}{% else %}{% include 'commissions_section.html' %}{% endif %}
           {% elif home_section == 'policies' %}{% if central_ready %}{% include 'central_policies.html' %}{% else %}{% include 'policies_products_section.html' %}{% endif %}
           {% elif home_section == 'top_franchise' %}{% if central_ready %}{% include 'central_rankings.html' %}{% else %}{% include 'top_franchise_section.html' %}{% endif %}
-          {% elif home_section == 'claims' %}{% if central_ready %}{% include 'central_claims.html' %}{% else %}{% include 'claims_section.html' %}{% endif %}
+          {% elif home_section == 'claims' %}{% if claim_insights is defined %}{% include 'claim_insights_block.html' %}{% endif %}{% if central_ready %}{% include 'central_claims.html' %}{% else %}{% include 'claims_section.html' %}{% endif %}
           {% elif home_section == 'imports' %}{% if current_user.role=='admin' %}{% include 'central_imports.html' %}{% endif %}
 {% elif home_section == 'admin' %}{% include 'admin_tools_section.html' %}
 {% elif home_section == 'commission_detail' %}{% include 'commission_detail.html' %}

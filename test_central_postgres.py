@@ -42,15 +42,22 @@ def run():
                 assert direct.execute(conn,"SELECT COUNT(*) FROM direct_data_rows").fetchone()[0]==0
             with closing(sqlite3.connect(':memory:')) as stage:
                 stage.execute('CREATE TABLE claims(n INTEGER PRIMARY KEY,month TEXT,franchise TEXT,product TEXT,amount TEXT,source TEXT,issues TEXT)')
-                source={'Amount net off against claim':'30','Net amount paid via bank':'70','Final Amount':'100','Date Of Claim Paid':'2026-09-10'}
+                source={'Claim Number':'TEMP-C1','Participating Group':'MARTINS FUNERALS ERMELO','Product':'Gold Family Plan 31 to 55 Years R 40 000','Claim Reported Date':'2026-09-01','Claim Status':'Approved','Amount net off against claim':'30','Net amount paid via bank':'70','Final Amount':'100','Date Of Claim Paid':'2026-09-10','Number of days between Incident Date/Entry Date':'365.25'}
                 stage.execute('INSERT INTO claims VALUES (1,?,?,?,?,?,?)',('2026-09','MARTINS FUNERALS ERMELO','Gold Family Plan 31 to 55 Years R 40 000','70',json.dumps(source),'[]'))
+                stage.execute('CREATE TABLE claim_events(n INTEGER PRIMARY KEY,source TEXT)')
+                stage.execute('INSERT INTO claim_events VALUES (?,?)',(1,json.dumps(source)))
+                stage.execute('INSERT INTO claim_events VALUES (?,?)',(2,json.dumps({**source,'Claim Number':'TEMP-C2','Claim Status':'Repudiated','Date Of Claim Paid':'','Net amount paid via bank':'0','Amount net off against claim':'0'})))
                 publish_claims(store,stage,'claims.xlsx',900000001,'Net amount paid via bank',['2026-09'])
+            from claim_insights import analyse
+            insights=analyse(store,dict(date_from='2026-09-01',date_to='2026-09-30'))
+            assert insights['reported_count']==2 and insights['paid_count']==1
+            assert {r['label']:r['count'] for r in insights['tables']['status']}=={'Approved':1,'Repudiated':1}
             claim=next(store.claims());assert claim['amount']=='70' and claim['net_off']=='30' and claim['bank_paid']=='70'
             publish_ledger(store,'ledger',900000001,'2026-09','control.xlsx',[dict(franchise='MARTINS FUNERALS ERMELO',opening='20',payment='10',system_control='400',account='TEST',paid_on='2026-09-30')])
             batch=store.publications()[0];files=catalog(store,batch)
             for kind in ('reconciliation','payover','claims','product_claims','commissions','internal','combine'):
                 item=next(i for i in files if i['kind']==kind);generate(store,batch,item,root/item['name'])
-            print('PASS: TEMP-only PostgreSQL publications, immutable versions, all source rows, System REF snapshot, claims components, balance controls and separate report exports.')
+            print('PASS: TEMP-only PostgreSQL publications, immutable versions, all source rows, System REF snapshot, claims components, unpaid status analytics, balance controls and separate report exports.')
     finally:engine.dispose()
 
 if __name__=='__main__':run()

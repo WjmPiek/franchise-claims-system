@@ -48,7 +48,7 @@ def source_paid_on(source):
     value=next((v for k,v in source.items() if normal(k) in PAID_DATES),'')
     return paid_date(value,0).strftime('%Y-%m-%d') if value else ''
 
-def read_transactions(path,amount_header,sheet_name='',controls=None):
+def read_transactions(path,amount_header,sheet_name='',controls=None,event_sink=None):
     if not amount_header.strip():raise ValueError('Specify the verified heading containing the amount actually paid.')
     book=load_workbook(path,read_only=True,data_only=True)
     try:
@@ -65,6 +65,7 @@ def read_transactions(path,amount_header,sheet_name='',controls=None):
             if not any(v not in (None,'') for v in row):continue
             if controls is not None:controls['source_rows']=controls.get('source_rows',0)+1
             source={str(key or f'Column {i+1}'):str(row[i] if i<len(row) and row[i] is not None else '') for i,key in enumerate(header)}
+            if event_sink is not None:event_sink(n,source)
             amount=component(source,amount_header)
             netoff=component(source,VERIFIED_NET_OFF_HEADER)
             status=str(row[status_index] or '').casefold() if status_index is not None else ''
@@ -116,6 +117,9 @@ def publish_claims(store,stage,source_file,owner,amount_header,replace_months,ba
             store.direct.execute(conn,'INSERT INTO central_claims VALUES (:batch,:n,:month,:franchise,:product,:amount,:source,:issues)',dict(batch=batch,n=n,month=month,franchise=franchise,product=product,amount=amount,source=source,issues=issues))
             fields=json.loads(source)
             store.direct.execute(conn,'INSERT INTO central_claim_components VALUES (:batch,:n,:netoff,:bank)',dict(batch=batch,n=n,netoff=str(component(fields,VERIFIED_NET_OFF_HEADER)),bank=str(component(fields,VERIFIED_BANK_HEADER))))
+        if stage.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='claim_events'").fetchone():
+            from claim_insights import persist_events
+            persist_events(store,conn,batch,stage.execute('SELECT n,source FROM claim_events ORDER BY n'))
         for month in scope:
             store.direct.execute(conn,'INSERT INTO central_claim_publications VALUES (:month,:batch) ON CONFLICT(month) DO UPDATE SET batch_id=excluded.batch_id',dict(month=month,batch=batch))
     return {'batch_id':batch,'months':sorted(scope),'unpublished_source_months':sorted(actual-scope),'rows':stage.execute('SELECT COUNT(*) FROM claims').fetchone()[0]}
