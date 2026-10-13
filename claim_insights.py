@@ -150,7 +150,7 @@ def analyse(store,dates,allowed=None):
         risk.append(dict(label=names.get(k,'Unallocated'),count=t['count'],bank=t['amount'],premium=den,ratio=value,colour=colour,action=action))
     risk.sort(key=lambda r:(r['ratio'] is None,-(r['ratio'] or 0),-r['bank'],r['label']))
     tables={k:grouped(events,lambda r,k=k:r[k]) for k in ('relation','age','gender','cause','status','product')}
-    tables.update(product_age=grouped(events,lambda r:r['product']+' / '+r['age']),cover=grouped(events,lambda r:r['product']+' / '+r['cover']),
+    tables.update(product_age=grouped(events,lambda r:r['product']+' / '+r['age']),cover=grouped(events,lambda r:r['cover']),
       payee=grouped(bank,lambda r:r['payee']),netoff=grouped(offset,lambda r:r['franchise']),duration=grouped(events,lambda r:r['product']),
       branch_month=grouped(bank,lambda r:r['franchise']+' / '+r['month']),risk=risk,
       risk_franchise=grouped([r for r in bank if normal(r['product']) in red],lambda r:r['franchise']),
@@ -203,7 +203,7 @@ def register(app,store,access):
         if metric=='early':records=[r for r in records if r['days'] is not None and r['days']<=180]
         if metric=='quality':records=[r for r in records if 'Unknown' in (r['age'],r['cause'],r['payee']) or r['days'] is None or not r['claim']]
         def label(r):
-            return r['product'] if metric in ('risk','duration','early','quality') else r['product']+' / '+r['age'] if metric=='product_age' else r['product']+' / '+r.get('cover','Unknown') if metric=='cover' else r['franchise']+' / '+r['month'] if metric=='branch_month' else r['franchise'] if metric in ('risk_franchise','netoff','delay') else r.get(metric,'Unknown')
+            return r['product'] if metric in ('risk','duration','early','quality') else r['product']+' / '+r['age'] if metric=='product_age' else r.get('cover','Unknown') if metric=='cover' else r['franchise']+' / '+r['month'] if metric=='branch_month' else r['franchise'] if metric in ('risk_franchise','netoff','delay') else r.get(metric,'Unknown')
         if group:records=[r for r in records if label(r)==group]
         count=len(records)
         return render_template('claim_insight_detail.html',insights=insights,title=SPECS[metric],metric=metric,rows=rows,records=records[(page-1)*50:page*50],count=count,page=page,group=group,franchise=franchise,dates=dates)
