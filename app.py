@@ -1170,40 +1170,16 @@ def parse_policy_transaction_sheet(df, source_path=''):
     """
     if df.empty:
         return pd.DataFrame()
-    lookup = {str(c).strip().lower(): c for c in df.columns}
-    def find(*names):
-        for n in names:
-            key = n.strip().lower()
-            if key in lookup:
-                return lookup[key]
-        return None
-    franchise_col = find('franchise', 'branch', 'branch name', 'participating group', 'participating_group', 'franchise name', 'office')
-    relation_col = find('relation', 'member relation', 'rel', 'member type')
-    risk_col = find('risk', 'risk value', 'risk premium', 'risk amount')
-    retail_col = find('retail', 'retail premium', 'retail amount')
-    mpia_col = find('mpia')
-
-    # Fallback to the fixed PolicyData column positions supplied by Martins Direct:
-    # I = relation/MEM, M = risk amount, R = MPIA, W = retail.
-    # Python indexes are zero-based: I=8, M=12, R=17, W=22.
-    cols = list(df.columns)
-    def by_index(idx):
-        return cols[idx] if len(cols) > idx else None
-    if relation_col is None:
-        relation_col = by_index(8)
-    if risk_col is None:
-        risk_col = by_index(12)
-    if mpia_col is None:
-        mpia_col = by_index(17)
-    if retail_col is None:
-        retail_col = by_index(22)
-    if franchise_col is None:
-        # Most exports keep the branch/franchise name near the first few columns.
-        # Try B first, then A as a final fallback.
-        franchise_col = by_index(1) or by_index(0)
-
-    if not all([franchise_col, relation_col, risk_col, retail_col, mpia_col]):
+    from policy_layout import policy_columns
+    positions = policy_columns(df.columns)
+    if any(index is None for index in positions.values()):
         return pd.DataFrame()
+    cols = list(df.columns)
+    franchise_col = cols[positions['franchise']]
+    relation_col = cols[positions['relation']]
+    risk_col = cols[positions['risk']]
+    retail_col = cols[positions['retail']]
+    mpia_col = cols[positions['mpia']]
 
     work = df.copy()
     work['__franchise'] = work[franchise_col].astype(str).str.strip()
@@ -2614,8 +2590,13 @@ def read_policydata_streaming(path, persist_detail=False):
     from import_progress import report
     report('Opening Excel workbook')
     wb = load_workbook(path, read_only=True, data_only=True)
-    ws = wb[wb.sheetnames[0]]
-    header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+    from policy_layout import find_policy_sheet
+    try:
+        ws, header_row, header, columns = find_policy_sheet(wb)
+        month = month_from_filename(path)
+    except Exception:
+        wb.close()
+        raise
     header_map = {_normalise_header(v): i for i, v in enumerate(header)}
 
     def idx(*names, fallback=None):
@@ -2625,12 +2606,12 @@ def read_policydata_streaming(path, persist_detail=False):
                 return header_map[key]
         return fallback
 
-    franchise_i = idx('Franchise', 'Branch', 'Participating Group', fallback=0)
+    franchise_i = columns['franchise']
     id_number_i = idx('ID Number', 'ID No', 'Identity Number', 'SA ID', fallback=5)  # F
-    relation_i = idx('Relation', fallback=8)  # I
-    risk_i = idx('AUL Risk', 'Risk', 'Risk Amount', 'Risk Premium', fallback=12)  # M
-    retail_i = idx('Retail', 'Retail Premium', fallback=13)  # N in this PolicyData export
-    mpia_i = idx('MPIA', fallback=17)  # R
+    relation_i = columns['relation']  # I
+    risk_i = columns['risk']  # M
+    retail_i = columns['retail']  # N in this PolicyData export
+    mpia_i = columns['mpia']  # R
     address_o_i = 14  # Excel column O, zero-based index 14
 
     agg = {}
@@ -2651,7 +2632,7 @@ def read_policydata_streaming(path, persist_detail=False):
     sink = policy_detail_batches(get_db_engine(), source_display, month.date(), max((getattr(ws, 'max_row', 0) or 0) - 1, 0) or None) if persist_detail else nullcontext(None)
     try:
         with sink as write_batch:
-            for row_number, row in enumerate(ws.iter_rows(min_row=2, max_col=max_needed_col, values_only=True), start=2):
+            for row_number, row in enumerate(ws.iter_rows(min_row=header_row + 1, max_col=max_needed_col, values_only=True), start=header_row + 1):
                 total_rows += 1
                 if total_rows % 1000 == 0:
                     report('Reading Excel rows', total_rows, max((getattr(ws, 'max_row', 0) or 0) - 1, total_rows))
@@ -2779,17 +2760,18 @@ def read_policydata_streaming(path, persist_detail=False):
 
 
 def looks_like_policydata_file(path):
-    name = os.path.basename(path).lower()
-    if name.startswith('policydata'):
+    # Upload paths have a UUID prefix; inspect the original display name.
+    if not str(path).lower().endswith('.xlsx'):
+        return False
+    if display_source_filename(path).lower().startswith('policydata'):
         return True
+    from policy_layout import find_policy_sheet
     wb = None
     try:
         wb = load_workbook(path, read_only=True, data_only=True)
-        ws = wb[wb.sheetnames[0]]
-        header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
-        keys = {_normalise_header(v) for v in header}
-        return {'franchise', 'relation', 'mpia'}.issubset(keys) and ('aul risk' in keys or 'risk' in keys) and 'retail' in keys
-    except Exception:
+        find_policy_sheet(wb)
+        return True
+    except ValueError:
         return False
     finally:
         if wb is not None:
@@ -6119,10 +6101,12 @@ def dashboard(section='dashboard'):
                 flash('No data available yet. Import a policy/premium file or claims file.', 'warning')
         except Exception as exc:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                app.logger.error('Excel import failed (%s)', type(exc).__name__)
+                app.logger.exception('Excel import failed')
                 from premium_precision import PremiumPrecisionBusy
                 if isinstance(exc, PremiumPrecisionBusy):
                     return jsonify(ok=False, error=str(exc)), 409
+                if isinstance(exc, ValueError):
+                    return jsonify(ok=False, error=str(exc)), 400
                 return jsonify(ok=False, error='Import failed. This file was not confirmed complete; check the server logs before retrying.'), 400
             flash(str(exc), 'danger')
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
