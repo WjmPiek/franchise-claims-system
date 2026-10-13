@@ -26,9 +26,13 @@ jobs:
       - run: pip install -r requirements.txt pypdf
       - run: python -m unittest discover -s tests -p 'test_report_summary*.py'
       - run: python -m unittest discover -s tests -p 'test_policy_import.py'
+        if: ${{ always() }}
       - run: python -m unittest discover -s tests -p 'test_policy_layout.py'
+        if: ${{ always() }}
       - run: python -m unittest discover -s tests -p 'test_import_session.py'
+        if: ${{ always() }}
       - run: node tests/test_import_queue.js
+        if: ${{ always() }}
 
   premium-precision:
     runs-on: ubuntu-latest
