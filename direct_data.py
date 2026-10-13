@@ -608,8 +608,11 @@ def register_direct_data(app, export_dir, get_engine=None):
         metadata = json.loads(owner.read_text())
         if metadata['owner'] != user.get('id') or datetime.now() - datetime.fromisoformat(metadata['created']) > timedelta(hours=12):
             return None
-        if not any(batch['id']==metadata.get('batch',job) for batch in store.batches(user['id'])):
+        batch=next((batch for batch in store.batches(user['id']) if batch['id']==metadata.get('batch',job)),None)
+        if batch is None:
             return None
+        current=next((b for b in store.central.publications() if b['month']==batch['month']),None)
+        if current and current['id']!=batch['id']:return None
         allowed = json.loads((folder / 'files.json').read_text()) if (folder / 'files.json').exists() else []
         if name not in allowed:
             return None
