@@ -100,6 +100,7 @@ def financial_rows(store,batch,allowed=None,franchise=''):
           'Average Claim':str(amount/count) if count else 'Not applicable',
           'Claim Ratio':str(r['value']/100) if r['value'] is not None else r['status'],
           'Scenario 2 / BrightRock Month Value':str(Decimal(values['retail'])-amount-Decimal(values['paid_commissions'])),
+          'Insurer Remaining After Commissions And Claims':str(Decimal(values['payover'])-Decimal(values['percentage_commission'])-amount) if batch['month'] in verified else 'Unconfirmed paid claims',
           'BrightRock Running Balance':running,'Running Balance History':'Available published receipt months through '+batch['month']+'; no external opening balance included',
           'Voucher Supplier':values['supplier'],'Voucher Retained':values['retained'],'Review Rows':values['review_rows']}
         for key,value in result.items():
@@ -152,11 +153,15 @@ def generate(store,batch,item,path,allowed=None):
                     due=system+opening if opening is not None else None;outstanding=due-payment if due is not None else None
                     external=Decimal(control['system_control']) if control else None;difference=system-external if external is not None else None
                     status='Draft — import opening balances and payment controls' if not control else 'Review — external system differs' if difference else 'Reconciled'
-                    w.append([row['Franchise'],control['account'] if control else 'Unconfirmed',system,row['R1'],row['ADV'],row['Mkhulu'],gross_voucher,Decimal(vals['retained']),Decimal(vals['supplier']),row['Net Risk / Insurer Payover'],system,opening if opening is not None else 'Unconfirmed',due if due is not None else 'Unconfirmed',control['paid_on'] if control else '',payment if payment is not None else 'Unconfirmed',outstanding if outstanding is not None else 'Unconfirmed',batch['version'],external if external is not None else 'Unconfirmed',difference if difference is not None else 'Unconfirmed',status]);count+=1;total+=Decimal(row['Net Risk / Insurer Payover'])
+                    w.append([row['Franchise'],control['account'] if control else 'Unconfirmed',system,row['R1'],row['ADV'],row['Mkhulu']+row['MFF'],gross_voucher,Decimal(vals['retained']),Decimal(vals['supplier']),row['Net Risk / Insurer Payover'],system,opening if opening is not None else 'Unconfirmed',due if due is not None else 'Unconfirmed',control['paid_on'] if control else '',payment if payment is not None else 'Unconfirmed',outstanding if outstanding is not None else 'Unconfirmed',batch['version'],external if external is not None else 'Unconfirmed',difference if difference is not None else 'Unconfirmed',status]);count+=1;total+=Decimal(row['Net Risk / Insurer Payover'])
+                detail=sheet('Insurer Calculation',['Franchise','Retail','BrightRock 10%','Brokers & Mkhulu 5%','Original Insurance Risk','Faithnet','R1 + ADV','Voucher Risk (separate)','Net Insurance Risk','Claims Paid Via Bank','Commissions + Bank Claims','Insurer Remaining After Commissions And Claims','Claims Verification'])
+                for row in rows:
+                    ready=batch['month'] in store.verified_claim_months()
+                    detail.append([row['Franchise'],row['Retail'],row['BrightRock'],row['Mkhulu']+row['MFF'],row['Original Risk'],row['Faithnet Deduction'],row['R1']+row['ADV'],row['Voucher Supplier']+row['Voucher Retained'],row['Net Risk / Insurer Payover'],row['Claims'] if ready else 'Unconfirmed',row['Percentage Commissions']+row['Claims'] if ready else 'Unconfirmed',row['Insurer Remaining After Commissions And Claims'],'Verified paid month' if ready else 'Import complete paid month or confirm no paid claims in Admin'])
             else:
                 headers=list(rows[0]) if rows else ['Franchise','Month']
                 if kind=='commissions':
-                    headers=[h for h in headers if h not in ('Claims','Claim Count','Average Claim','Claim Ratio','Scenario 2 / BrightRock Month Value','BrightRock Running Balance','Running Balance History')]
+                    headers=[h for h in headers if h not in ('Claims','Claim Count','Average Claim','Claim Ratio','Scenario 2 / BrightRock Month Value','Insurer Remaining After Commissions And Claims','BrightRock Running Balance','Running Balance History')]
                 w=sheet(item['title'][:31],headers)
                 for row in rows:w.append([row.get(k,'') for k in headers]);count+=1;total+=Decimal(row['Paid Commissions'])
         elif kind=='claims':

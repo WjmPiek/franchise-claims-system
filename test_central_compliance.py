@@ -90,6 +90,23 @@ class CentralComplianceTest(unittest.TestCase):
         ranks=retail_rank({'B':100,'A':100,'C':50},{'B':200,'A':100})
         self.assertEqual([r['franchise'] for r in ranks],['A','B','C'])
         self.assertEqual([r['change'] for r in ranks],[1,-1,None])
+    def test_insurer_calculation_keeps_bank_claims_and_fees_separate(self):
+        self.import_rows([record(franchise='ERMELO',risk='200',retail='300')])
+        batch=self.store.publications()[0];item=next(i for i in catalog(self.store,batch) if i['kind']=='payover')
+        path=self.root/'payover.xlsx';generate(self.store,batch,item,path)
+        book=load_workbook(path,data_only=True)
+        self.assertEqual(book['Monthly Pay-over']['F2'].value,15)
+        self.assertEqual(book['Insurer Calculation']['L2'].value,'Unconfirmed paid claims');book.close()
+        with sqlite3.connect(':memory:') as stage:
+            stage.execute('CREATE TABLE claims(n INTEGER PRIMARY KEY,month TEXT,franchise TEXT,product TEXT,amount TEXT,source TEXT,issues TEXT)')
+            stage.execute('INSERT INTO claims VALUES (?,?,?,?,?,?,?)',(2,'2026-09','ERMELO','Plan A','50',json.dumps({'Net amount paid via bank':50,'Amount net off against claim':20,'Final Amount':70}),'[]'))
+            publish_claims(self.store,stage,'claims.xlsx',1,'Net amount paid via bank',['2026-09'])
+        generate(self.store,batch,item,path);book=load_workbook(path,data_only=True)
+        sheet=book['Insurer Calculation']
+        self.assertEqual(sheet['J2'].value,50)
+        self.assertEqual(sheet['K2'].value,95)
+        self.assertAlmostEqual(sheet['L2'].value,sheet['I2'].value-95)
+        book.close()
     def test_durable_job_checksums_failures_do_not_stop_other_months(self):
         app=Flask(__name__);audit=ImportAudit(self.root/'audit.sqlite');queue=JobQueue(app,self.store,self.root,audit)
         class Upload:
