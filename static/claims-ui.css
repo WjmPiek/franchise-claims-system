@@ -24,7 +24,7 @@ body.claims-ui{background:#f6f7fb !important;color:#211b30 !important;font:14px/
 .claims-ui .martins-module-brand{font-size:23px !important;font-weight:800 !important;gap:15px !important}
 .claims-ui .martins-module-account{background:#fbf9ff !important;border:1px solid #eadff3 !important;border-radius:14px !important;padding:7px 10px 7px 14px !important;font-size:12px !important;flex-wrap:wrap !important}
 .claims-ui .martins-module-account a{font-size:13px !important;padding:7px 13px !important;border-radius:10px !important}
-.claims-ui .executive-topbar{grid-template-columns:minmax(220px,1fr) minmax(320px,1fr) !important;gap:24px !important}
+.claims-ui .executive-topbar{grid-template-columns:minmax(0,1fr) !important;gap:18px !important}
 .claims-ui .executive-topbar h1{font-size:36px !important;font-weight:800 !important;letter-spacing:-.8px !important}
 .claims-ui .card,.claims-ui .exec-card,.claims-ui .metric,.claims-ui .workspace-card,.claims-ui .executive-filter,.admin-wrap{border:1px solid #e1e6ef !important;border-radius:17px !important;box-shadow:0 14px 36px rgba(25,31,47,.065) !important;background:#fff !important;padding:22px !important}
 .claims-ui .exec-grid,.claims-ui .summary-grid{gap:18px !important}
