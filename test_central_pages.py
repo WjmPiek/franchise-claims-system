@@ -67,6 +67,7 @@ class CentralPages(unittest.TestCase):
         with self.store.direct.connection() as conn:
             args=json.loads(self.store.direct.execute(conn,'SELECT args FROM central_jobs WHERE id=:id',{'id':identifier}).fetchone()[0])
         self.assertEqual(args['ledger_version'],'balance')
+        self.assertIsNotNone(args['claims_version'])
         with self.app.test_request_context('/'):
             g.user={'id':999999,'role':'admin'}
             self.assertTrue(self.app.extensions['central_export_access'](args))

@@ -51,7 +51,7 @@ def register_central(app,export_dir,scope):
     def export_arguments(batch,item,allowed):
         args={'batch':batch['id'],'name':item['name'],'allowed':sorted(allowed) if allowed is not None else None}
         with store.direct.connection() as conn:
-            if item['kind'] in ('claims','product_claims','internal'):
+            if item['kind'] in ('claims','product_claims','internal','payover'):
                 row=store.direct.execute(conn,'SELECT batch_id FROM central_claim_publications WHERE month=:month',{'month':batch['month']}).fetchone()
                 args['claims_version']=row[0] if row else None
             if item['kind']=='payover':
