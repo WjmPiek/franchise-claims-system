@@ -4227,7 +4227,7 @@ def build_premium_parlour_analysis(source_df, current_df, selected='All'):
     }
 
 
-def build_executive_dashboard_context(monthly_view, selected='All', period_view='six_months', premium_analysis_month=''):
+def build_executive_dashboard_context(monthly_view, selected='All', period_view='six_months', premium_analysis_month='', section=None):
     """Build the executive dashboard data directly from imported system data.
 
     The calculations use the same analysed monthly dataframe as the rest of the
@@ -4305,7 +4305,7 @@ def build_executive_dashboard_context(monthly_view, selected='All', period_view=
     except Exception:
         selected_premium_month = ''
         premium_current_df = df
-    premium_parlour_analysis = build_premium_parlour_analysis(source_df, premium_current_df, selected)
+    premium_parlour_analysis = build_premium_parlour_analysis(source_df, premium_current_df, selected) if section in (None,'risk','compare','dashboard') else {}
     premium_parlour_analysis['available_months'] = available_premium_months
     premium_parlour_analysis['selected_month'] = selected_premium_month
     premium_parlour_analysis['using_dashboard_period'] = not bool(selected_premium_month)
@@ -4324,7 +4324,7 @@ def build_executive_dashboard_context(monthly_view, selected='All', period_view=
     overdue_count = 0
     ageing_buckets = {'0-7 days': 0, '8-14 days': 0, '15-30 days': 0, '31+ days': 0}
     try:
-        engine = get_db_engine()
+        engine = get_db_engine() if section in (None,'claims','dashboard') else None
         if engine is not None:
             params = {}
             where = ['COALESCE(archived,false) = false']
@@ -4450,12 +4450,12 @@ def build_executive_dashboard_context(monthly_view, selected='All', period_view=
         'top_franchise_rows': top_rows, 'has_location_data': bool(client_locations),
         'status_breakdown': status_breakdown,
         'franchise_detail': franchise_detail,
-        'relation_counts': get_policy_relation_counts(selected),
+        'relation_counts': get_policy_relation_counts(selected) if section in (None,'policies','relations','dashboard') else {'rows':[],'total':0},
         'premium_parlour_analysis': premium_parlour_analysis,
-        'age_notifications': get_policy_age_notifications(selected, 12),
-        'age_notification_summary': get_policy_age_notification_summary(selected, 100),
-        'age_notification_totals': get_policy_age_notification_totals(selected),
-        'age_notification_age_bands': get_policy_age_notification_age_bands(selected),
+        'age_notifications': get_policy_age_notifications(selected, 12) if section in (None,'policies','relations','dashboard') else [],
+        'age_notification_summary': get_policy_age_notification_summary(selected, 100) if section in (None,'policies','relations','dashboard') else [],
+        'age_notification_totals': get_policy_age_notification_totals(selected) if section in (None,'policies','relations','dashboard') else {},
+        'age_notification_age_bands': get_policy_age_notification_age_bands(selected) if section in (None,'policies','relations','dashboard') else [],
     }
 def build_scenario_comparison_view(monthly_view, args):
     """Build the Excel-style Scenario Comparison commission calculator.
@@ -6032,6 +6032,9 @@ def index():
 
 @app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard(section='dashboard'):
+    if request.method=='GET' and section=='graphs':
+        from central_graphs import render_page
+        return render_page(app)
     if request.method=='POST' and request.files and app.extensions.get('central_jobs'):
         return jsonify(ok=False,error='Use the Imports tab for verified Direct and paid-claims source files.'),410
     if request.method=='GET' and section=='dashboard':return redirect(url_for('overview_page',section='risk',**request.args.to_dict()))
@@ -6232,7 +6235,7 @@ def dashboard(section='dashboard'):
         from period_selection import month_bounds
         try:month_bounds(g.period_dates)
         except ValueError as exc:return str(exc),400
-    executive_dashboard = build_executive_dashboard_context(monthly_view, selected=selected, period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month)
+    executive_dashboard = build_executive_dashboard_context(monthly_view, selected=selected, period_view=dashboard_period_view, premium_analysis_month=premium_analysis_month,section=section)
     home_titles={'dashboard':'Dashboard','risk':'Risk & Retail','commissions':'Commissions & Fees','policies':'Policies & Products','claims':'Claims','compare':'Compare','top_franchise':'Top Franchise','imports':'Imports','admin':'Admin','commission_detail':'Commission supporting data','reports':'Reports & Downloads','downloads':'Reports & Downloads','graphs':'Graphs','claim_trend':'Claim Amount Comparison Over Time','policy_trend':'Policy / Client Trend','relations':'Policy Relation Counts'}
     topic_frame,_topic_label=_dashboard_month_filter(monthly_view,dashboard_period_view)
     topic_totals={key:_sum_col(topic_frame,key) for key in ('Total Commission','Total Paid Commissions','Total Book Value','BrightRock Month Total')}
@@ -6268,6 +6271,7 @@ def dashboard(section='dashboard'):
 
 @app.context_processor
 def editable_period_context():
+    if getattr(g,'graph_page',False):return {}
     from period_selection import selected_dates
     try:return {'period_dates':selected_dates(request.args)}
     except ValueError:return {'period_dates':{'date_from':'','date_to':''}}

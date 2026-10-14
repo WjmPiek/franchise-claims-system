@@ -1,0 +1,8 @@
+<div class="exec-card span-6" data-graph-card="{{ graph.key }}">
+<h2><a href="{{ url_for('central_calculation_detail',category=graph.category,franchise=selected,**graph.dates) }}">{{ graph.label }}</a></h2>
+<form method="get" action="{{ url_for('overview_page',section='graphs') }}" class="graph-period" data-update-url="{{ url_for('update_graph',key=graph.key) }}">
+<input type="hidden" name="graph" value="{{ graph.key }}"><input type="hidden" name="franchise" value="{{ selected }}">
+<label>From date<input type="date" name="date_from" value="{{ graph.dates.date_from }}" required></label><label>To date<input type="date" name="date_to" value="{{ graph.dates.date_to }}" required></label><button type="submit">Update graph</button></form>
+<p class="graph-status" role="status" aria-live="polite">Showing {{ graph.dates.date_from }} to {{ graph.dates.date_to }}</p>
+{% include 'central_chart.html' %}
+<details class="graph-values"><summary>View monthly values</summary><table class="exec-table"><thead><tr><th>Receipt / paid month</th><th>{{ graph.label }}</th></tr></thead><tbody>{% for point in graph.points %}<tr><td><a href="{{ point.url }}">{{ point.label }}</a></td><td>{{ point.value|int if graph.unit=='rows' else point.value|money }}</td></tr>{% else %}<tr><td colspan="2">No verified data in this selection.</td></tr>{% endfor %}</tbody></table></details></div>

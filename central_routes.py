@@ -105,9 +105,15 @@ def register_central(app,export_dir,scope):
         from period_selection import selected_dates,month_bounds
         return month_bounds(selected_dates(request.args))
 
+    app.extensions['central_page_access']=access
+    from central_graphs import register as register_graphs
+    register_graphs(app)
+
     @app.context_processor
     def central_context():
+        if getattr(g,'graph_page',False):return {}
         if not getattr(g,'user',None) or request.endpoint not in ('overview_page','dashboard','workspace_page'):return {}
+        section=(request.view_args or {}).get('section') or request.args.get('section') or 'risk'
         start,end=selected();allowed=access();pubs=[b for b in store.publications() if start<=b['month']<=end]
         selected_franchise=request.args.get('franchise','All')
         if selected_franchise!='All':allowed={selected_franchise} if allowed is None or selected_franchise in allowed else set()
@@ -117,14 +123,16 @@ def register_central(app,export_dir,scope):
             from claim_insights import analyse
             from period_selection import selected_dates
             insights={'claim_insights':analyse(store,selected_dates(request.args),allowed)}
-        import app as application
-        from premium_comparison import comparison
-        current=application.apply_user_franchise_scope(application.effective_result()['monthly'])
-        historical=application.apply_user_franchise_scope(application.LAST_RESULT.get('monthly',__import__('pandas').DataFrame()))
-        if allowed is not None:
-            if not current.empty:current=current[current['Franchise'].isin(allowed)]
-            if not historical.empty:historical=historical[historical['Franchise'].isin(allowed)]
-        premium_comparison=comparison(current,historical,start,end,selected_franchise,application.build_premium_parlour_analysis)
+        premium_comparison={}
+        if section in ('risk','compare'):
+            import app as application
+            from premium_comparison import comparison
+            current=application.apply_user_franchise_scope(application.effective_result()['monthly'])
+            historical=application.apply_user_franchise_scope(application.LAST_RESULT.get('monthly',__import__('pandas').DataFrame()))
+            if allowed is not None:
+                if not current.empty:current=current[current['Franchise'].isin(allowed)]
+                if not historical.empty:historical=historical[historical['Franchise'].isin(allowed)]
+            premium_comparison=comparison(current,historical,start,end,selected_franchise,application.build_premium_parlour_analysis)
         if not summaries:return {'central_batches':pubs,'central_ready':False,'central_premium_comparison':premium_comparison,**insights}
         from decimal import Decimal
         totals={}
@@ -146,7 +154,7 @@ def register_central(app,export_dir,scope):
             output={}
             for row in rows:output[row['franchise']]=output.get(row['franchise'],Decimal(0))+Decimal(row['summary']['source_retail'])
             return output
-        rankings=retail_rank(retail(store.summaries(start,end)),retail(store.summaries(previous_start,previous_end)))
+        rankings=retail_rank(retail(store.summaries(start,end)),retail(store.summaries(previous_start,previous_end))) if section=='top_franchise' else []
         if allowed is not None:rankings=[r for r in rankings if r['franchise'] in allowed]
         expected=[];year,month=map(int,start.split('-'));last=tuple(map(int,end.split('-')))
         while (year,month)<=last:
@@ -166,10 +174,10 @@ def register_central(app,export_dir,scope):
           'central_premium_comparison':premium_comparison,
           'business_branches':__import__('business_overview').branch_totals(summaries,claims_by_franchise.values()),
           'central_rankings':rankings,'central_missing_months':[m for m in expected if m not in present],
-          'central_catalog':[{'batch':{**b,'source_rows':sum(r['summary']['rows'] for r in summaries if r['month']==b['month'])},'files':allowed_catalog(b,allowed)} for b in pubs],
+          'central_catalog':[{'batch':{**b,'source_rows':sum(r['summary']['rows'] for r in summaries if r['month']==b['month'])},'files':allowed_catalog(b,allowed)} for b in pubs] if section=='downloads' else [],
           'central_source_version':VERSION,'central_identity_pending':False,
-          'central_members':__import__('central_identity').member_snapshot(store,start,end,allowed),
-          'central_product_retail':__import__('central_identity').products_by_retail(store,start,end,allowed),
+          'central_members':__import__('central_identity').member_snapshot(store,start,end,allowed) if section in ('risk','top_franchise') else {},
+          'central_product_retail':__import__('central_identity').products_by_retail(store,start,end,allowed) if section=='top_franchise' else [],
           'central_voucher_ranking':sorted([dict(franchise=r['franchise'],units=sum(Decimal(v['summary']['voucher_units']) for v in summaries if v['franchise']==r['franchise'])) for r in {v['franchise']:v for v in summaries}.values()],key=lambda r:(-r['units'],r['franchise'].casefold())),
           'central_graphs':__import__('central_graphs').graphs(store,start,end,allowed) if request.args.get('section')=='graphs' or (request.view_args or {}).get('section')=='graphs' else [],
           'central_claims_verified':all(b['month'] in verified_claims for b in pubs),

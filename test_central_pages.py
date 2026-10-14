@@ -52,6 +52,29 @@ class CentralPages(unittest.TestCase):
                 self.assertEqual(self.client.get('/reports/central/pages/0').status_code,403)
             self.assertEqual(self.client.post('/admin/claims/confirm-zero',data={'month':'2026-08','confirm':'yes'}).status_code,403)
         finally:self.app.before_request_funcs=original
+    def test_graphs_default_to_latest_twelve_months_without_heavy_page_work(self):
+        with self.client.session_transaction() as session:session['period_dates']={'date_from':'2026-09-01','date_to':'2026-09-30'};session.pop('graph_periods',None)
+        with patch.object(baseline.claims,'build_executive_dashboard_context',side_effect=AssertionError('Unrelated dashboard work')),patch('central_identity.member_snapshot',side_effect=AssertionError('Member index scan')),patch('central_identity.products_by_retail',side_effect=AssertionError('Product scan')):
+            page=self.client.get('/overview/graphs?date_from=2026-09-01&date_to=2026-09-30')
+        self.assertEqual(page.status_code,200,page.data[:200]);self.assertEqual(page.data.count(b'data-graph-card='),13)
+        self.assertIn(b'value="2025-10-01"',page.data);self.assertIn(b'value="2026-09-30"',page.data)
+        with self.client.session_transaction() as session:self.assertEqual(session['period_dates']['date_from'],'2026-09-01')
+    def test_update_one_graph_preserves_other_periods_and_skips_claim_rows(self):
+        with self.client.session_transaction() as session:session.pop('graph_periods',None)
+        with patch.object(self.store,'claims',side_effect=AssertionError('Risk graph must not load claims')):
+            page=self.client.get('/graphs/original_risk?date_from=2026-01-01&date_to=2026-01-31')
+        self.assertEqual(page.status_code,200);self.assertEqual(page.data.count(b'data-graph-card='),1);self.assertIn(b'2026-01-01',page.data)
+        with self.client.session_transaction() as session:self.assertEqual(set(session['graph_periods']),{'original_risk'})
+        page=self.client.get('/overview/graphs');self.assertIn(b'value="2025-10-01"',page.data);self.assertIn(b'value="2026-01-01"',page.data)
+        self.assertEqual(self.client.get('/graphs/original_risk?date_from=2026-10-01&date_to=2026-01-01').status_code,400)
+        self.assertEqual(self.client.get('/graphs/not-a-graph?date_from=2026-01-01&date_to=2026-01-31').status_code,404)
+    def test_non_policy_tabs_do_not_load_notices_or_relations(self):
+        with patch.object(baseline.claims,'get_policy_relation_counts',side_effect=AssertionError('Relation scan')),patch.object(baseline.claims,'get_policy_age_notifications',side_effect=AssertionError('Age scan')),patch.object(baseline.claims,'get_policy_age_notification_age_bands',side_effect=AssertionError('Age bands scan')):
+            for section in ('risk','commissions','claims','top_franchise','imports','downloads','admin'):
+                page=self.client.get('/overview/'+section+'?date_from=2026-09-01&date_to=2026-09-30');self.assertEqual(page.status_code,200,section)
+        with patch('central_routes.catalog',side_effect=AssertionError('Unrelated report catalogue')):
+            for section in ('risk','commissions','claims','top_franchise','imports','admin'):
+                self.assertEqual(self.client.get('/overview/'+section).status_code,200,section)
     def test_zero_confirmation_cannot_erase_paid_claims(self):
         self.assertEqual(self.client.post('/admin/claims/confirm-zero',data={'month':'2026-09','confirm':'yes'}).status_code,409)
         self.assertEqual(self.client.post('/admin/claims/confirm-zero',data={'month':'2026-08','confirm':'yes'}).status_code,302)

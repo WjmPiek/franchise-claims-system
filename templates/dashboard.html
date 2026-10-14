@@ -204,7 +204,9 @@
               <h1>{{ 'Business Overview' if home_section=='risk' else home_title or 'Dashboard' }}</h1>
               <p>Claims · {{ ed.get('period_label','') }} · {{ 'All franchises' if selected == 'All' else selected }}</p>
             </div>
-            <form method="get" action="{{ url_for('overview_page',section=home_section) if home_section != 'dashboard' else url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
+            {% if graph_page|default(false) %}
+            <form method="get" action="{{ url_for('overview_page',section='graphs') }}" class="topic-filter no-print"><label>Franchise<select name="franchise"><option value="All">All Franchises</option>{% for f in franchises %}<option value="{{ f }}" {% if selected==f %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></label><button type="submit">Apply franchise</button></form>
+            {% else %}<form method="get" action="{{ url_for('overview_page',section=home_section) if home_section != 'dashboard' else url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
               <input type="hidden" name="period_view" value="{{ period_view }}">
               <input type="hidden" name="traffic_filter" value="{{ traffic_filter }}">
               <label>Franchise<br>
@@ -218,8 +220,9 @@
               <label>Search franchise<input name="q" value="{{ search_text }}" placeholder="Search franchise"></label>
               <button type="submit">Apply</button>
             </form>
+            {% endif %}
           </div>
-          <p class="muted">Monthly figures use receipt months. Custom dates include every imported month between the selected dates.</p>
+          {% if graph_page|default(false) %}<p class="muted">Graphs start with the latest 12 receipt months. Change dates on a graph and press Update graph. Only that graph updates; other tabs keep their selected period.</p>{% else %}<p class="muted">Monthly figures use receipt months. Custom dates include every imported month between the selected dates.</p>{% endif %}
           {% if home_section == 'dashboard' %}{% include 'overview_summary.html' %}
           {% elif home_section == 'risk' %}{% include 'risk_retail_section.html' %}
           {% elif home_section == 'commissions' %}{% if central_ready %}{% include 'central_fees.html' %}{% else %}{% include 'commissions_section.html' %}{% endif %}
