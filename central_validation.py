@@ -3,13 +3,22 @@ import json,re
 from collections import defaultdict
 from central_calculations import mappings,normal,effective_mpia
 
+def member_plan(product,row,products):
+    explicit=products.get(normal(product),'Unclassified')
+    if explicit!='Unclassified':return explicit
+    from direct_data import number
+    try:cover=number(row[10],'Main Cover',0)
+    except ValueError:return 'Unclassified'
+    if cover>0:return 'Plan 2' if cover in (40000,50000) else 'Historic'
+    return 'Unclassified'
+
 def plan_assignments(conn):
     registry=mappings();products=registry['plans'];known={normal(n) for n in registry['franchises']}
     has_fingerprints=conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='source_fingerprints'").fetchone()[0]
     duplicates={r[0] for r in conn.execute('SELECT n FROM source_fingerprints WHERE digest IN (SELECT digest FROM source_fingerprints GROUP BY digest HAVING COUNT(*)>1)')} if has_fingerprints else set()
     members=defaultdict(set);policies=defaultdict(set)
     for branch,policy,product,data in conn.execute("SELECT branch,policy,product,values_json FROM rows WHERE destination='AUL' AND voucher=0 AND relation='MEM'"):
-        row=json.loads(data);plan=products.get(normal(product),'Unclassified')
+        row=json.loads(data);plan=member_plan(product,row,products)
         members[(branch,policy,row[16])].add(plan);policies[(branch,policy)].add(plan)
     assignments={};issues={}
     has_extra=conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='source_extra'").fetchone()[0]
@@ -50,7 +59,7 @@ def plan_assignments(conn):
                 plan=explicit
                 messages.append('No MEM row for this policy in the source; approved product mapping used. Verify the missing main-member source record. All related source rows retained.')
             else:plan=next(iter(group)) if len(group)==1 else explicit if explicit in group else 'Unclassified'
-            if rel=='MEM':plan=explicit
+            if rel=='MEM':plan=member_plan(product,row,products)
             if plan=='Unclassified':messages.append('[BLOCK] AUL product or related policy plan is unclassified; record retained in AUL Unclassified.')
             assignments[n]=plan
         if messages:issues[n]=messages

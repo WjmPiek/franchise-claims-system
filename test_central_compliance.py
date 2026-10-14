@@ -63,12 +63,12 @@ class CentralComplianceTest(unittest.TestCase):
         self.assertEqual(Decimal(v['original_risk']),sum((Decimal(v[k]) for k in ('payover','faithnet','r1','adv','supplier','retained','reconciliation_adjustment')),Decimal(0)))
     def test_split_unknown_product_and_individual_export_schemas(self):
         gold='Gold Family Plan 31 to 55 Years R 40 000';cremation='Martin`s Cremation Plan For Families'
-        self.import_rows([record(product=gold,cover='40000'),record(product=cremation,cover='20000'),record(product='Brand new unclassified plan',cover='50000')])
-        records=list(self.store.records('batch1'));self.assertEqual([r['plan'] for r in records],['Plan 2','Historic','Unclassified'])
+        self.import_rows([record(product=gold,cover='40000'),record(product=cremation,cover='20000'),record(product='New plan identified by main cover',cover='50000'),record(product='Plan with no main cover supplied',cover='0')])
+        records=list(self.store.records('batch1'));self.assertEqual([r['plan'] for r in records],['Plan 2','Historic','Plan 2','Unclassified'])
         batch=self.store.publications()[0];items=catalog(self.store,batch)
         plan=next(i for i in items if i['plan']=='Plan 2');out=self.root/plan['name']
         with patch('central_calculations.fees',side_effect=AssertionError('Export must never recalculate')):metadata=generate(self.store,batch,plan,out)
-        self.assertEqual(metadata['rows'],1)
+        self.assertEqual(metadata['rows'],2)
         w=load_workbook(out,data_only=True);self.assertEqual(w['Sheet1'].max_column,19);self.assertEqual(w['Sheet1']['O1'].value,'MPIA');self.assertEqual(w['Sheet1']['F2'].data_type,'s');self.assertEqual(w['Sheet1']['G2'].number_format,'dd/mm/yyyy');w.close()
         standard=next(i for i in items if i['kind']=='policy' and i['destination']=='AUL' and not i['plan'])
         with self.assertRaisesRegex(ValueError,'unclassified'):generate(self.store,batch,standard,self.root/standard['name'])

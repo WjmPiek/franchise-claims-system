@@ -241,7 +241,18 @@
     "JOSIAHPLANF1": "Historic",
     "MARTINSGOLDENFUNERALPLANFAMILY": "Historic",
     "APFM": "Historic",
-    "113MEMBERAND13NOMINATEDFAMILYMEMBERS": "Historic"
+    "113MEMBERAND13NOMINATEDFAMILYMEMBERS": "Historic",
+    "FAMILY6584R10000OLD": "Historic",
+    "F1664700000": "Historic",
+    "FAMILY100001665EMP": "Historic",
+    "INDIVIDUALPLAN10": "Historic",
+    "BRONZE": "Historic",
+    "FAMILY166510000A": "Historic",
+    "SINGLEPLANR20000": "Historic",
+    "SINGLE648510000A": "Historic",
+    "SINGLER10000": "Historic",
+    "HERITAGEGOLD": "Historic",
+    "SINGLE6584R4000": "Historic"
   },
   "franchises": [
     "MARTINS DRIE RIVIERE",
@@ -352,5 +363,9 @@
     "113MEMBERAND13NOMINATEDFAMILYMEMBERS": [
       "30000.00"
     ]
-  }
+  },
+  "claims_only_branches": [
+    "Lavender Properties",
+    "Martins Funeral Services Empangeni (Pty) Ltd"
+  ]
 }

@@ -52,6 +52,9 @@ def register_central(app,export_dir,scope):
 
     def export_arguments(batch,item,allowed):
         from central_reports import REPORT_FORMAT_VERSION
+        if app.extensions.get('allocation_audit_path')!=str(store.direct.path):
+            from allocation_repair import ensure
+            ensure(store);app.extensions['allocation_audit_path']=str(store.direct.path)
         args={'batch':batch['id'],'name':item['name'],'allowed':sorted(allowed) if allowed is not None else None,'report_format_version':REPORT_FORMAT_VERSION}
         with store.direct.connection() as conn:
             if item['kind'] in ('claims','product_claims','internal','payover','branch_calculation'):
@@ -62,6 +65,8 @@ def register_central(app,export_dir,scope):
                 ensure(store)
                 row=store.direct.execute(conn,'SELECT batch_id FROM central_ledger_publications WHERE month=:month',{'month':batch['month']}).fetchone()
                 args['ledger_version']=row[0] if row else None
+            row=store.direct.execute(conn,"SELECT COALESCE(MAX(changed_at),'') FROM central_allocation_audit WHERE batch_id IN (:policy,:claims)",{'policy':batch['id'],'claims':args.get('claims_version','')}).fetchone()
+            args['allocation_revision']=row[0]
         return args
 
     def allowed_catalog(batch,allowed):
@@ -184,7 +189,7 @@ def register_central(app,export_dir,scope):
             months=[b['month'] for b in store.publications() if start<=b['month']<=end]
             if months:start=end=max(months)
         store.ensure();params={'start':start,'end':end};clauses=['p.month BETWEEN :start AND :end']
-        review_predicate="jsonb_array_length(CAST(r.record_json AS jsonb)->'issues')>0" if store.direct.get_engine else "json_array_length(json_extract(r.record_json,'$.issues'))>0"
+        review_predicate="json_array_length(CAST(r.record_json AS json)->'issues')>0" if store.direct.get_engine else "json_array_length(json_extract(r.record_json,'$.issues'))>0"
         predicates={'review':review_predicate,'aul':"r.destination='AUL'",'plan2':"r.plan='Plan 2'",'historic':"r.plan='Historic'",'unclassified':"r.plan='Unclassified'",'vouchers':"r.destination='Vouchers'",'insurers':"r.destination<>'Vouchers'",'fees':"r.relation='MEM' AND r.destination<>'Vouchers'"}
         if category in predicates:clauses.append(predicates[category])
         if category=='commissions':clauses.append("r.destination<>'Vouchers'")

@@ -138,15 +138,16 @@ class JobQueue:
                         with closing(sqlite3.connect(self.root/(identifier+'.sqlite'))) as stage:
                             stage.execute('CREATE TABLE claims(n INTEGER PRIMARY KEY,month TEXT,franchise TEXT,product TEXT,amount TEXT,source TEXT,issues TEXT)')
                             stage.execute('CREATE TABLE claim_events(n INTEGER PRIMARY KEY,source TEXT)')
-                            known={r['franchise'] for r in self.store.summaries()};aliases={}
-                            from app import franchise_match_key
-                            for name in known:aliases.setdefault(franchise_match_key(name),set()).add(name)
+                            from central_calculations import mappings
+                            known={r['franchise'] for r in self.store.summaries()}|set(mappings().get('claims_only_branches',[]));aliases={}
+                            from app import franchise_match_key,apply_franchise_alias
+                            for name in known:aliases.setdefault(apply_franchise_alias(franchise_match_key(name)),set()).add(name)
                             count=0;amount=Decimal(0);paid_count=0
                             claims_controls={}
                             for record in read_transactions(path,VERIFIED_AMOUNT_HEADER,annual_sheet,claims_controls,lambda n,source:stage.execute('INSERT INTO claim_events VALUES (?,?)',(n,json.dumps(source)))):
-                                issues=[];franchise=record['franchise'];matches=aliases.get(franchise_match_key(franchise),set())
+                                issues=[];franchise=record['franchise'];matches=aliases.get(apply_franchise_alias(franchise_match_key(franchise)),set())
                                 if franchise not in known:
-                                    if len(matches)==1:franchise=next(iter(matches));issues.append('Franchise resolved by the existing normalised alias; original source retained.')
+                                    if len(matches)==1:franchise=next(iter(matches))
                                     else:issues.append('Unresolved franchise allocation; transaction retained once in reconciliation.')
                                 if not record['product']:issues.append('Unresolved product allocation; no policy-number multiplication was performed.')
                                 stage.execute('INSERT INTO claims VALUES (?,?,?,?,?,?,?)',(record['n'],record['month'],franchise,record['product'],record['amount'],json.dumps(record['source']),json.dumps(issues)))
@@ -179,6 +180,9 @@ class JobQueue:
                                 _,_,_,issues=prepare_outputs(stage,self.root/identifier,source_batch['source_file'],'mpia','mpia','policy',generate_files=False)
                                 self.store.direct.save(stage,identifier,args['source_owner'],source_batch['month'],source_batch['source_file'],central_only=True)
                         result=self.store.existing_batch(identifier);result.update(migrated_from=args['source_batch'],source_provenance='Saved source fields; original file bytes were not available for this older import.')
+                    elif job['kind']=='allocation_repair':
+                        from allocation_repair import repair
+                        result=repair(self.store,job['owner_id'],self,identifier)
                     elif job['kind']=='verification':
                         from import_verification import verify_targets
                         result=verify_targets(self.store,self,job['args']['targets'],identifier)

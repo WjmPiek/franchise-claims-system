@@ -102,10 +102,15 @@ def register(app,store,queue):
         except ValueError as exc:return str(exc),400
         policies=[r for r in policies if first<=r['month']<=last];claims=[r for r in claims if r['month'] and first<=r['month']<=last]
         historical=[r for r in historical if first<=r['month']<=last and not any(p['month']==r['month'] and p['current_id']==p['id'] for p in policies)]
+        from allocation_repair import ensure as ensure_allocation
+        ensure_allocation(store)
+        with store.direct.connection() as conn:
+            allocations=store.direct.records(store.direct.execute(conn,'SELECT kind,batch_id,changed_at,reason,COUNT(*) AS records FROM central_allocation_audit GROUP BY kind,batch_id,changed_at,reason ORDER BY changed_at DESC'))
+        batches={r['id'] for r in policies+claims};allocations=[r for r in allocations if r['batch_id'] in batches]
         found={r['month'] for r in policies+historical}
         import pandas as pd
         missing=[str(m) for m in pd.period_range(first,last,freq='M') if str(m) not in found]
-        return render_template('import_verification.html',policies=policies,claims=claims,historical=historical,missing=missing,date_from=start,date_to=end)
+        return render_template('import_verification.html',policies=policies,claims=claims,historical=historical,allocations=allocations,missing=missing,date_from=start,date_to=end)
     @app.post('/imports/verification/run')
     def import_verification_run():
         if not admin():return jsonify(error='Administrator access required.'),403
