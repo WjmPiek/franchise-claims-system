@@ -10,6 +10,7 @@ from central_claims import component,paid_date,read_transactions,VERIFIED_AMOUNT
 VERSION='claims-insights-20261013-v1'
 DAYS='Number of days between Incident Date/Entry Date'
 _CACHE={}
+_SELECTED_SCOPE=object()
 
 def sales_period(dates):
     """Twelve complete receipt/payment months ending in the selected end month."""
@@ -133,10 +134,11 @@ def grouped(records,key):
         row['years']=row['days']/Decimal('365.25') if row['days'] is not None else None
     return sorted(groups.values(),key=lambda r:(-r['count'],r['label'].casefold()))
 
-def analyse(store,dates,allowed=None):
+def analyse(store,dates,allowed=None,sales_allowed=_SELECTED_SCOPE):
     store.ensure()
+    if sales_allowed is _SELECTED_SCOPE:sales_allowed=allowed
     from published_cache import signature
-    key=(signature(store),tuple(sorted(dates.items())),None if allowed is None else tuple(sorted(allowed)))
+    key=(signature(store),tuple(sorted(dates.items())),None if allowed is None else tuple(sorted(allowed)),None if sales_allowed is None else tuple(sorted(sales_allowed)))
     if key in _CACHE and time.monotonic()-_CACHE[key][0]<120:return _CACHE[key][1]
     events,paid,missing=populations(store,dates,allowed);bank=[r for r in paid if r['bank']!=0];offset=[r for r in paid if r['netoff']!=0]
     start,end=dates['date_from'][:7],dates['date_to'][:7]
@@ -148,9 +150,9 @@ def analyse(store,dates,allowed=None):
         r['cover']='R'+format(next(iter(options)),',.2f') if len(options)==1 else 'Unknown / conflicting Direct cover'
     risk_dates=sales_period(dates)
     risk_start,risk_end=risk_dates['date_from'][:7],risk_dates['date_to'][:7]
-    _,risk_paid,_=populations(store,risk_dates,allowed)
+    _,risk_paid,_=populations(store,risk_dates,sales_allowed)
     risk_bank=[r for r in risk_paid if r['bank']!=0]
-    premium,_,names=products(store,risk_start,risk_end,allowed)
+    premium,_,names=products(store,risk_start,risk_end,sales_allowed)
     risk_pubs=[b for b in store.publications() if risk_start<=b['month']<=risk_end]
     totals=defaultdict(lambda:dict(amount=Decimal(0),count=0,branches=defaultdict(lambda:[0,Decimal(0)])))
     for r in risk_bank:
@@ -168,7 +170,7 @@ def analyse(store,dates,allowed=None):
         colour='red' if value is not None and value>=70 else 'green' if value is not None and value>=50 else 'blue' if value is not None else 'unknown'
         action='Must not be sold' if colour=='red' else 'May be sold — green band' if colour=='green' else 'Lower claim ratio — blue band' if colour=='blue' else 'Needs complete claims and monthly premiums'
         if colour=='red':red.add(k)
-        risk.append(dict(label=names.get(k,'Unallocated'),count=t['count'],bank=t['amount'],premium=den,ratio=value,colour=colour,action=action))
+        risk.append(dict(label=names.get(k,'Unallocated'),count=t['count'],bank=t['amount'],premium=den,remaining=den-t['amount'],franchises=len(t['branches']),ratio=value,colour=colour,action=action))
     risk.sort(key=lambda r:(r['ratio'] is None,-(r['ratio'] or 0),-r['bank'],r['label']))
     tables={k:grouped(events,lambda r,k=k:r[k]) for k in ('relation','age','gender','cause','status','product')}
     tables.update(product_age=grouped(events,lambda r:r['product']+' / '+r['age']),cover=grouped(events,lambda r:r['cover']),
@@ -195,7 +197,11 @@ def analyse(store,dates,allowed=None):
         cards.append(dict(key=key,label=label,value=value,unit=unit,count=count,top=rows[:10],incomplete=incomplete))
     maximum=max((r['ratio'] for r in risk if r['ratio'] is not None and r['ratio']>0),default=Decimal(0))
     for r in risk:r['scale']=max(0,float(r['ratio']/maximum*100)) if maximum and r['ratio'] is not None else 0
-    result=dict(cards=cards,tables=tables,events=events,paid=paid,risk_paid=risk_paid,risk_dates=risk_dates,missing=missing,red=red,complete=complete,whole_months=whole_months,dates=dates,
+    risk_groups=[]
+    for colour,title in [('red','Red ≥70%: Must not be sold'),('green','Green 50–69.99%: May be sold'),('blue','Blue <50%: lower claim ratio')]:
+        rows=[r for r in risk if r['colour']==colour]
+        risk_groups.append(dict(colour=colour,title=title,count=len(rows),rows=rows[:3]))
+    result=dict(cards=cards,tables=tables,events=events,paid=paid,risk_paid=risk_paid,risk_dates=risk_dates,risk_groups=risk_groups,risk_unknown=sum(r['ratio'] is None for r in risk),missing=missing,red=red,complete=complete,whole_months=whole_months,dates=dates,
       reported_count=len(events),paid_count=len(bank),bank=sum((r['bank'] for r in bank),Decimal(0)),netoff=sum((r['netoff'] for r in paid),Decimal(0)),netoff_count=len(offset))
     if len(_CACHE)>=16:_CACHE.pop(next(iter(_CACHE)))
     _CACHE[key]=(time.monotonic(),result)
@@ -215,7 +221,7 @@ def register(app,store,access):
         dates,allowed,franchise,error=selection()
         if error:return error
         if metric not in SPECS:return 'Unknown claims analysis.',404
-        insights=analyse(store,dates,allowed);rows=insights['tables'][metric];group=request.args.get('group','');page=max(1,request.args.get('page',1,type=int))
+        insights=analyse(store,dates,allowed,sales_allowed=access());rows=insights['tables'][metric];group=request.args.get('group','');page=max(1,request.args.get('page',1,type=int))
         if metric in ('risk','risk_franchise'):records=insights['risk_paid']
         elif metric in ('payee','netoff','branch_month','delay'):records=insights['paid']
         else:records=insights['events']

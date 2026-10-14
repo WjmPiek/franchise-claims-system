@@ -128,7 +128,7 @@ def register_central(app,export_dir,scope):
         if (request.view_args or {}).get('section')=='claims' or request.args.get('section')=='claims':
             from claim_insights import analyse
             from period_selection import selected_dates
-            insights={'claim_insights':analyse(store,selected_dates(request.args),allowed)}
+            insights={'claim_insights':analyse(store,selected_dates(request.args),allowed,sales_allowed=access())}
         premium_comparison={}
         if section in ('risk','compare'):
             import app as application

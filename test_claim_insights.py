@@ -135,5 +135,34 @@ class ClaimInsightsTest(unittest.TestCase):
             row=conn.execute('SELECT * FROM central_product_monthly').fetchone()
             values=list(row);values[2]='Never claimed';conn.execute('INSERT INTO central_product_monthly VALUES (?,?,?,?,?,?)',values)
         self.assertEqual([r['label'] for r in analyse(self.store,self.dates)['tables']['risk']],[PRODUCT])
+    def test_sales_combine_branches_without_changing_other_selected_cards(self):
+        self.publish([self.source('ONE'),self.source('TWO')]);self.complete_year()
+        with self.store.direct.connection() as conn:
+            conn.execute("UPDATE central_claims SET franchise='OTHER' WHERE n=3")
+            conn.execute("UPDATE central_claim_events SET franchise='OTHER' WHERE n=3")
+            for row in conn.execute('SELECT * FROM central_product_monthly').fetchall():
+                values=list(row);values[1]='OTHER';conn.execute('INSERT INTO central_product_monthly VALUES (?,?,?,?,?,?)',values)
+        combined=analyse(self.store,self.dates,{'ERMELO'},sales_allowed=None)
+        r=combined['tables']['risk'][0]
+        self.assertEqual(combined['paid_count'],1);self.assertEqual(r['count'],2)
+        self.assertEqual(r['franchises'],2);self.assertEqual(r['bank'],300)
+        self.assertEqual(r['premium'],Decimal('194.82')*24)
+        self.assertEqual(r['remaining'],r['premium']-300)
+        restricted=analyse(self.store,self.dates,{'ERMELO'},sales_allowed={'ERMELO'})
+        self.assertEqual(restricted['tables']['risk'][0]['count'],1)
+        self.assertEqual(restricted['tables']['risk'][0]['premium'],Decimal('194.82')*12)
+    def test_first_three_in_each_sales_band_are_ranked_by_ratio(self):
+        amounts=[90,85,80,75,69,65,60,55,49,40,30,20]
+        self.publish([self.source(str(i),**{'Product':'PRODUCT '+str(i),'Net amount paid via bank':str(amount)}) for i,amount in enumerate(amounts)])
+        self.complete_year()
+        with self.store.direct.connection() as conn:
+            row=list(conn.execute("SELECT * FROM central_product_monthly WHERE batch_id='direct'").fetchone())
+            summary=json.loads(row[5]);summary['payover']='100';row[5]=json.dumps(summary)
+            for i in range(len(amounts)):
+                row[2]='PRODUCT '+str(i);conn.execute('INSERT INTO central_product_monthly VALUES (?,?,?,?,?,?)',row)
+        a=analyse(self.store,self.dates)
+        self.assertEqual([g['count'] for g in a['risk_groups']],[4,4,4])
+        self.assertEqual([[r['ratio'] for r in g['rows']] for g in a['risk_groups']],[[90,85,80],[69,65,60],[49,40,30]])
+        self.assertEqual(a['risk_groups'][0]['rows'][0]['remaining'],10)
 
 if __name__=='__main__':unittest.main()
