@@ -19,7 +19,14 @@ def selected_dates(args, fallback=None):
     elif args.get('report_from_date') or args.get('report_to_date'):
         dates={'date_from':args.get('report_from_date',''),'date_to':args.get('report_to_date','')}
     else:
-        dates=getattr(g,'period_dates',None) or session.get('period_dates') or fallback
+        dates=getattr(g,'period_dates',None) or session.get('period_dates')
+        if not dates and fallback:
+            # A fresh login clears the session. Open the last available receipt
+            # month, while retaining explicitly selected periods on later pages.
+            import calendar
+            last=date.fromisoformat(fallback['date_to'])
+            dates={'date_from':last.replace(day=1).isoformat(),
+                   'date_to':last.replace(day=calendar.monthrange(last.year,last.month)[1]).isoformat()}
         if not dates:
             today=date.today();dates={'date_from':date(today.year-1,1,1).isoformat(),'date_to':today.isoformat()}
     month_bounds(dates)
