@@ -150,6 +150,7 @@ def register_central(app,export_dir,scope):
             item=aul_groups.setdefault(name,dict(franchise=name,rows=0,payover=Decimal(0)))
             item['rows']+=int(value['aul_rows']);item['payover']+=Decimal(value['aul_payover'])
         return {**insights,'central_ready':True,'central_totals':totals,'central_batches':pubs,
+          'business_branches':__import__('business_overview').branch_totals(summaries,claims_by_franchise.values()),
           'central_rankings':rankings,'central_missing_months':[m for m in expected if m not in present],
           'central_catalog':[{'batch':{**b,'source_rows':sum(r['summary']['rows'] for r in summaries if r['month']==b['month'])},'files':allowed_catalog(b,allowed)} for b in pubs],
           'central_source_version':VERSION,'central_identity_pending':False,
@@ -174,7 +175,8 @@ def register_central(app,export_dir,scope):
             months=[b['month'] for b in store.publications() if start<=b['month']<=end]
             if months:start=end=max(months)
         store.ensure();params={'start':start,'end':end};clauses=['p.month BETWEEN :start AND :end']
-        predicates={'aul':"r.destination='AUL'",'plan2':"r.plan='Plan 2'",'historic':"r.plan='Historic'",'unclassified':"r.plan='Unclassified'",'vouchers':"r.destination='Vouchers'",'insurers':"r.destination<>'Vouchers'",'fees':"r.relation='MEM' AND r.destination<>'Vouchers'"}
+        review_predicate="jsonb_array_length(CAST(r.record_json AS jsonb)->'issues')>0" if store.direct.get_engine else "json_array_length(json_extract(r.record_json,'$.issues'))>0"
+        predicates={'review':review_predicate,'aul':"r.destination='AUL'",'plan2':"r.plan='Plan 2'",'historic':"r.plan='Historic'",'unclassified':"r.plan='Unclassified'",'vouchers':"r.destination='Vouchers'",'insurers':"r.destination<>'Vouchers'",'fees':"r.relation='MEM' AND r.destination<>'Vouchers'"}
         if category in predicates:clauses.append(predicates[category])
         if category=='commissions':clauses.append("r.destination<>'Vouchers'")
         if category=='faithnet':clauses.append("r.relation='MEM' AND LOWER(r.franchise) LIKE '%faithnet%'")

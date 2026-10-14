@@ -201,7 +201,7 @@
           </header>
           <div class="executive-topbar">
             <div>
-              <h1>{{ home_title or 'Dashboard' }}</h1>
+              <h1>{{ 'Business Overview' if home_section=='risk' else home_title or 'Dashboard' }}</h1>
               <p>Claims · {{ ed.get('period_label','') }} · {{ 'All franchises' if selected == 'All' else selected }}</p>
             </div>
             <form method="get" action="{{ url_for('overview_page',section=home_section) if home_section != 'dashboard' else url_for('dashboard') }}" class="dashboard-period-form executive-filter no-print">
