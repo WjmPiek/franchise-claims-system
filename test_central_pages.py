@@ -79,6 +79,14 @@ class CentralPages(unittest.TestCase):
         with patch.object(baseline.claims,'build_executive_dashboard_context',side_effect=AssertionError('Legacy analysis rebuilt')),patch.object(baseline.claims,'apply_franchise_config',side_effect=AssertionError('Legacy portfolio rebuilt')):
             for section in ('risk','commissions','policies','top_franchise','claims','imports','admin','downloads'):
                 self.assertEqual(self.client.get('/overview/'+section+'?date_from=2026-09-01&date_to=2026-09-30').status_code,200,section)
+    def test_claims_single_product_block_and_annual_branch_detail_links(self):
+        page=self.client.get('/overview/claims?date_from=2026-09-01&date_to=2026-09-30')
+        self.assertEqual(page.status_code,200)
+        self.assertEqual(page.data.count(b'<th>Product</th>'),1)
+        self.assertNotIn(b'<h3><span class="claim-flag',page.data)
+        self.assertIn(b'The first seven products in each category',page.data)
+        self.assertIn(b'12 months: 2025-10-01 to 2026-09-30',page.data)
+        self.assertIn(b'date_from=2025-10-01&amp;date_to=2026-09-30',page.data)
     def test_financial_cache_copies_and_rechecks_publication_versions(self):
         from central_routes import financial_result
         from published_cache import FINANCIAL

@@ -37,7 +37,7 @@ class ClaimInsightsTest(unittest.TestCase):
                 raw=json.dumps(s);stage.execute('INSERT INTO claim_events VALUES (?,?)',(n,raw))
                 if s.get('Date Of Claim Paid') and (Decimal(s['Net amount paid via bank']) or Decimal(s['Amount net off against claim'])):
                     stage.execute('INSERT INTO claims VALUES (?,?,?,?,?,?,?)',(n,s['Date Of Claim Paid'][:7],'ERMELO',s['Product'],s['Net amount paid via bank'],raw,'[]'))
-            publish_claims(self.store,stage,'claims.xlsx',1,VERIFIED_AMOUNT_HEADER,['2026-09'],batch_id=batch)
+            publish_claims(self.store,stage,'claims.xlsx',1,VERIFIED_AMOUNT_HEADER,[r[0] for r in stage.execute('SELECT DISTINCT month FROM claims')],batch_id=batch)
     def complete_year(self):
         from dateutil.relativedelta import relativedelta
         from datetime import date
@@ -87,6 +87,8 @@ class ClaimInsightsTest(unittest.TestCase):
         response=client.get('/claims/analytics/risk?date_from=2026-09-01&date_to=2026-09-30&group='+PRODUCT)
         self.assertIn(b'2025-10-01 to 2026-09-30',response.data)
         self.assertIn(b'2 matching rows',response.data);self.assertIn(b'2026-08-15',response.data)
+        response=client.get('/claims/analytics/branch_month?date_from=2026-09-01&date_to=2026-09-30')
+        self.assertIn(b'2 matching rows',response.data);self.assertIn(b'2025-10-01 to 2026-09-30',response.data)
         app.before_request_funcs={None:[lambda:setattr(g,'user',{'id':2,'role':'voucher_supplier'})]}
         self.assertEqual(client.get('/claims/analytics/status').status_code,403)
     def test_reader_captures_all_status_rows_but_preserves_bank_financial_reader(self):
@@ -151,8 +153,8 @@ class ClaimInsightsTest(unittest.TestCase):
         restricted=analyse(self.store,self.dates,{'ERMELO'},sales_allowed={'ERMELO'})
         self.assertEqual(restricted['tables']['risk'][0]['count'],1)
         self.assertEqual(restricted['tables']['risk'][0]['premium'],Decimal('194.82')*12)
-    def test_first_three_in_each_sales_band_are_ranked_by_ratio(self):
-        amounts=[90,85,80,75,69,65,60,55,49,40,30,20]
+    def test_first_seven_in_each_sales_band_are_ranked_by_ratio(self):
+        amounts=list(range(99,91,-1))+list(range(69,61,-1))+list(range(49,41,-1))
         self.publish([self.source(str(i),**{'Product':'PRODUCT '+str(i),'Net amount paid via bank':str(amount)}) for i,amount in enumerate(amounts)])
         self.complete_year()
         with self.store.direct.connection() as conn:
@@ -161,8 +163,18 @@ class ClaimInsightsTest(unittest.TestCase):
             for i in range(len(amounts)):
                 row[2]='PRODUCT '+str(i);conn.execute('INSERT INTO central_product_monthly VALUES (?,?,?,?,?,?)',row)
         a=analyse(self.store,self.dates)
-        self.assertEqual([g['count'] for g in a['risk_groups']],[4,4,4])
-        self.assertEqual([[r['ratio'] for r in g['rows']] for g in a['risk_groups']],[[90,85,80],[69,65,60],[49,40,30]])
-        self.assertEqual(a['risk_groups'][0]['rows'][0]['remaining'],10)
+        self.assertEqual([g['count'] for g in a['risk_groups']],[8,8,8])
+        self.assertEqual([[r['ratio'] for r in g['rows']] for g in a['risk_groups']],[list(range(99,92,-1)),list(range(69,62,-1)),list(range(49,42,-1))])
+        self.assertEqual(a['risk_groups'][0]['rows'][0]['remaining'],1)
+    def test_branch_totals_use_twelve_actual_paid_months_and_selected_scope(self):
+        self.publish([self.source('OLD',**{'Date Of Claim Paid':'2025-09-30'}),self.source('AUG',**{'Date Of Claim Paid':'2026-08-15','Net amount paid via bank':'200','Amount net off against claim':'40'}),self.source('SEP')])
+        a=analyse(self.store,self.dates)
+        self.assertEqual(a['paid_count'],1)
+        self.assertEqual(a['branch_totals'],dict(claims=350,claim_net_off=60,claim_count=2))
+        self.assertEqual(a['branch_summaries'][0]['claims'],350)
+        self.assertEqual(sum(r['count'] for r in a['tables']['branch_month']),2)
+        self.assertFalse(a['branch_complete'])
+        restricted=analyse(self.store,self.dates,{'OTHER'})
+        self.assertEqual(restricted['branch_totals']['claims'],0);self.assertEqual(restricted['branch_summaries'],[])
 
 if __name__=='__main__':unittest.main()

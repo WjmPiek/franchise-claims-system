@@ -151,6 +151,8 @@ def analyse(store,dates,allowed=None,sales_allowed=_SELECTED_SCOPE):
     risk_dates=sales_period(dates)
     risk_start,risk_end=risk_dates['date_from'][:7],risk_dates['date_to'][:7]
     _,risk_paid,_=populations(store,risk_dates,sales_allowed)
+    _,branch_paid,_=populations(store,risk_dates,allowed)
+    branch_bank=[r for r in branch_paid if r['bank']!=0]
     risk_bank=[r for r in risk_paid if r['bank']!=0]
     premium,_,names=products(store,risk_start,risk_end,sales_allowed)
     risk_pubs=[b for b in store.publications() if risk_start<=b['month']<=risk_end]
@@ -175,7 +177,7 @@ def analyse(store,dates,allowed=None,sales_allowed=_SELECTED_SCOPE):
     tables={k:grouped(events,lambda r,k=k:r[k]) for k in ('relation','age','gender','cause','status','product')}
     tables.update(product_age=grouped(events,lambda r:r['product']+' / '+r['age']),cover=grouped(events,lambda r:r['cover']),
       payee=grouped(bank,lambda r:r['payee']),netoff=grouped(offset,lambda r:r['franchise']),duration=grouped(events,lambda r:r['product']),
-      branch_month=grouped(bank,lambda r:r['franchise']+' / '+r['month']),risk=risk,
+      branch_month=grouped(branch_bank,lambda r:r['franchise']+' / '+r['month']),risk=risk,
       risk_franchise=grouped([r for r in risk_bank if normal(r['product']) in red],lambda r:r['franchise']),
       early=grouped([r for r in events if r['days'] is not None and r['days']<=180],lambda r:r['product']),
       quality=grouped([r for r in events if 'Unknown' in (r['age'],r['cause'],r['payee']) or r['days'] is None or not r['claim']],lambda r:r['product']))
@@ -200,8 +202,13 @@ def analyse(store,dates,allowed=None,sales_allowed=_SELECTED_SCOPE):
     risk_groups=[]
     for colour,title in [('red','Red ≥70%: Must not be sold'),('green','Green 50–69.99%: May be sold'),('blue','Blue <50%: lower claim ratio')]:
         rows=[r for r in risk if r['colour']==colour]
-        risk_groups.append(dict(colour=colour,title=title,count=len(rows),rows=rows[:3]))
-    result=dict(cards=cards,tables=tables,events=events,paid=paid,risk_paid=risk_paid,risk_dates=risk_dates,risk_groups=risk_groups,risk_unknown=sum(r['ratio'] is None for r in risk),missing=missing,red=red,complete=complete,whole_months=whole_months,dates=dates,
+        risk_groups.append(dict(colour=colour,title=title,count=len(rows),rows=rows[:7]))
+    branch_summaries={}
+    for r in branch_paid:
+        item=branch_summaries.setdefault(r['franchise'],dict(franchise=r['franchise'],claims=Decimal(0),net_off=Decimal(0),count=0))
+        item['claims']+=r['bank'];item['net_off']+=r['netoff'];item['count']+=int(r['bank']!=0)
+    branch_totals=dict(claims=sum((r['bank'] for r in branch_paid),Decimal(0)),claim_net_off=sum((r['netoff'] for r in branch_paid),Decimal(0)),claim_count=len(branch_bank))
+    result=dict(cards=cards,tables=tables,events=events,paid=paid,risk_paid=risk_paid,risk_dates=risk_dates,branch_paid=branch_paid,branch_totals=branch_totals,branch_summaries=sorted(branch_summaries.values(),key=lambda r:r['franchise'].casefold()),branch_complete=all(m in verified for m in expected),risk_groups=risk_groups,risk_unknown=sum(r['ratio'] is None for r in risk),missing=missing,red=red,complete=complete,whole_months=whole_months,dates=dates,
       reported_count=len(events),paid_count=len(bank),bank=sum((r['bank'] for r in bank),Decimal(0)),netoff=sum((r['netoff'] for r in paid),Decimal(0)),netoff_count=len(offset))
     if len(_CACHE)>=16:_CACHE.pop(next(iter(_CACHE)))
     _CACHE[key]=(time.monotonic(),result)
@@ -223,6 +230,7 @@ def register(app,store,access):
         if metric not in SPECS:return 'Unknown claims analysis.',404
         insights=analyse(store,dates,allowed,sales_allowed=access());rows=insights['tables'][metric];group=request.args.get('group','');page=max(1,request.args.get('page',1,type=int))
         if metric in ('risk','risk_franchise'):records=insights['risk_paid']
+        elif metric=='branch_month':records=insights['branch_paid']
         elif metric in ('payee','netoff','branch_month','delay'):records=insights['paid']
         else:records=insights['events']
         if metric=='netoff':records=[r for r in records if r['netoff']!=0]

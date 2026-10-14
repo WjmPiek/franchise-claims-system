@@ -187,7 +187,10 @@ def register_central(app,export_dir,scope):
           'central_voucher_ranking':sorted([dict(franchise=r['franchise'],units=sum(Decimal(v['summary']['voucher_units']) for v in summaries if v['franchise']==r['franchise'])) for r in {v['franchise']:v for v in summaries}.values()],key=lambda r:(-r['units'],r['franchise'].casefold())),
           'central_graphs':__import__('central_graphs').graphs(store,start,end,allowed) if request.args.get('section')=='graphs' or (request.view_args or {}).get('section')=='graphs' else [],
           'central_claims_verified':all(b['month'] in verified_claims for b in pubs),
-          'central_claim_branches':sorted(claims_by_franchise.values(),key=lambda row:row['franchise'].casefold()),
+          'central_claim_branches':insights['claim_insights']['branch_summaries'] if insights else sorted(claims_by_franchise.values(),key=lambda row:row['franchise'].casefold()),
+          'central_branch_claim_totals':insights['claim_insights']['branch_totals'] if insights else totals,
+          'central_branch_claim_dates':insights['claim_insights']['risk_dates'] if insights else {},
+          'central_branch_claims_verified':insights['claim_insights']['branch_complete'] if insights else False,
           'central_aul_groups':sorted(aul_groups.values(),key=lambda row:row['franchise'].casefold()),'central_aul_combined':combined,
           'central_franchise_months':summaries}
 
