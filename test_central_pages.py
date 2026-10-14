@@ -25,7 +25,7 @@ class CentralPages(unittest.TestCase):
             stage_source(path,stage);prepare_outputs(stage,cls.root/'unused',path.name,'mpia','mpia','policy',generate_files=False);cls.store.direct.save(stage,'pages',999999,'2026-09',path.name,central_only=True)
         with closing(sqlite3.connect(':memory:')) as stage:
             stage.execute('CREATE TABLE claims(n INTEGER PRIMARY KEY,month TEXT,franchise TEXT,product TEXT,amount TEXT,source TEXT,issues TEXT)')
-            stage.execute('INSERT INTO claims VALUES (1,?,?,?,?,?,?)',('2026-09','MARTINS FUNERALS ERMELO','Gold Family Plan 31 to 55 Years R 40 000','100',json.dumps({'Amount net off against claim':'30','Net amount paid via bank':'70'}),'[]'))
+            stage.execute('INSERT INTO claims VALUES (1,?,?,?,?,?,?)',('2026-09','MARTINS FUNERALS ERMELO','Gold Family Plan 31 to 55 Years R 40 000','100',json.dumps({'Amount net off against claim':'30','Net amount paid via bank':'70','Date Of Claim Paid':'2026-09-10','Product':'Gold Family Plan 31 to 55 Years R 40 000'}),'[]'))
             publish_claims(cls.store,stage,'claims.xlsx',999999,'Final Amount',['2026-09'])
         publish_ledger(cls.store,'balance',999999,'2026-09','control.xlsx',[dict(franchise='MARTINS FUNERALS ERMELO',opening='20',payment='10',system_control='217',account='TEST',paid_on='')])
     @classmethod
@@ -97,6 +97,34 @@ class CentralPages(unittest.TestCase):
             response=self.client.get(path)
             self.assertEqual(response.status_code,200,path)
             self.assertEqual(response.data.count(b'table-pan.js'),1,path)
+    def test_combined_franchise_summary_reconciles_products_and_keeps_one_total_row(self):
+        from franchise_summary import grouped_products
+        dates=dict(date_from='2026-09-01',date_to='2026-09-30')
+        with patch.object(self.store,'records',side_effect=AssertionError('Grouped summary must not scan source policies')):
+            rows=grouped_products(self.store,'MARTINS FUNERALS ERMELO',dates)
+            page=self.client.get('/franchise-summary',query_string=dict(franchise='MARTINS FUNERALS ERMELO',**dates))
+        self.assertEqual(page.status_code,200)
+        self.assertEqual(sum(r['rows'] for r in rows),3)
+        self.assertEqual(sum(r['retail'] for r in rows),320)
+        self.assertEqual(sum(r['bank'] for r in rows),70)
+        self.assertEqual(sum(r['netoff'] for r in rows),30)
+        self.assertEqual(len(rows),3)
+        self.assertIn(b'One combined row for this franchise',page.data)
+        self.assertIn(b'All policy source records',page.data)
+        self.assertEqual(page.data.count(b'table-pan.js'),1)
+    def test_franchise_links_and_balanced_top_cards(self):
+        for section in ('risk','commissions','policies','top_franchise'):
+            page=self.client.get('/overview/'+section+'?date_from=2026-09-01&date_to=2026-09-30')
+            self.assertEqual(page.status_code,200)
+            self.assertIn(b'/franchise-summary?',page.data,section)
+        page=self.client.get('/overview/top_franchise?date_from=2026-09-01&date_to=2026-09-30')
+        self.assertIn(b'class="franchise-ranking-grid"',page.data)
+        original=self.app.before_request_funcs
+        self.app.before_request_funcs={None:[lambda:setattr(g,'user',dict(id=999998,role='viewer'))]}
+        try:
+            with patch.object(baseline.claims,'get_user_franchise_access',return_value=['OTHER FRANCHISE']):
+                self.assertEqual(self.client.get('/franchise-summary?franchise=MARTINS+FUNERALS+ERMELO').status_code,403)
+        finally:self.app.before_request_funcs=original
     def test_financial_cache_copies_and_rechecks_publication_versions(self):
         from central_routes import financial_result
         from published_cache import FINANCIAL

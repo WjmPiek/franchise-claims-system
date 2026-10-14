@@ -227,5 +227,12 @@ class ClaimInsightsTest(unittest.TestCase):
         query['product']=PRODUCT;response=client.get('/claims/branch-products',query_string=query)
         self.assertIn(b'2 matching rows',response.data)
         query['franchise']='OTHER';self.assertEqual(client.get('/claims/branch-products',query_string=query).status_code,403)
+    def test_franchise_summary_combines_months_and_product_case_variants(self):
+        from franchise_summary import grouped_products
+        self.publish([self.source('ONE'),self.source('TWO',**{'Product':PRODUCT.lower()})]);self.complete_year()
+        rows=grouped_products(self.store,'ERMELO',dict(date_from='2025-10-01',date_to='2026-09-30'))
+        self.assertEqual(len(rows),1);self.assertEqual(rows[0]['rows'],12)
+        self.assertEqual(rows[0]['retail'],3600);self.assertEqual(rows[0]['claim_count'],2)
+        self.assertEqual(rows[0]['bank'],300)
 
 if __name__=='__main__':unittest.main()

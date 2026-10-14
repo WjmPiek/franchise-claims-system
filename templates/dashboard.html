@@ -331,7 +331,7 @@
               <tbody>
               {% for _, r in quick_view.iterrows() %}
                 <tr>
-                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td><a href="{{ url_for('franchise_summary',franchise=r['Franchise'],section='commissions',**range_args) }}">{{ r['Franchise'] }}</a></td>
                   <td>{{ r['Period View'] }}</td>
                   <td class="money-cell positive">{{ r['Retail Premium']|money }}</td>
                   <td>{{ r['Risk Premium']|money }}</td>
@@ -354,7 +354,7 @@
               <tbody>
               {% for _, r in quick_view.iterrows() %}
                 <tr>
-                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td><a href="{{ url_for('franchise_summary',franchise=r['Franchise'],section='commissions',**range_args) }}">{{ r['Franchise'] }}</a></td>
                   <td>{{ r.get('Period View','') }}</td>
                   <td>{{ r.get('Start Date','') }}</td>
                   <td>{{ r.get('End Date','') }}</td>
@@ -375,7 +375,7 @@
               <tbody>
               {% for _, r in money_view.iterrows() %}
                 <tr>
-                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td><a href="{{ url_for('franchise_summary',franchise=r['Franchise'],section='commissions',**range_args) }}">{{ r['Franchise'] }}</a></td>
                   <td>{{ r['Period View'] }}</td>
                   <td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r.get('Claim Count', 0)|int }}</td><td>{{ r.get('Average Claim', 0)|money }}</td><td>{{ r['Claim Ratio']|pct }}</td><td>{{ r['Total Commission']|money }}</td><td>{{ r['R1 Policy Fee']|money }}</td><td>{{ r.get('Underwriter 2.1% Fee', 0)|money }}</td><td>{{ r.get('Total Paid Commissions', r['Total Commission'])|money }}</td>
                   <td class="money-cell {% if r['Franchise Money'] < 0 %}negative{% else %}positive{% endif %}">{{ r['Franchise Money']|money }}</td>
@@ -421,7 +421,7 @@
               <tbody>
               {% for _, r in commission_view.iterrows() %}
                 <tr>
-                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period View'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Claim Ratio']|pct }}</td>
+                  <td><a href="{{ url_for('franchise_summary',franchise=r['Franchise'],section='commissions',**range_args) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period View'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Claim Ratio']|pct }}</td>
                   {% if commission_focus in ['All','BrightRock'] %}<td>{{ rates['BrightRock']|pct }}<br><strong>{{ r['BrightRock Amount']|money }}</strong></td>{% endif %}
                   {% if commission_focus in ['All','Inkulu'] %}<td>{{ rates['Inkulu']|pct }}<br><strong>{{ r['Inkulu Amount']|money }}</strong></td>{% endif %}
                   {% if commission_focus in ['All','MFF'] %}<td>{{ rates['MFF']|pct }}<br><strong>{{ r['MFF Amount']|money }}</strong></td>{% endif %}
@@ -450,7 +450,7 @@
               <tbody>
               {% for _, r in underwriter_view.iterrows() %}
                 <tr>
-                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td><a href="{{ url_for('franchise_summary',franchise=r['Franchise'],section='commissions',**range_args) }}">{{ r['Franchise'] }}</a></td>
                   <td>{{ r['Period View'] }}</td>
                   <td>{{ r['Retail Premium']|money }}</td>
                   <td>{{ r['Original Risk Premium']|money }}</td>
@@ -480,7 +480,7 @@
               <tbody>
               {% for _, r in commission_business_view.iterrows() %}
                 <tr>
-                  <td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td>
+                  <td><a href="{{ url_for('franchise_summary',franchise=r['Franchise'],section='commissions',**range_args) }}">{{ r['Franchise'] }}</a></td>
                   <td>{{ r['Period View'] }}</td>
                   <td>{{ r['Retail Premium']|money }}</td>
                   <td>{{ r['Risk Premium']|money }}</td>
@@ -684,7 +684,7 @@
               <thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claims</th><th>Claim Ratio</th><th>MFF Book Value</th><th>Franchise Book Value</th><th>Total Book Value</th></tr></thead>
               <tbody>
               {% for _, r in book_view.iterrows() %}
-                <tr><td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period View'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Claim Ratio']|pct }}</td><td>{{ r['MFF Book Value 2.5%']|money }}</td><td>{{ r['Franchise Book Value 2.5%']|money }}</td><td><strong>{{ r['Total Book Value']|money }}</strong></td></tr>
+                <tr><td><a href="{{ url_for('franchise_summary',franchise=r['Franchise'],section='commissions',**range_args) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period View'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Claim Ratio']|pct }}</td><td>{{ r['MFF Book Value 2.5%']|money }}</td><td>{{ r['Franchise Book Value 2.5%']|money }}</td><td><strong>{{ r['Total Book Value']|money }}</strong></td></tr>
               {% endfor %}
               </tbody>
             </table>
@@ -843,7 +843,7 @@
         </section>
       {% elif workspace == 'advanced_analytics' %}
         <section class="summary-grid compact-summary"><div class="metric red"><span>High Risk</span><strong>{{ portfolio.get('high_risk_count', 0) }}</strong></div><div class="metric blue"><span>Move to BrightRock</span><strong>{{ portfolio.get('move_count', 0) }}</strong></div><div class="metric green"><span>Can Move</span><strong>{{ portfolio.get('can_move_count', 0) }}</strong></div><div class="metric"><span>Portfolio Claims</span><strong>{{ portfolio.get('total_claims', 0)|money }}</strong></div></section>
-        <section class="card wide"><h2>Risk Ranking and Opportunity Filter</h2><div class="table-wrap draggable-table"><table class="compact-table"><thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claims</th><th>Claim Ratio</th><th>Claims Contribution</th><th>Franchise Money on 100%</th><th>Franchise Money on BrightRock</th><th>Recommendation</th></tr></thead><tbody>{% for _, r in advanced_view.iterrows() %}<tr><td><a href="{{ url_for('franchise_page', franchise=r['Franchise']) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Weighted Claim Ratio']|pct }}</td><td>{{ r['Claims Contribution %']|pct }}</td><td>{{ r['Franchise Money on 100%']|money }}</td><td>{{ r['Franchise Money on BrightRock']|money }}</td><td><span class="pill {{ r['Claim Ratio Status']|lower }}">{{ r['Claim Ratio Label'] }}</span></td></tr>{% endfor %}</tbody></table></div></section>
+        <section class="card wide"><h2>Risk Ranking and Opportunity Filter</h2><div class="table-wrap draggable-table"><table class="compact-table"><thead><tr><th>Franchise</th><th>Period</th><th>Retail Premium</th><th>Risk Premium</th><th>Claims</th><th>Claim Ratio</th><th>Claims Contribution</th><th>Franchise Money on 100%</th><th>Franchise Money on BrightRock</th><th>Recommendation</th></tr></thead><tbody>{% for _, r in advanced_view.iterrows() %}<tr><td><a href="{{ url_for('franchise_summary',franchise=r['Franchise'],section='commissions',**range_args) }}">{{ r['Franchise'] }}</a></td><td>{{ r['Period'] }}</td><td>{{ r['Retail Premium']|money }}</td><td>{{ r['Risk Premium']|money }}</td><td>{{ r['Claims']|money }}</td><td>{{ r['Weighted Claim Ratio']|pct }}</td><td>{{ r['Claims Contribution %']|pct }}</td><td>{{ r['Franchise Money on 100%']|money }}</td><td>{{ r['Franchise Money on BrightRock']|money }}</td><td><span class="pill {{ r['Claim Ratio Status']|lower }}">{{ r['Claim Ratio Label'] }}</span></td></tr>{% endfor %}</tbody></table></div></section>
       {% elif workspace == 'ai_assistant' %}
         <section class="card ai-panel"><h2>Ask AI Data Assistant</h2><p class="muted">This offline test build includes a rule-based assistant. In production this can connect to the OpenAI API and use the same backend calculation functions.</p><form method="get" class="ai-form"><label>Your question<input type="text" name="ask" value="{{ ai_question }}" placeholder="Example: Which franchises should move to BrightRock?"></label><button type="submit">Ask</button></form></section>
         {% if ai_answer %}<section class="card"><h2>Answer</h2><p>{{ ai_answer.summary }}</p>{% if ai_answer.rows %}<div class="table-wrap draggable-table"><table class="compact-table"><thead><tr>{% for c in ai_answer.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>{% for row in ai_answer.rows %}<tr>{% for c in ai_answer.columns %}<td>{{ row[c] }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% endif %}</section>{% endif %}

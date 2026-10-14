@@ -55,6 +55,8 @@ def register_central(app,export_dir,scope):
         frame=scope(pd.DataFrame({'Franchise':names}))
         return set(frame['Franchise']) if 'Franchise' in frame else set()
     app.extensions['central_scope']=access
+    from franchise_summary import register as register_franchise_summary
+    register_franchise_summary(app,store,access)
     from claim_insights import register as register_claim_insights
     register_claim_insights(app,store,access)
 
