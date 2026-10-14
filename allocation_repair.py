@@ -2,13 +2,14 @@
 import json,sqlite3,tempfile
 from pathlib import Path
 from contextlib import closing
-from collections import defaultdict
+from collections import defaultdict,Counter
 from datetime import datetime
 from decimal import Decimal
 from central_calculations import mappings
 from central_validation import plan_assignments
 
 UNRESOLVED='Unresolved franchise allocation; transaction retained once in reconciliation.'
+AUL_EXAMPLE_NOTE='Franchise is not in the supplied September AUL examples; confirm its AUL allocation.'
 
 def ensure(store):
     store.ensure()
@@ -24,7 +25,7 @@ def aliases(names,key,alias):
 
 def repair(store,owner,queue=None,job_id=None):
     import app as application
-    ensure(store);d=store.direct;stamp=datetime.utcnow().isoformat();policy_changes=claims_changes=events_changes=0
+    ensure(store);d=store.direct;stamp=datetime.utcnow().isoformat();policy_changes=claims_changes=events_changes=cleared_notes=0
     known={r['franchise'] for r in store.summaries()}|set(mappings().get('claims_only_branches',[]))
     known_aliases=aliases(known,application.franchise_match_key,application.apply_franchise_alias)
     def resolved(name):
@@ -82,6 +83,39 @@ def repair(store,owner,queue=None,job_id=None):
                     if existing:
                         other=json.loads(existing[0]);values={k:values[k]+Decimal(str(other[k])) for k in values}
                     d.execute(conn,'INSERT INTO central_product_monthly VALUES (:batch,:f,:product,:dest,:plan,:summary) ON CONFLICT(batch_id,franchise,product,destination,plan) DO UPDATE SET summary=excluded.summary',{**params,'plan':plan,'summary':json.dumps(values,default=str)})
+    # The approved routing rule sends all remaining branches to AUL. Examples
+    # are layout samples, not a whitelist of branches eligible for AUL.
+    for batch in store.publications():
+        if queue:queue.update(job_id,'Clearing obsolete example warnings '+batch['month'])
+        with d.connection() as conn:
+            if d.get_engine:d.execute(conn,'SELECT pg_advisory_xact_lock(hashtext(:key))',{'key':'allocation:'+batch['id']})
+            current=d.execute(conn,'SELECT batch_id FROM central_publications WHERE month=:m',{'m':batch['month']}).fetchone()
+            if not current or current[0]!=batch['id']:continue
+            rows=d.records(d.execute(conn,'SELECT n,record_json FROM central_records WHERE batch_id=:id AND record_json LIKE :note',dict(id=batch['id'],note='%'+AUL_EXAMPLE_NOTE+'%')))
+            removed_by_branch=Counter()
+            for item in rows:
+                old=json.loads(item['record_json'])
+                if AUL_EXAMPLE_NOTE not in old['issues']:continue
+                new={**old,'issues':[s for s in old['issues'] if s!=AUL_EXAMPLE_NOTE]}
+                assert old['calculation']==new['calculation'] and old['data']==new['data']
+                audit(conn,'policy_review',batch['id'],item['n'],old,new,'Approved remaining-branches-to-AUL rule; remove obsolete example-only warning. No amounts changed.')
+                d.execute(conn,'UPDATE central_records SET record_json=:record WHERE batch_id=:batch AND n=:n',dict(record=json.dumps(new,default=str),batch=batch['id'],n=item['n']))
+                removed_by_branch[old['franchise']]+=int(bool(old['issues']))-int(bool(new['issues']));cleared_notes+=1
+            for branch,removed in removed_by_branch.items():
+                row=d.execute(conn,'SELECT summary FROM central_monthly WHERE batch_id=:batch AND franchise=:f',dict(batch=batch['id'],f=branch)).fetchone();summary=json.loads(row[0]);summary['review_rows']=int(summary['review_rows'])-removed
+                d.execute(conn,'UPDATE central_monthly SET summary=:s WHERE batch_id=:batch AND franchise=:f',dict(s=json.dumps(summary),batch=batch['id'],f=branch))
+            d.execute(conn,"UPDATE central_batches SET review_rows=review_rows-:removed WHERE id=:batch",dict(removed=sum(removed_by_branch.values()),batch=batch['id']))
+            d.execute(conn,"UPDATE central_batches SET status=CASE WHEN review_rows=0 THEN 'Published' ELSE 'Published with review' END WHERE id=:id",{'id':batch['id']})
+            # Source-total controls stay valid: only review metadata changed.
+            exists=d.execute(conn,"SELECT to_regclass('public.central_import_verification')").fetchone()[0] if d.get_engine else conn.execute("SELECT name FROM sqlite_master WHERE name='central_import_verification'").fetchone()
+            if exists:
+                checked=d.execute(conn,'SELECT result FROM central_import_verification WHERE batch_id=:id',{'id':batch['id']}).fetchone()
+                if checked:
+                    predicate="json_array_length(CAST(record_json AS json)->'issues')>0" if d.get_engine else "json_array_length(record_json,'$.issues')>0"
+                    reviews=d.records(d.execute(conn,'SELECT record_json FROM central_records WHERE batch_id=:id AND '+predicate,{'id':batch['id']}));reasons=Counter()
+                    for item in reviews:reasons.update(json.loads(item['record_json'])['issues'])
+                    result=json.loads(checked[0]);result['review']=len(reviews);result['review_reasons']=dict(reasons.most_common())
+                    d.execute(conn,'UPDATE central_import_verification SET result=:r WHERE batch_id=:id',dict(r=json.dumps(result),id=batch['id']))
     with d.connection() as conn:
         if d.get_engine:d.execute(conn,"SELECT pg_advisory_xact_lock(hashtext('claims-allocation-refresh'))")
         rows=d.records(d.execute(conn,'SELECT c.* FROM central_claims c JOIN central_claim_publications p ON p.batch_id=c.batch_id AND p.month=c.month'))
@@ -99,4 +133,4 @@ def repair(store,owner,queue=None,job_id=None):
             if name is None or name==row['franchise']:continue
             after={**row,'franchise':name};audit(conn,'claims_source',row['batch_id'],row['n'],row,after,'Apply approved branch name for source analytics; raw claim case retained.')
             d.execute(conn,'UPDATE central_claim_events SET franchise=:f WHERE batch_id=:batch AND n=:n',dict(f=name,batch=row['batch_id'],n=row['n']));events_changes+=1
-    return dict(ok=True,policy_classifications=policy_changes,claim_allocations=claims_changes,claim_cases=events_changes,amounts_changed=False)
+    return dict(ok=True,policy_classifications=policy_changes,claim_allocations=claims_changes,claim_cases=events_changes,obsolete_notes_cleared=cleared_notes,amounts_changed=False)

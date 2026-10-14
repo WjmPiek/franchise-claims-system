@@ -13,7 +13,7 @@ def member_plan(product,row,products):
     return 'Unclassified'
 
 def plan_assignments(conn):
-    registry=mappings();products=registry['plans'];known={normal(n) for n in registry['franchises']}
+    registry=mappings();products=registry['plans']
     has_fingerprints=conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='source_fingerprints'").fetchone()[0]
     duplicates={r[0] for r in conn.execute('SELECT n FROM source_fingerprints WHERE digest IN (SELECT digest FROM source_fingerprints GROUP BY digest HAVING COUNT(*)>1)')} if has_fingerprints else set()
     members=defaultdict(set);policies=defaultdict(set)
@@ -51,7 +51,6 @@ def plan_assignments(conn):
             if rel=='MEM' and approved_covers:
                 from decimal import Decimal
                 if Decimal(row[10]) not in {Decimal(v) for v in approved_covers}:messages.append('[BLOCK] Legacy product main cover differs from the supplied October example; confirm its approved plan mapping before export.')
-            if normal(row[0]) not in known:messages.append('Franchise is not in the supplied September AUL examples; confirm its AUL allocation.')
             group=members.get((branch,policy,row[16]),set()) if row[16] else set()
             if not group:group=policies.get((branch,policy),set())
             explicit=products.get(normal(product),'Unclassified')
