@@ -10,6 +10,14 @@ from central_claims import component,paid_date,read_transactions,VERIFIED_AMOUNT
 VERSION='claims-insights-20261013-v1'
 DAYS='Number of days between Incident Date/Entry Date'
 _CACHE={}
+
+def sales_period(dates):
+    """Twelve complete receipt/payment months ending in the selected end month."""
+    import calendar
+    from dateutil.relativedelta import relativedelta
+    end=date.fromisoformat(dates['date_to']).replace(day=1)
+    start=end-relativedelta(months=11)
+    return dict(date_from=start.isoformat(),date_to=end.replace(day=calendar.monthrange(end.year,end.month)[1]).isoformat())
 SPECS={'relation':'Relationships of life assured','age':'Age categories','product':'Top 10 claimed products','product_age':'Products by age category',
  'cover':'Product cover claimed','gender':'Policyholder gender','cause':'Incident causes','status':'Approved and repudiated',
  'payee':'Paid to franchise holder or client','netoff':'Net-offs against claims','duration':'Average product duration to incident',
@@ -134,23 +142,28 @@ def analyse(store,dates,allowed=None):
     start,end=dates['date_from'][:7],dates['date_to'][:7]
     # Product cover is sourced from actual Direct MEM benefits, not claim payout amounts.
     from performance_index import products
-    premium,covers,names=products(store,start,end,allowed)
-    pubs=[b for b in store.publications() if start<=b['month']<=end]
+    _,covers,_=products(store,start,end,allowed)
     for r in events:
         options=covers.get(normal(r['product']),set())
         r['cover']='R'+format(next(iter(options)),',.2f') if len(options)==1 else 'Unknown / conflicting Direct cover'
+    risk_dates=sales_period(dates)
+    risk_start,risk_end=risk_dates['date_from'][:7],risk_dates['date_to'][:7]
+    _,risk_paid,_=populations(store,risk_dates,allowed)
+    risk_bank=[r for r in risk_paid if r['bank']!=0]
+    premium,_,names=products(store,risk_start,risk_end,allowed)
+    risk_pubs=[b for b in store.publications() if risk_start<=b['month']<=risk_end]
     totals=defaultdict(lambda:dict(amount=Decimal(0),count=0,branches=defaultdict(lambda:[0,Decimal(0)])))
-    for r in bank:
+    for r in risk_bank:
         k=normal(r['product']);names[k]=r['product'];totals[k]['amount']+=r['bank'];totals[k]['count']+=1
         totals[k]['branches'][r['franchise']][0]+=1;totals[k]['branches'][r['franchise']][1]+=r['bank']
-    expected=[];y,m=map(int,start.split('-'));last=tuple(map(int,end.split('-')))
+    expected=[];y,m=map(int,risk_start.split('-'));last=tuple(map(int,risk_end.split('-')))
     while (y,m)<=last:
         expected.append(f'{y:04d}-{m:02d}');m+=1
         if m==13:y+=1;m=1
-    verified=store.verified_claim_months();complete=all(m in verified and m in {b['month'] for b in pubs} for m in expected)
-    whole_months=dates['date_from'].endswith('-01') and date.fromisoformat(dates['date_to']).day==__import__('calendar').monthrange(*map(int,end.split('-')))[1]
+    verified=store.verified_claim_months();complete=all(m in verified and m in {b['month'] for b in risk_pubs} for m in expected)
+    whole_months=True
     risk=[];red=set()
-    for k in set(premium)|set(totals):
+    for k in totals:
         t=totals[k];den=premium[k];value=t['amount']/den*100 if den>0 and complete and whole_months else None
         colour='red' if value is not None and value>=70 else 'green' if value is not None and value>=50 else 'blue' if value is not None else 'unknown'
         action='Must not be sold' if colour=='red' else 'May be sold — green band' if colour=='green' else 'Lower claim ratio — blue band' if colour=='blue' else 'Needs complete claims and monthly premiums'
@@ -161,7 +174,7 @@ def analyse(store,dates,allowed=None):
     tables.update(product_age=grouped(events,lambda r:r['product']+' / '+r['age']),cover=grouped(events,lambda r:r['cover']),
       payee=grouped(bank,lambda r:r['payee']),netoff=grouped(offset,lambda r:r['franchise']),duration=grouped(events,lambda r:r['product']),
       branch_month=grouped(bank,lambda r:r['franchise']+' / '+r['month']),risk=risk,
-      risk_franchise=grouped([r for r in bank if normal(r['product']) in red],lambda r:r['franchise']),
+      risk_franchise=grouped([r for r in risk_bank if normal(r['product']) in red],lambda r:r['franchise']),
       early=grouped([r for r in events if r['days'] is not None and r['days']<=180],lambda r:r['product']),
       quality=grouped([r for r in events if 'Unknown' in (r['age'],r['cause'],r['payee']) or r['days'] is None or not r['claim']],lambda r:r['product']))
     delay=[]
@@ -180,7 +193,9 @@ def analyse(store,dates,allowed=None):
             valid=sum(r['days_count'] for r in rows);value=sum((r['days_total'] for r in rows),Decimal(0))/valid if valid else None;unit='days'
         incomplete=bool(missing) and key in ('relation','age','product','product_age','cover','gender','cause','status','duration','early','quality')
         cards.append(dict(key=key,label=label,value=value,unit=unit,count=count,top=rows[:10],incomplete=incomplete))
-    result=dict(cards=cards,tables=tables,events=events,paid=paid,missing=missing,red=red,complete=complete,whole_months=whole_months,dates=dates,
+    maximum=max((r['ratio'] for r in risk if r['ratio'] is not None and r['ratio']>0),default=Decimal(0))
+    for r in risk:r['scale']=max(0,float(r['ratio']/maximum*100)) if maximum and r['ratio'] is not None else 0
+    result=dict(cards=cards,tables=tables,events=events,paid=paid,risk_paid=risk_paid,risk_dates=risk_dates,missing=missing,red=red,complete=complete,whole_months=whole_months,dates=dates,
       reported_count=len(events),paid_count=len(bank),bank=sum((r['bank'] for r in bank),Decimal(0)),netoff=sum((r['netoff'] for r in paid),Decimal(0)),netoff_count=len(offset))
     if len(_CACHE)>=16:_CACHE.pop(next(iter(_CACHE)))
     _CACHE[key]=(time.monotonic(),result)
@@ -201,7 +216,8 @@ def register(app,store,access):
         if error:return error
         if metric not in SPECS:return 'Unknown claims analysis.',404
         insights=analyse(store,dates,allowed);rows=insights['tables'][metric];group=request.args.get('group','');page=max(1,request.args.get('page',1,type=int))
-        if metric in ('risk','risk_franchise','payee','netoff','branch_month','delay'):records=insights['paid']
+        if metric in ('risk','risk_franchise'):records=insights['risk_paid']
+        elif metric in ('payee','netoff','branch_month','delay'):records=insights['paid']
         else:records=insights['events']
         if metric=='netoff':records=[r for r in records if r['netoff']!=0]
         elif metric in ('payee','branch_month','risk','risk_franchise','delay'):records=[r for r in records if r['bank']!=0]

@@ -1,2 +1,4 @@
 .claim-flag{display:inline-block;padding:7px 10px;border-radius:6px;font-weight:700}.claim-flag.red{background:#fde4e5;color:#9a1820}.claim-flag.green{background:#e0f2e8;color:#17643b}.claim-flag.blue{background:#e2ecfb;color:#204e85}.claim-flag.unknown{background:#f2efdf;color:#655923}.central-page details{margin:20px 0}.central-page nav{padding:18px 0}.central-page td{vertical-align:top}
 .claim-card-breakdown{margin-top:12px;font-size:14px}.claim-card-breakdown div{display:flex;gap:16px;justify-content:space-between;padding:4px 0;border-top:1px solid #eee}.claim-card-breakdown span{overflow-wrap:anywhere}
+
+.claim-ratio-scale{min-width:125px}.claim-ratio-track{height:8px;background:#eef0f7;border-radius:6px;margin-top:6px;overflow:hidden}.claim-ratio-track i{display:block;height:100%;border-radius:6px}.claim-ratio-track i.red{background:#c93743}.claim-ratio-track i.green{background:#25935e}.claim-ratio-track i.blue{background:#3977c8}

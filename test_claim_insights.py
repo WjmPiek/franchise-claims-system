@@ -38,6 +38,16 @@ class ClaimInsightsTest(unittest.TestCase):
                 if s.get('Date Of Claim Paid') and (Decimal(s['Net amount paid via bank']) or Decimal(s['Amount net off against claim'])):
                     stage.execute('INSERT INTO claims VALUES (?,?,?,?,?,?,?)',(n,s['Date Of Claim Paid'][:7],'ERMELO',s['Product'],s['Net amount paid via bank'],raw,'[]'))
             publish_claims(self.store,stage,'claims.xlsx',1,VERIFIED_AMOUNT_HEADER,['2026-09'],batch_id=batch)
+    def complete_year(self):
+        from dateutil.relativedelta import relativedelta
+        from datetime import date
+        months=[(date(2025,10,1)+relativedelta(months=i)).strftime('%Y-%m') for i in range(11)]
+        with closing(sqlite3.connect(':memory:')) as stage:
+            stage_source(self.root/'direct.csv',stage);prepare_outputs(stage,self.root/'unused','direct.csv','mpia','mpia','policy',generate_files=False)
+            for month in months:self.store.direct.save(stage,'direct-'+month,1,month,'direct.csv',central_only=True)
+        with self.store.direct.connection() as conn:
+            batch=conn.execute("SELECT batch_id FROM central_claim_publications WHERE month='2026-09'").fetchone()[0]
+            for month in months:conn.execute('INSERT INTO central_claim_publications VALUES (?,?) ON CONFLICT(month) DO NOTHING',(month,batch))
     def test_unpaid_repudiations_are_analysed_without_becoming_paid_claims(self):
         self.publish([self.source(),self.source('C2',**{'Date Of Claim Paid':'','Net amount paid via bank':'0','Amount net off against claim':'0','Claim Status':'Repudiated','Number of days between Incident Date/Entry Date':'-5','Relationship of Life Assured/Member':'Child - Stillborn','PayableTo':'','Policyholder Gender':'Other','Incident Cause':'Unnatural'})])
         a=analyse(self.store,self.dates);self.assertEqual(a['reported_count'],2);self.assertEqual(a['paid_count'],1)
@@ -46,8 +56,8 @@ class ClaimInsightsTest(unittest.TestCase):
         self.assertEqual(a['tables']['duration'][0]['days_count'],1);self.assertEqual(a['tables']['duration'][0]['years'],1)
         self.assertEqual(a['tables']['payee'][0]['label'],'Franchise holder')
         self.assertIn('R40,000.00',a['tables']['cover'][0]['label'])
-        self.assertEqual(a['tables']['risk'][0]['action'],'Must not be sold')
-        self.assertEqual(a['tables']['risk_franchise'][0]['count'],1)
+        self.assertEqual(a['tables']['risk'][0]['action'],'Needs complete claims and monthly premiums')
+        self.assertEqual(a['tables']['risk_franchise'],[])
     def test_exact_dates_and_partial_month_do_not_use_full_month_premium_as_a_rate(self):
         self.publish([self.source()]);a=analyse(self.store,dict(date_from='2026-09-11',date_to='2026-09-30'))
         self.assertEqual(a['paid_count'],0);self.assertEqual(a['reported_count'],0)
@@ -72,6 +82,11 @@ class ClaimInsightsTest(unittest.TestCase):
         for key in SPECS:
             response=client.get('/claims/analytics/'+key+'?date_from=2026-09-01&date_to=2026-09-30')
             self.assertEqual(response.status_code,200,(key,response.data[:200]))
+        self.publish([self.source('SEPT'),self.source('AUG',**{'Date Of Claim Paid':'2026-08-15'})],batch='annual-detail')
+        self.complete_year()
+        response=client.get('/claims/analytics/risk?date_from=2026-09-01&date_to=2026-09-30&group='+PRODUCT)
+        self.assertIn(b'2025-10-01 to 2026-09-30',response.data)
+        self.assertIn(b'2 matching rows',response.data);self.assertIn(b'2026-08-15',response.data)
         app.before_request_funcs={None:[lambda:setattr(g,'user',{'id':2,'role':'voucher_supplier'})]}
         self.assertEqual(client.get('/claims/analytics/status').status_code,403)
     def test_reader_captures_all_status_rows_but_preserves_bank_financial_reader(self):
@@ -101,8 +116,24 @@ class ClaimInsightsTest(unittest.TestCase):
         self.assertEqual(analyse(self.store,self.dates)['reported_count'],2)
     def test_70_percent_threshold_is_inclusive_and_zero_premium_unavailable(self):
         net=Decimal(self.store.summaries()[0]['summary']['payover'])
-        self.publish([self.source(**{'Net amount paid via bank':str(net*Decimal('.70'))})]);a=analyse(self.store,self.dates)
+        self.publish([self.source(**{'Net amount paid via bank':str(net*12*Decimal('.70'))})]);self.complete_year();a=analyse(self.store,self.dates)
         self.assertEqual(a['tables']['risk'][0]['ratio'],70);self.assertEqual(a['tables']['risk'][0]['colour'],'red')
         self.assertEqual(classify(self.source(**{'Number of days between Incident Date/Entry Date':'bad'}))['days'],None)
+    def test_sales_flags_use_matching_twelve_month_claims_and_premiums(self):
+        self.publish([self.source('OLD',**{'Date Of Claim Paid':'2025-09-30'}),self.source('AUG',**{'Date Of Claim Paid':'2026-08-15','Net amount paid via bank':'200'}),self.source('SEP')]);self.complete_year()
+        a=analyse(self.store,self.dates);r=a['tables']['risk'][0]
+        self.assertEqual(a['paid_count'],1)
+        self.assertEqual(r['count'],2);self.assertEqual(r['bank'],350)
+        self.assertEqual(r['premium'],Decimal('194.82')*12)
+        self.assertEqual(r['ratio'],Decimal(350)/(Decimal('194.82')*12)*100)
+        self.assertEqual(a['risk_dates'],dict(date_from='2025-10-01',date_to='2026-09-30'))
+        partial=analyse(self.store,dict(date_from='2026-09-20',date_to='2026-09-25'))
+        self.assertEqual(partial['paid_count'],0);self.assertEqual(partial['tables']['risk'][0]['ratio'],r['ratio'])
+    def test_sales_ranking_excludes_products_without_paid_claims(self):
+        self.publish([self.source()])
+        with self.store.direct.connection() as conn:
+            row=conn.execute('SELECT * FROM central_product_monthly').fetchone()
+            values=list(row);values[2]='Never claimed';conn.execute('INSERT INTO central_product_monthly VALUES (?,?,?,?,?,?)',values)
+        self.assertEqual([r['label'] for r in analyse(self.store,self.dates)['tables']['risk']],[PRODUCT])
 
 if __name__=='__main__':unittest.main()
