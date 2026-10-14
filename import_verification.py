@@ -1,6 +1,6 @@
 """Read-only verification of archived uploads against their saved versions."""
 import calendar,json,sqlite3,tempfile
-from collections import defaultdict
+from collections import defaultdict,Counter
 from contextlib import closing
 from datetime import datetime
 from decimal import Decimal
@@ -29,13 +29,14 @@ def policy_check(store,queue,batch):
     path=queue.restore_source(source_job(store,batch))
     with tempfile.TemporaryDirectory(dir=queue.root) as directory:
         with closing(sqlite3.connect(str(Path(directory)/'source.sqlite'))) as stage:source=stage_source(path,stage)
-    count=review=0;risk=retail=Decimal(0)
+    count=review=0;risk=retail=Decimal(0);reasons=Counter()
     for row in streamed(store,'SELECT record_json FROM central_records WHERE batch_id=:id',{'id':batch}):
         record=json.loads(row[0]);count+=1;risk+=Decimal(str(record['original_risk']));retail+=Decimal(str(record['retail']));review+=bool(record['issues'])
+        reasons.update(record['issues'])
     controls=[dict(label='Source records',source=str(source['rows']),stored=str(count),difference=str(count-int(source['rows']))),
       dict(label='Original Risk',source=str(source['risk']),stored=str(risk),difference=str(risk-Decimal(str(source['risk'])))),
       dict(label='Total Retail',source=str(source['retail']),stored=str(retail),difference=str(retail-Decimal(str(source['retail']))))]
-    return dict(matched=all(Decimal(c['difference'])==0 for c in controls),controls=controls,review=review,method='Original uploaded bytes checked by SHA-256; source file re-read and compared with individual stored records.')
+    return dict(matched=all(Decimal(c['difference'])==0 for c in controls),controls=controls,review=review,review_reasons=dict(reasons.most_common()),method='Original uploaded bytes checked by SHA-256; source file re-read and compared with individual stored records.')
 
 def claims_check(store,queue,batch):
     from central_claims import read_transactions,verified_annual_sheet,VERIFIED_AMOUNT_HEADER,component
@@ -43,10 +44,11 @@ def claims_check(store,queue,batch):
     for r in read_transactions(path,VERIFIED_AMOUNT_HEADER,verified_annual_sheet(path),controls):
         m=source[r['month']];m['rows']+=1;m['bank']+=Decimal(r['amount']);m['netoff']+=component(r['source'],'Amount net off against claim')
     stored=defaultdict(lambda:dict(rows=0,bank=Decimal(0),netoff=Decimal(0)))
-    reviews=0
+    reviews=0;reasons=Counter()
     for row in streamed(store,'SELECT c.month,c.amount,x.net_off,c.issues FROM central_claims c LEFT JOIN central_claim_components x ON x.batch_id=c.batch_id AND x.n=c.n WHERE c.batch_id=:id',{'id':batch}):
         m=stored[row[0]];m['rows']+=1;m['bank']+=Decimal(row[1]);m['netoff']+=Decimal(row[2] or '0')
         reviews+=bool(json.loads(row[3]))
+        reasons.update(json.loads(row[3]))
     checks=[]
     for month in sorted(set(source)|set(stored)):
         for key,label in [('rows','Financial records'),('bank','Bank-paid claims (AM)'),('netoff','Dated claim net-offs (AL)')]:
@@ -55,7 +57,7 @@ def claims_check(store,queue,batch):
         events=store.direct.execute(conn,'SELECT COUNT(*) FROM central_claim_events WHERE batch_id=:id',{'id':batch}).fetchone()[0]
     all_rows=int(controls.get('source_rows',0));checks.insert(0,dict(label='All source claim cases, including unpaid / repudiated',source=str(all_rows),stored=str(events),difference=str(events-all_rows)))
     return dict(matched=all(Decimal(c['difference'])==0 for c in checks),controls=checks,review=reviews+controls.get('undated_netoff_rows',0),
-      method='Original uploaded bytes checked by SHA-256; all claim cases counted and financial rows compared per actual paid month. Undated net-offs stay outside paid-month totals.',source_notes=controls)
+      method='Original uploaded bytes checked by SHA-256; all claim cases counted and financial rows compared per actual paid month. Undated net-offs stay outside paid-month totals.',source_notes=controls,review_reasons=dict(reasons.most_common()))
 
 def verify_targets(store,queue,targets,job_id):
     ensure(store);results=[]
