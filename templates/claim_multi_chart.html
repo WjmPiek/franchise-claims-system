@@ -1,0 +1,8 @@
+<svg class="line-chart" id="centralGraph{{ graph.key }}" viewBox="0 0 600 260" role="img" aria-label="{{ graph.label }}: reported claim counts" style="display:block;width:100%;height:auto;min-height:180px">
+<title>{{ graph.label }}: reported claim counts</title>
+{% if graph.chart.labels %}
+{% for tick in graph.chart.ticks %}<line x1="70" x2="570" y1="{{ tick.y }}" y2="{{ tick.y }}" stroke="#e3e7f1"/><text x="62" y="{{ tick.y+4 }}" text-anchor="end" fill="#5e687d" font-size="11">{{ tick.value|int }}</text>{% endfor %}
+{% for series in graph.series %}<g data-series-index="{{ loop.index0 }}"><path data-claim-series="{{ series.label }}" d="{{ series.path }}" fill="none" stroke="{{ series.colour }}" stroke-width="3" stroke-dasharray="{{ series.dash }}" stroke-linejoin="round"/>{% for p in series.chart_points %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="4" fill="{{ series.colour }}"><title>{{ series.label }} · {{ p.label }}: {{ p.value }} claims</title></circle>{% endfor %}</g>{% endfor %}
+{% for p in graph.chart.labels %}{% if loop.index0 % graph.chart.label_step == 0 or loop.last %}<text x="{{ p.x }}" y="217" text-anchor="middle" fill="#5e687d" font-size="11">{{ p.label }}</text>{% endif %}{% endfor %}
+<text x="320" y="246" text-anchor="middle" fill="#5e687d" font-size="11">{{ graph.axis }}</text><text x="15" y="105" transform="rotate(-90 15 105)" text-anchor="middle" fill="#5e687d" font-size="11">Number of claims</text>
+{% else %}<text x="300" y="110" text-anchor="middle" fill="#667085">No reported claims in this selection</text>{% endif %}</svg>

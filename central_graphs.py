@@ -3,8 +3,10 @@ from decimal import Decimal
 from flask import url_for,g,request,session,render_template,redirect
 import calendar
 from datetime import date
+from claim_graphs import SPECS as CLAIM_SPECS
 
 SPECS=[('original_risk','Original Risk','source','money'),('source_retail','Retail','source','money'),('payover','Insurer Payover','insurers','money'),('aul_payover','AUL Payover','aul','money'),('aul_plan2_rows','AUL Plan 2 rows','plan2','rows'),('aul_historic_rows','AUL Historic rows','historic','rows'),('r1','R1 Fees','fees','money'),('adv','2.1% Fees','fees','money'),('faithnet','Faithnet Deductions','fees','money'),('supplier','Voucher Supplier Payable','vouchers','money'),('retained','Voucher Retained','vouchers','money'),('policy_qty','Paid policy months / MPIA','fees','rows'),('verified_claims','Claim Amount Comparison Over Time','claims','money')]
+SPECS+=CLAIM_SPECS
 
 def default_dates(publications):
     latest=max((b['month'] for b in publications),default=date.today().strftime('%Y-%m'))
@@ -22,13 +24,21 @@ def chart_geometry(points):
     return dict(points=plotted,path=path,baseline=y(0),ticks=[dict(y=y(low+span*i/3),value=low+span*i/3) for i in range(4)],
                 label_step=max(1,(len(points)+5)//6))
 
-def graphs(store,start,end,allowed=None,keys=None,franchise='All'):
+def graphs(store,start,end,allowed=None,keys=None,franchise='All',dates=None,product=''):
+    requested={s[0] for s in SPECS} if keys is None else set(keys)
+    claim_keys=requested & {s[0] for s in CLAIM_SPECS}
+    result=[]
+    if claim_keys:
+        from claim_graphs import graphs as claim_graphs
+        dates=dates or dict(date_from=start+'-01',date_to=end+'-'+str(calendar.monthrange(*map(int,end.split('-')))[1]))
+        result=claim_graphs(store,dates,allowed,claim_keys,product)
+    requested-=claim_keys
+    if not requested:return result
     months=defaultdict(dict)
     for row in store.summaries(start,end,allowed):
         for key,value in row['summary'].items():months[row['month']][key]=months[row['month']].get(key,Decimal(0))+Decimal(str(value))
     claims=defaultdict(lambda:Decimal(0))
-    specs=[s for s in SPECS if keys is None or s[0] in keys]
-    result=[]
+    specs=[s for s in SPECS if s[0] in requested]
     for key,label,category,unit in specs:
         if key=='verified_claims':
             for row in store.claims(start,end,allowed):claims[row['month']]+=Decimal(row['amount'])
@@ -37,7 +47,8 @@ def graphs(store,start,end,allowed=None,keys=None,franchise='All'):
         else:values=[(month,v.get(key,0)) for month,v in sorted(months.items())]
         points=[dict(label=month,value=float(value),url=url_for('central_calculation_detail',category=category,franchise=franchise,date_from=month+'-01',date_to=month+'-'+str(calendar.monthrange(*map(int,month.split('-')))[1]))) for month,value in values]
         result.append(dict(key=key,label=label,category=category,unit=unit,points=points))
-    for graph in result:graph['chart']=chart_geometry(graph['points'])
+    for graph in result:
+        if 'series' not in graph:graph['chart']=chart_geometry(graph['points'])
     return result
 
 def graph_scope(app):
@@ -62,13 +73,14 @@ def render_page(app):
         except ValueError as exc:return str(exc),400
         if not all(dates.values()):return 'Choose start and end dates.',400
         periods[key]=dates;session['graph_periods']=periods
+        if key=='claim_product_age':session['graph_age_product']=request.args.get('product','')
     grouped=defaultdict(list)
     for key,*_ in SPECS:
         dates=periods.get(key,defaults);grouped[(dates['date_from'],dates['date_to'])].append(key)
     result={}
     for (first,last),keys in grouped.items():
         dates=dict(date_from=first,date_to=last);start,end=month_bounds(dates)
-        for graph in graphs(store,start,end,allowed,keys,franchise):result[graph['key']]={**graph,'dates':dates}
+        for graph in graphs(store,start,end,allowed,keys,franchise,dates,session.get('graph_age_product','')):result[graph['key']]={**graph,'dates':dates}
     # Do not read policy member indexes, report catalogues or legacy workflows.
     names=sorted({r['franchise'] for r in store.summaries(allowed=app.extensions['central_page_access']())})
     sidebar_dates=session.get('period_dates') or dict(date_from=defaults['date_to'][:7]+'-01',date_to=defaults['date_to'])
@@ -87,6 +99,7 @@ def register(app):
         try:start,end=month_bounds(dates)
         except ValueError as exc:return str(exc),400
         if not start:return 'Choose start and end dates.',400
-        graph=graphs(app.extensions['central_store'],start,end,allowed,[key],franchise)[0];graph['dates']=dates
+        graph=graphs(app.extensions['central_store'],start,end,allowed,[key],franchise,dates,request.args.get('product',''))[0];graph['dates']=dates
+        if key=='claim_product_age':session['graph_age_product']=request.args.get('product','')
         periods=dict(session.get('graph_periods',{}));periods[key]=dates;session['graph_periods']=periods
         response=app.make_response(render_template('central_graph_card.html',graph=graph,selected=franchise));response.headers['Cache-Control']='no-store';return response

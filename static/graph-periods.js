@@ -1,3 +1,8 @@
+document.addEventListener('click',event=>{
+  const button=event.target.closest('[data-series-toggle]');if(!button)return;
+  const card=button.closest('[data-graph-card]'),line=card.querySelector('[data-series-index="'+button.dataset.seriesToggle+'"]');if(!line)return;
+  const show=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(show));line.setAttribute('visibility',show?'visible':'hidden');button.style.opacity=show?'1':'.45';
+});
 document.addEventListener('submit',async event=>{
   const form=event.target.closest('form[data-update-url]');if(!form)return;
   event.preventDefault();const card=form.closest('[data-graph-card]'),status=card.querySelector('.graph-status'),button=form.querySelector('button');

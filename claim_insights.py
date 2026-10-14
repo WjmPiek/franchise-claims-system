@@ -205,6 +205,10 @@ def register(app,store,access):
         def label(r):
             return r['product'] if metric in ('risk','duration','early','quality') else r['product']+' / '+r['age'] if metric=='product_age' else r.get('cover','Unknown') if metric=='cover' else r['franchise']+' / '+r['month'] if metric=='branch_month' else r['franchise'] if metric in ('risk_franchise','netoff','delay') else r.get(metric,'Unknown')
         if group:records=[r for r in records if label(r)==group]
+        product=request.args.get('product','')
+        if product:
+            records=[r for r in records if normal(r['product'])==normal(product)]
+            if metric=='product_age':rows=grouped(records,label)
         count=len(records)
         return render_template('claim_insight_detail.html',insights=insights,title=SPECS[metric],metric=metric,rows=rows,records=records[(page-1)*50:page*50],count=count,page=page,group=group,franchise=franchise,dates=dates)
     @app.post('/admin/claims/analyse-saved')

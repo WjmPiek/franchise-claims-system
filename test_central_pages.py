@@ -56,7 +56,7 @@ class CentralPages(unittest.TestCase):
         with self.client.session_transaction() as session:session['period_dates']={'date_from':'2026-09-01','date_to':'2026-09-30'};session.pop('graph_periods',None)
         with patch.object(baseline.claims,'build_executive_dashboard_context',side_effect=AssertionError('Unrelated dashboard work')),patch('central_identity.member_snapshot',side_effect=AssertionError('Member index scan')),patch('central_identity.products_by_retail',side_effect=AssertionError('Product scan')):
             page=self.client.get('/overview/graphs?date_from=2026-09-01&date_to=2026-09-30')
-        self.assertEqual(page.status_code,200,page.data[:200]);self.assertEqual(page.data.count(b'data-graph-card='),13)
+        self.assertEqual(page.status_code,200,page.data[:200]);self.assertEqual(page.data.count(b'data-graph-card='),17)
         self.assertIn(b'value="2025-10-01"',page.data);self.assertIn(b'value="2026-09-30"',page.data)
         with self.client.session_transaction() as session:self.assertEqual(session['period_dates']['date_from'],'2026-09-01')
     def test_update_one_graph_preserves_other_periods_and_skips_claim_rows(self):
@@ -75,6 +75,12 @@ class CentralPages(unittest.TestCase):
         with patch('central_routes.catalog',side_effect=AssertionError('Unrelated report catalogue')):
             for section in ('risk','commissions','claims','top_franchise','imports','admin'):
                 self.assertEqual(self.client.get('/overview/'+section).status_code,200,section)
+    def test_claim_profile_updates_read_claims_only_and_keep_independent_dates(self):
+        with patch.object(self.store,'records',side_effect=AssertionError('Profile chart must not scan policies')):
+            for key in ('claim_relationship_products','claim_product_age','claim_gender','claim_cause'):
+                response=self.client.get('/graphs/'+key+'?date_from=2026-08-01&date_to=2026-09-30')
+                self.assertEqual(response.status_code,200,key);self.assertEqual(response.data.count(b'data-graph-card='),1)
+                self.assertIn(key.encode(),response.data);self.assertIn(b'Claim Reported Date',response.data)
     def test_zero_confirmation_cannot_erase_paid_claims(self):
         self.assertEqual(self.client.post('/admin/claims/confirm-zero',data={'month':'2026-09','confirm':'yes'}).status_code,409)
         self.assertEqual(self.client.post('/admin/claims/confirm-zero',data={'month':'2026-08','confirm':'yes'}).status_code,302)
