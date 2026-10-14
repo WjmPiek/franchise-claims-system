@@ -113,6 +113,6 @@ body .app-shell :is(.page-header,.overview-hero-copy) p,body.claims-ui .executiv
 body.claims-ui .exec-card h2{font-size:1.14rem!important;line-height:1.15!important}
 
 /* Match period field values to paragraph text, and Top 10 entries to ranking rows. */
-html body.claims-ui .executive-filter :is(input,select){font-size:.92rem!important}
+html body.claims-ui .executive-filter input:not([type=hidden]):not([type=checkbox]):not([type=radio]),html body.claims-ui .executive-filter select{font-size:.92rem!important}
 html body.claims-ui .franchise-ranking-grid li{font-size:.76rem!important;line-height:1.25!important}
 html body.claims-ui .franchise-ranking-grid li a{font-size:inherit!important}
