@@ -87,6 +87,16 @@ class CentralPages(unittest.TestCase):
         self.assertIn(b'The first seven products in each category',page.data)
         self.assertIn(b'12 months: 2025-10-01 to 2026-09-30',page.data)
         self.assertIn(b'date_from=2025-10-01&amp;date_to=2026-09-30',page.data)
+        page=self.client.get('/overview/claims?date_from=2026-09-01&date_to=2026-09-30&product_from=2026-09-01&product_to=2026-09-30&product_scenario=count')
+        self.assertEqual(page.status_code,200);self.assertIn(b'Most Paid Claims (Green &amp; Blue)',page.data)
+        self.assertIn(b'name="product_from" value="2026-09-01"',page.data)
+        self.assertIn(b'12 months: 2025-10-01 to 2026-09-30',page.data)
+        self.assertEqual(self.client.get('/overview/claims?product_from=2026-09-30&product_to=2026-09-01').status_code,400)
+    def test_table_drag_assets_load_once_on_standalone_and_dashboard_pages(self):
+        for path in ('/overview/claims','/overview/imports','/calculations?date_from=2026-09-01&date_to=2026-09-30'):
+            response=self.client.get(path)
+            self.assertEqual(response.status_code,200,path)
+            self.assertEqual(response.data.count(b'table-pan.js'),1,path)
     def test_financial_cache_copies_and_rechecks_publication_versions(self):
         from central_routes import financial_result
         from published_cache import FINANCIAL

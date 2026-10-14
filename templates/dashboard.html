@@ -148,7 +148,7 @@
 .import-card .grid-form{display:flex!important;flex-direction:column!important;align-items:stretch}.import-card .grid-form label{width:100%;display:flex;flex-direction:column;gap:10px}.import-card .grid-form button{align-self:flex-start}.import-outcome{white-space:pre-wrap;margin:16px 0;padding:16px;background:#f4effa;border-radius:10px}
 </style>
 {% endif %}
-</head>
+<link rel="stylesheet" href="{{ url_for('static',filename='table-pan.css',v='20261014') }}"><script defer src="{{ url_for('static',filename='table-pan.js',v='20261014') }}"></script></head>
 <body class="claims-ui">
   <div class="container compact">
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -852,15 +852,6 @@
     {% endif %}
   </div>
 <script>
-  document.querySelectorAll('.draggable-table').forEach((slider) => {
-    let isDown=false,startX=0,scrollLeft=0,moved=false,rafId=null,nextScrollLeft=0;
-    const stop=()=>{isDown=false;slider.classList.remove('dragging');document.body.classList.remove('no-select');if(rafId){cancelAnimationFrame(rafId);rafId=null;}};
-    slider.addEventListener('mousedown',(e)=>{if(e.button!==0)return;isDown=true;moved=false;slider.classList.add('dragging');document.body.classList.add('no-select');startX=e.clientX;scrollLeft=slider.scrollLeft;});
-    window.addEventListener('mouseup',stop);slider.addEventListener('mouseleave',stop);
-    slider.addEventListener('mousemove',(e)=>{if(!isDown)return;e.preventDefault();const walk=(e.clientX-startX)*1.05;if(Math.abs(walk)>1)moved=true;nextScrollLeft=scrollLeft-walk;if(!rafId){rafId=requestAnimationFrame(()=>{slider.scrollLeft+=(nextScrollLeft-slider.scrollLeft)*0.85;rafId=null;});}});
-    slider.addEventListener('click',(e)=>{if(moved){e.preventDefault();e.stopPropagation();}},true);
-  });
-
   (function(){
     const grid = document.getElementById('dashboardCards');
     if(!grid) return;

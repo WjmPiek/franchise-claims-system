@@ -1,0 +1,4 @@
+.table-pan-shell{max-width:100%;overflow-x:auto}
+.can-pan{cursor:grab!important;touch-action:pan-y}
+.is-panning,.is-panning *{cursor:grabbing!important;user-select:none!important}
+@media print{.table-pan-shell{overflow:visible}.can-pan{cursor:auto!important}}

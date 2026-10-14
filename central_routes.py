@@ -30,6 +30,8 @@ def financial_result(app,legacy):
     return g.central_financial_result
 
 def register_central(app,export_dir,scope):
+    from table_pan import register as register_table_pan
+    register_table_pan(app)
     store=app.extensions['central_store'];root=Path(export_dir)/'central_reports';root.mkdir(parents=True,exist_ok=True)
     def access():
         user=getattr(g,'user',None) or {}
@@ -126,9 +128,10 @@ def register_central(app,export_dir,scope):
         summaries=store.summaries(start,end,allowed)
         insights={}
         if (request.view_args or {}).get('section')=='claims' or request.args.get('section')=='claims':
-            from claim_insights import analyse
+            from claim_insights import analyse,sales_selection
             from period_selection import selected_dates
-            insights={'claim_insights':analyse(store,selected_dates(request.args),allowed,sales_allowed=access())}
+            claim_dates=selected_dates(request.args)
+            insights={'claim_insights':analyse(store,claim_dates,allowed,sales_allowed=access(),sales_dates=sales_selection(request.args,claim_dates))}
         premium_comparison={}
         if section in ('risk','compare'):
             import app as application
@@ -189,7 +192,7 @@ def register_central(app,export_dir,scope):
           'central_claims_verified':all(b['month'] in verified_claims for b in pubs),
           'central_claim_branches':insights['claim_insights']['branch_summaries'] if insights else sorted(claims_by_franchise.values(),key=lambda row:row['franchise'].casefold()),
           'central_branch_claim_totals':insights['claim_insights']['branch_totals'] if insights else totals,
-          'central_branch_claim_dates':insights['claim_insights']['risk_dates'] if insights else {},
+          'central_branch_claim_dates':insights['claim_insights']['branch_dates'] if insights else {},
           'central_branch_claims_verified':insights['claim_insights']['branch_complete'] if insights else False,
           'central_aul_groups':sorted(aul_groups.values(),key=lambda row:row['franchise'].casefold()),'central_aul_combined':combined,
           'central_franchise_months':summaries}

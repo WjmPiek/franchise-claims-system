@@ -176,5 +176,31 @@ class ClaimInsightsTest(unittest.TestCase):
         self.assertFalse(a['branch_complete'])
         restricted=analyse(self.store,self.dates,{'OTHER'})
         self.assertEqual(restricted['branch_totals']['claims'],0);self.assertEqual(restricted['branch_summaries'],[])
+    def test_product_dates_do_not_change_annual_branch_totals(self):
+        from claim_insights import sales_selection
+        from werkzeug.exceptions import BadRequest
+        self.publish([self.source('AUG',**{'Date Of Claim Paid':'2026-08-15','Net amount paid via bank':'200'}),self.source('SEP')]);self.complete_year()
+        custom=sales_selection(dict(product_from='2026-08-01',product_to='2026-08-31'),self.dates)
+        a=analyse(self.store,self.dates,sales_dates=custom)
+        self.assertEqual(a['tables']['risk'][0]['bank'],200)
+        self.assertEqual(a['risk_dates'],custom);self.assertEqual(a['branch_totals']['claims'],350)
+        self.assertEqual(a['branch_dates'],dict(date_from='2025-10-01',date_to='2026-09-30'))
+        with self.assertRaises(BadRequest):sales_selection(dict(product_from='2026-09-01',product_to='2026-08-01'),self.dates)
+        partial=analyse(self.store,self.dates,sales_dates=dict(date_from='2026-08-10',date_to='2026-08-20'))
+        self.assertEqual(partial['tables']['risk'][0]['bank'],200);self.assertIsNone(partial['tables']['risk'][0]['ratio'])
+    def test_most_claimed_ranks_count_in_green_and_blue_instead_of_ratio(self):
+        cases=[]
+        for product,amounts in [('GREEN_MANY',[20,20,20]),('GREEN_HIGH',[69]),('BLUE_MANY',[10,10,10,10]),('BLUE_HIGH',[49]),('RED',[99])]:
+            for i,amount in enumerate(amounts):cases.append(self.source(product+str(i),**{'Product':product,'Net amount paid via bank':str(amount)}))
+        self.publish(cases);self.complete_year()
+        with self.store.direct.connection() as conn:
+            row=list(conn.execute("SELECT * FROM central_product_monthly WHERE batch_id='direct'").fetchone())
+            summary=json.loads(row[5]);summary['payover']='100';row[5]=json.dumps(summary)
+            for product in ['GREEN_MANY','GREEN_HIGH','BLUE_MANY','BLUE_HIGH','RED']:
+                row[2]=product;conn.execute('INSERT INTO central_product_monthly VALUES (?,?,?,?,?,?)',row)
+        a=analyse(self.store,self.dates)
+        self.assertEqual([g['rows'][0]['label'] for g in a['most_groups']],['GREEN_MANY','BLUE_MANY'])
+        self.assertEqual([g['rows'][0]['count'] for g in a['most_groups']],[3,4])
+        self.assertEqual(a['most_groups'][0]['rows'][0]['ratio'],60)
 
 if __name__=='__main__':unittest.main()
