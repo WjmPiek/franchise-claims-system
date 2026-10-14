@@ -228,7 +228,7 @@ def register(app,store,access):
         if metric=='quality':records=[r for r in records if 'Unknown' in (r['age'],r['cause'],r['payee']) or r['days'] is None or not r['claim']]
         def label(r):
             return r['product'] if metric in ('risk','duration','early','quality') else r['product']+' / '+r['age'] if metric=='product_age' else r.get('cover','Unknown') if metric=='cover' else r['franchise']+' / '+r['month'] if metric=='branch_month' else r['franchise'] if metric in ('risk_franchise','netoff','delay') else r.get(metric,'Unknown')
-        if group:records=[r for r in records if label(r)==group]
+        if group:records=[r for r in records if (normal(label(r))==normal(group) if metric=='risk' else label(r)==group)]
         product=request.args.get('product','') if metric=='product_age' else ''
         if product:
             records=[r for r in records if normal(r['product'])==normal(product)]

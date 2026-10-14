@@ -82,7 +82,7 @@ class ClaimInsightsTest(unittest.TestCase):
         for key in SPECS:
             response=client.get('/claims/analytics/'+key+'?date_from=2026-09-01&date_to=2026-09-30')
             self.assertEqual(response.status_code,200,(key,response.data[:200]))
-        self.publish([self.source('SEPT'),self.source('AUG',**{'Date Of Claim Paid':'2026-08-15'})],batch='annual-detail')
+        self.publish([self.source('SEPT'),self.source('AUG',**{'Date Of Claim Paid':'2026-08-15','Product':PRODUCT.lower()})],batch='annual-detail')
         self.complete_year()
         response=client.get('/claims/analytics/risk?date_from=2026-09-01&date_to=2026-09-30&group='+PRODUCT)
         self.assertIn(b'2025-10-01 to 2026-09-30',response.data)
