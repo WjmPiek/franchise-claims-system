@@ -1,5 +1,6 @@
 """Audited metadata corrections using approved rules; source and amounts stay intact."""
-import json,sqlite3
+import json,sqlite3,tempfile
+from pathlib import Path
 from contextlib import closing
 from collections import defaultdict
 from datetime import datetime
@@ -36,7 +37,7 @@ def repair(store,owner,queue=None,job_id=None):
             unresolved=d.execute(conn,"SELECT COUNT(*) FROM central_records WHERE batch_id=:id AND plan='Unclassified'",{'id':batch['id']}).fetchone()[0]
         if not unresolved:continue
         if queue:queue.update(job_id,'Applying approved product plans '+batch['month'])
-        with closing(sqlite3.connect(':memory:')) as stage:
+        with tempfile.TemporaryDirectory(dir=queue.root if queue else None) as temporary, closing(sqlite3.connect(str(Path(temporary)/'classification.sqlite'))) as stage:
             stage.execute('CREATE TABLE rows(n INTEGER PRIMARY KEY,branch TEXT,policy TEXT,product TEXT,destination TEXT,relation TEXT,voucher INTEGER,values_json TEXT)')
             stage.execute('CREATE TABLE source_raw(n INTEGER PRIMARY KEY,data TEXT)')
             targets=[]
@@ -44,6 +45,7 @@ def repair(store,owner,queue=None,job_id=None):
                 stage.execute('INSERT INTO rows VALUES (?,?,?,?,?,?,?,?)',(r['n'],r['franchise'],r['policy'],r['data'][11],r['destination'],r['relation'],int(r['destination']=='Vouchers'),json.dumps(r['data'])))
                 stage.execute('INSERT INTO source_raw VALUES (?,?)',(r['n'],json.dumps(r['calculation']['source'])))
                 if r['plan']=='Unclassified':targets.append(r)
+                if queue and r['n']%5000==0:queue.update(job_id,'Checking policy membership '+batch['month'],r['n'],batch['source_rows'])
             plans,_=plan_assignments(stage)
         with d.connection() as conn:
             if d.get_engine:d.execute(conn,'SELECT pg_advisory_xact_lock(hashtext(:key))',{'key':'allocation:'+batch['id']})
