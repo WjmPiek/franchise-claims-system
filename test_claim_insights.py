@@ -202,5 +202,30 @@ class ClaimInsightsTest(unittest.TestCase):
         self.assertEqual([g['rows'][0]['label'] for g in a['most_groups']],['GREEN_MANY','BLUE_MANY'])
         self.assertEqual([g['rows'][0]['count'] for g in a['most_groups']],[3,4])
         self.assertEqual(a['most_groups'][0]['rows'][0]['ratio'],60)
+    def test_branch_dates_and_rankings_are_independent_of_products(self):
+        from claim_insights import branch_selection,rank_branches
+        from werkzeug.exceptions import BadRequest
+        self.publish([self.source('AUG',**{'Date Of Claim Paid':'2026-08-15','Net amount paid via bank':'200'}),self.source('SEP')]);self.complete_year()
+        custom=branch_selection(dict(branch_from='2026-08-01',branch_to='2026-08-31',branch_scenario='count'),self.dates)
+        a=analyse(self.store,self.dates,branch_dates=custom)
+        self.assertEqual(a['branch_totals']['claims'],200);self.assertEqual(a['branch_totals']['claim_count'],1)
+        self.assertEqual(a['tables']['risk'][0]['bank'],350)
+        rows=[dict(franchise='A',count=3,claims=100),dict(franchise='B',count=1,claims=500)]
+        self.assertEqual(rank_branches(rows,'count')[0]['franchise'],'A');self.assertEqual(rank_branches(rows,'amount')[0]['franchise'],'B')
+        with self.assertRaises(BadRequest):branch_selection(dict(branch_from='2026-09-30',branch_to='2026-09-01'),self.dates)
+    def test_franchise_products_group_paid_claims_and_keep_scope_and_dates(self):
+        self.publish([self.source('SEP'),self.source('AUG',**{'Date Of Claim Paid':'2026-08-15','Product':PRODUCT.lower()}),self.source('OTHER',**{'Product':'Other Product','Net amount paid via bank':'200'}),self.source('OLD',**{'Date Of Claim Paid':'2025-08-15'})])
+        app=Flask(__name__);app.secret_key='test';app.template_folder=str(Path(__file__).parent/'templates')
+        app.add_url_rule('/overview/<section>','overview_page',lambda section:'overview')
+        app.before_request(lambda:setattr(g,'user',{'id':1,'role':'admin'}))
+        register(app,self.store,lambda:{'ERMELO'});client=app.test_client()
+        query=dict(franchise='ERMELO',date_from='2026-09-01',date_to='2026-09-30',branch_from='2026-08-01',branch_to='2026-09-30')
+        response=client.get('/claims/branch-products',query_string=query)
+        self.assertEqual(response.status_code,200);self.assertIn(b'3 matching rows',response.data)
+        self.assertIn(b'>2</td><td>R300.00</td>',response.data)
+        self.assertLess(response.data.index(PRODUCT.encode()),response.data.index(b'>Other Product</a>'))
+        query['product']=PRODUCT;response=client.get('/claims/branch-products',query_string=query)
+        self.assertIn(b'2 matching rows',response.data)
+        query['franchise']='OTHER';self.assertEqual(client.get('/claims/branch-products',query_string=query).status_code,403)
 
 if __name__=='__main__':unittest.main()

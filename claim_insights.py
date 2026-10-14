@@ -29,6 +29,19 @@ def sales_selection(args,dates):
         if start>end:raise ValueError()
     except ValueError:raise BadRequest('Enter valid product From and To dates, with From before To.')
     return dict(date_from=start.isoformat(),date_to=end.isoformat())
+
+def branch_selection(args,dates):
+    from werkzeug.exceptions import BadRequest
+    if args.get('branch_scenario','name') not in ('name','count','amount'):raise BadRequest('Choose a valid branch scenario.')
+    if not args.get('branch_from') and not args.get('branch_to'):return sales_period(dates)
+    try:
+        start=date.fromisoformat(args.get('branch_from',''));end=date.fromisoformat(args.get('branch_to',''))
+        if start>end:raise ValueError()
+    except ValueError:raise BadRequest('Enter valid branch From and To dates, with From before To.')
+    return dict(date_from=start.isoformat(),date_to=end.isoformat())
+
+def rank_branches(rows,scenario='name'):
+    return sorted(rows,key=(lambda r:(-r['count'],-r['claims'],r['franchise'].casefold())) if scenario=='count' else (lambda r:(-r['claims'],-r['count'],r['franchise'].casefold())) if scenario=='amount' else lambda r:r['franchise'].casefold())
 SPECS={'relation':'Relationships of life assured','age':'Age categories','product':'Top 10 claimed products','product_age':'Products by age category',
  'cover':'Product cover claimed','gender':'Policyholder gender','cause':'Incident causes','status':'Approved and repudiated',
  'payee':'Paid to franchise holder or client','netoff':'Net-offs against claims','duration':'Average product duration to incident',
@@ -144,12 +157,12 @@ def grouped(records,key):
         row['years']=row['days']/Decimal('365.25') if row['days'] is not None else None
     return sorted(groups.values(),key=lambda r:(-r['count'],r['label'].casefold()))
 
-def analyse(store,dates,allowed=None,sales_allowed=_SELECTED_SCOPE,sales_dates=None):
+def analyse(store,dates,allowed=None,sales_allowed=_SELECTED_SCOPE,sales_dates=None,branch_dates=None):
     store.ensure()
     if sales_allowed is _SELECTED_SCOPE:sales_allowed=allowed
-    branch_dates=sales_period(dates);risk_dates=sales_dates or branch_dates
+    default_dates=sales_period(dates);branch_dates=branch_dates or default_dates;risk_dates=sales_dates or default_dates
     from published_cache import signature
-    key=(signature(store),tuple(sorted(dates.items())),None if allowed is None else tuple(sorted(allowed)),None if sales_allowed is None else tuple(sorted(sales_allowed)),tuple(sorted(risk_dates.items())))
+    key=(signature(store),tuple(sorted(dates.items())),None if allowed is None else tuple(sorted(allowed)),None if sales_allowed is None else tuple(sorted(sales_allowed)),tuple(sorted(risk_dates.items())),tuple(sorted(branch_dates.items())))
     if key in _CACHE and time.monotonic()-_CACHE[key][0]<120:return _CACHE[key][1]
     events,paid,missing=populations(store,dates,allowed);bank=[r for r in paid if r['bank']!=0];offset=[r for r in paid if r['netoff']!=0]
     start,end=dates['date_from'][:7],dates['date_to'][:7]
@@ -224,7 +237,8 @@ def analyse(store,dates,allowed=None,sales_allowed=_SELECTED_SCOPE,sales_dates=N
         item['claims']+=r['bank'];item['net_off']+=r['netoff'];item['count']+=int(r['bank']!=0)
     branch_totals=dict(claims=sum((r['bank'] for r in branch_paid),Decimal(0)),claim_net_off=sum((r['netoff'] for r in branch_paid),Decimal(0)),claim_count=len(branch_bank))
     from dateutil.relativedelta import relativedelta
-    branch_months=[(date.fromisoformat(branch_dates['date_from'])+relativedelta(months=i)).strftime('%Y-%m') for i in range(12)]
+    branch_months=[];month=date.fromisoformat(branch_dates['date_from']).replace(day=1);last=date.fromisoformat(branch_dates['date_to']).replace(day=1)
+    while month<=last:branch_months.append(month.strftime('%Y-%m'));month+=relativedelta(months=1)
     result=dict(cards=cards,tables=tables,events=events,paid=paid,risk_paid=risk_paid,risk_dates=risk_dates,branch_dates=branch_dates,branch_paid=branch_paid,branch_totals=branch_totals,branch_summaries=sorted(branch_summaries.values(),key=lambda r:r['franchise'].casefold()),branch_complete=all(m in verified for m in branch_months),risk_groups=risk_groups,most_groups=most_groups,risk_unknown=sum(r['ratio'] is None for r in risk),missing=missing,red=red,complete=complete,whole_months=whole_months,dates=dates,
       reported_count=len(events),paid_count=len(bank),bank=sum((r['bank'] for r in bank),Decimal(0)),netoff=sum((r['netoff'] for r in paid),Decimal(0)),netoff_count=len(offset))
     if len(_CACHE)>=16:_CACHE.pop(next(iter(_CACHE)))
@@ -245,7 +259,7 @@ def register(app,store,access):
         dates,allowed,franchise,error=selection()
         if error:return error
         if metric not in SPECS:return 'Unknown claims analysis.',404
-        insights=analyse(store,dates,allowed,sales_allowed=access(),sales_dates=sales_selection(request.args,dates));rows=insights['tables'][metric];group=request.args.get('group','');page=max(1,request.args.get('page',1,type=int))
+        insights=analyse(store,dates,allowed,sales_allowed=access(),sales_dates=sales_selection(request.args,dates),branch_dates=branch_selection(request.args,dates));rows=insights['tables'][metric];group=request.args.get('group','');page=max(1,request.args.get('page',1,type=int))
         most_claims=metric=='risk' and request.args.get('product_scenario')=='count'
         if most_claims:rows=sorted([r for r in rows if r['colour'] in ('green','blue')],key=lambda r:(-r['count'],-r['bank'],r['label'].casefold()))
         if metric in ('risk','risk_franchise'):records=insights['risk_paid']
@@ -270,6 +284,23 @@ def register(app,store,access):
             if metric=='product_age':rows=grouped(records,label)
         count=len(records)
         return render_template('claim_insight_detail.html',insights=insights,title=SPECS[metric],metric=metric,rows=rows,records=records[(page-1)*50:page*50],count=count,page=page,group=group,franchise=franchise,dates=dates)
+    @app.get('/claims/branch-products')
+    def branch_claim_products():
+        dates,allowed,franchise,error=selection()
+        if error:return error
+        if allowed==set():return 'Franchise access required.',403
+        period=branch_selection(request.args,dates)
+        _,paid,_=populations(store,period,allowed)
+        groups={}
+        for r in paid:
+            item=groups.setdefault(normal(r['product']),dict(label=r['product'],count=0,bank=Decimal(0),netoff=Decimal(0)))
+            item['count']+=int(r['bank']!=0);item['bank']+=r['bank'];item['netoff']+=r['netoff']
+        rows=sorted(groups.values(),key=lambda r:(-r['count'],-r['bank'],r['label'].casefold()))
+        product=request.args.get('product','')
+        records=[r for r in paid if not product or normal(r['product'])==normal(product)]
+        page=max(1,request.args.get('page',1,type=int))
+        totals=dict(count=sum(r['count'] for r in rows),bank=sum((r['bank'] for r in rows),Decimal(0)),netoff=sum((r['netoff'] for r in rows),Decimal(0)))
+        return render_template('branch_claim_products.html',franchise=franchise,dates=dates,period=period,rows=rows,totals=totals,records=records[(page-1)*50:page*50],count=len(records),page=page,product=product)
     @app.post('/admin/claims/analyse-saved')
     def claim_insight_backfill():
         if (getattr(g,'user',None) or {}).get('role')!='admin':return 'Administrator access required.',403

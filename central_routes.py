@@ -128,10 +128,10 @@ def register_central(app,export_dir,scope):
         summaries=store.summaries(start,end,allowed)
         insights={}
         if (request.view_args or {}).get('section')=='claims' or request.args.get('section')=='claims':
-            from claim_insights import analyse,sales_selection
+            from claim_insights import analyse,sales_selection,branch_selection
             from period_selection import selected_dates
             claim_dates=selected_dates(request.args)
-            insights={'claim_insights':analyse(store,claim_dates,allowed,sales_allowed=access(),sales_dates=sales_selection(request.args,claim_dates))}
+            insights={'claim_insights':analyse(store,claim_dates,allowed,sales_allowed=access(),sales_dates=sales_selection(request.args,claim_dates),branch_dates=branch_selection(request.args,claim_dates))}
         premium_comparison={}
         if section in ('risk','compare'):
             import app as application
@@ -142,7 +142,7 @@ def register_central(app,export_dir,scope):
                 if not current.empty:current=current[current['Franchise'].isin(allowed)]
                 if not historical.empty:historical=historical[historical['Franchise'].isin(allowed)]
             premium_comparison=comparison(current,historical,start,end,selected_franchise,application.build_premium_parlour_analysis)
-        if not summaries:return {'central_batches':pubs,'central_ready':False,'central_premium_comparison':premium_comparison,**insights}
+        if not summaries and not insights:return {'central_batches':pubs,'central_ready':False,'central_premium_comparison':premium_comparison,**insights}
         from decimal import Decimal
         totals={}
         for row in summaries:
@@ -190,7 +190,7 @@ def register_central(app,export_dir,scope):
           'central_voucher_ranking':sorted([dict(franchise=r['franchise'],units=sum(Decimal(v['summary']['voucher_units']) for v in summaries if v['franchise']==r['franchise'])) for r in {v['franchise']:v for v in summaries}.values()],key=lambda r:(-r['units'],r['franchise'].casefold())),
           'central_graphs':__import__('central_graphs').graphs(store,start,end,allowed) if request.args.get('section')=='graphs' or (request.view_args or {}).get('section')=='graphs' else [],
           'central_claims_verified':all(b['month'] in verified_claims for b in pubs),
-          'central_claim_branches':insights['claim_insights']['branch_summaries'] if insights else sorted(claims_by_franchise.values(),key=lambda row:row['franchise'].casefold()),
+          'central_claim_branches':__import__('claim_insights').rank_branches(insights['claim_insights']['branch_summaries'],request.args.get('branch_scenario','name')) if insights else sorted(claims_by_franchise.values(),key=lambda row:row['franchise'].casefold()),
           'central_branch_claim_totals':insights['claim_insights']['branch_totals'] if insights else totals,
           'central_branch_claim_dates':insights['claim_insights']['branch_dates'] if insights else {},
           'central_branch_claims_verified':insights['claim_insights']['branch_complete'] if insights else False,

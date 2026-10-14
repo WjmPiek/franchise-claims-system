@@ -85,12 +85,12 @@ class CentralPages(unittest.TestCase):
         self.assertEqual(page.data.count(b'<th>Product</th>'),1)
         self.assertNotIn(b'<h3><span class="claim-flag',page.data)
         self.assertIn(b'The first seven products in each category',page.data)
-        self.assertIn(b'12 months: 2025-10-01 to 2026-09-30',page.data)
+        self.assertIn(b'Period: 2025-10-01 to 2026-09-30',page.data)
         self.assertIn(b'date_from=2025-10-01&amp;date_to=2026-09-30',page.data)
         page=self.client.get('/overview/claims?date_from=2026-09-01&date_to=2026-09-30&product_from=2026-09-01&product_to=2026-09-30&product_scenario=count')
         self.assertEqual(page.status_code,200);self.assertIn(b'Most Paid Claims (Green &amp; Blue)',page.data)
         self.assertIn(b'name="product_from" value="2026-09-01"',page.data)
-        self.assertIn(b'12 months: 2025-10-01 to 2026-09-30',page.data)
+        self.assertIn(b'Period: 2025-10-01 to 2026-09-30',page.data)
         self.assertEqual(self.client.get('/overview/claims?product_from=2026-09-30&product_to=2026-09-01').status_code,400)
     def test_table_drag_assets_load_once_on_standalone_and_dashboard_pages(self):
         for path in ('/overview/claims','/overview/imports','/calculations?date_from=2026-09-01&date_to=2026-09-30'):
