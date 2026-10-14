@@ -1,7 +1,7 @@
 """Single approved import/export workflow; archived data remains intact."""
 from html.parser import HTMLParser
 from urllib.parse import urlsplit,parse_qs
-from flask import request,g,redirect,url_for,jsonify
+from flask import request,g,redirect,url_for,jsonify,session
 
 LEGACY_EXPORTS={'export','export_payover','board_report','policy_reports','direct_reports','direct_recreate','direct_download','direct_report_view','sample','claims_report'}
 LEGACY_IMPORTS={'central_import_balances','central_convert_saved','load_default_import_file'}
@@ -47,6 +47,12 @@ def register(app):
         if request.endpoint in LEGACY_EXPORTS or request.args.get('download'):
             return redirect(url_for('overview_page',section='downloads'))
     app.extensions['approved_file_workflow']=approved_file_workflow
+    @app.after_request
+    def reset_period_after_login(response):
+        if request.endpoint=='login' and response.status_code==302 and session.get('user_id'):
+            session.pop('period_dates',None)
+            session['latest_period_pending']=True
+        return response
     @app.after_request
     def remove_retired_download_links(response):
         if not response.is_streamed and response.mimetype=='text/html':
