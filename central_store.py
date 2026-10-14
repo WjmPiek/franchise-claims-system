@@ -23,6 +23,8 @@ class CentralStore:
                 'CREATE INDEX IF NOT EXISTS central_record_scope ON central_records(batch_id,franchise,destination,plan)',
                 'CREATE TABLE IF NOT EXISTS central_member_index (batch_id TEXT NOT NULL,n INTEGER NOT NULL,franchise TEXT NOT NULL,system_ref TEXT NOT NULL,product TEXT NOT NULL,PRIMARY KEY(batch_id,n))',
                 'CREATE TABLE IF NOT EXISTS central_product_monthly (batch_id TEXT NOT NULL,franchise TEXT NOT NULL,product TEXT NOT NULL,destination TEXT NOT NULL,plan TEXT NOT NULL,summary TEXT NOT NULL,PRIMARY KEY(batch_id,franchise,product,destination,plan))',
+                'CREATE TABLE IF NOT EXISTS central_product_benefits (batch_id TEXT NOT NULL,franchise TEXT NOT NULL,product TEXT NOT NULL,cover TEXT NOT NULL,PRIMARY KEY(batch_id,franchise,product,cover))',
+                'CREATE TABLE IF NOT EXISTS central_benefit_versions (batch_id TEXT PRIMARY KEY,member_rows INTEGER NOT NULL,built_at TEXT NOT NULL)',
                 'CREATE TABLE IF NOT EXISTS central_monthly (batch_id TEXT NOT NULL,franchise TEXT NOT NULL,summary TEXT NOT NULL,PRIMARY KEY(batch_id,franchise))',
                 'CREATE TABLE IF NOT EXISTS central_publications (month TEXT PRIMARY KEY,batch_id TEXT NOT NULL,version TEXT NOT NULL,published_at TEXT NOT NULL)',
                 'CREATE TABLE IF NOT EXISTS central_claim_batches (id TEXT PRIMARY KEY,source_file TEXT NOT NULL,owner_id INTEGER NOT NULL,created_at TEXT NOT NULL,amount_header TEXT NOT NULL,status TEXT NOT NULL)',
@@ -67,7 +69,7 @@ class CentralStore:
         if self.direct.get_engine:
             self.direct.execute(conn,'SELECT pg_advisory_xact_lock(hashtext(:key))',{'key':'central:'+month})
         self.reject_older_job(conn,batch_id,month,'central_publications')
-        totals={};rows=[];count=review=0;member_rows=[];product_totals={}
+        totals={};rows=[];count=review=0;member_rows=[];product_totals={};benefits=set();member_count=0
         expected=stage.execute('SELECT COUNT(*) FROM prepared').fetchone()[0]
         has_raw=stage.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='source_raw'").fetchone()[0]
         has_extra=stage.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='source_extra'").fetchone()[0]
@@ -93,6 +95,9 @@ class CentralStore:
             if prepared['destination']=='Vouchers':item['voucher_rows']+=1
             elif prepared['relation']=='MEM':
                 item['mem_rows']+=1
+                from performance_index import cover
+                benefit=cover(data[10]);member_count+=1
+                if benefit is not None:benefits.add((prepared['franchise'],data[11],benefit))
                 member_rows.append(dict(batch=batch_id,n=prepared['n'],franchise=prepared['franchise'],ref=str(data[16] or '').strip(),product=data[11]))
             for key in SUM_FIELDS:item[key]+=Decimal(calc[key])
             product_key=(prepared['franchise'],data[11],prepared['destination'],prepared['plan'])
@@ -126,6 +131,8 @@ class CentralStore:
             self.direct.execute(conn,'INSERT INTO central_monthly VALUES (:batch,:franchise,:summary)',dict(batch=batch_id,franchise=franchise,summary=encode(values)))
         for (franchise,product,destination,plan),values in product_totals.items():
             self.direct.execute(conn,'INSERT INTO central_product_monthly VALUES (:batch,:franchise,:product,:dest,:plan,:summary)',dict(batch=batch_id,franchise=franchise,product=product,dest=destination,plan=plan,summary=encode(values)))
+        from performance_index import write as write_benefits
+        write_benefits(self,conn,batch_id,benefits,member_count)
         from import_progress import report
         if self.direct.get_engine:report('Committing reconciled month',count,count)
         self.direct.execute(conn,'INSERT INTO central_publications VALUES (:month,:batch,:version,:created) ON CONFLICT(month) DO UPDATE SET batch_id=excluded.batch_id,version=excluded.version,published_at=excluded.published_at',dict(month=month,batch=batch_id,version=VERSION,created=stamp))
@@ -169,9 +176,9 @@ class CentralStore:
         for row in rows:row['summary']=json.loads(row['summary'])
         return rows
 
-    def records(self,batch_id,allowed=None,destination='',plan='',voucher=None):
+    def records(self,batch_id,allowed=None,destination='',plan='',voucher=None,relation=''):
         self.ensure();params={'batch':batch_id};where=['r.batch_id=:batch']
-        for key,value in [('destination',destination),('plan',plan)]:
+        for key,value in [('destination',destination),('plan',plan),('relation',relation)]:
             if value:where.append('r.'+key+'=:'+key);params[key]=value
         if voucher is not None:where.append("r.destination"+("=" if voucher else "<>")+"'Vouchers'")
         with self.direct.connection() as conn:

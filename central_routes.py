@@ -10,15 +10,21 @@ def financial_result(app,legacy):
     if hasattr(g,'central_financial_result'):return g.central_financial_result
     store=app.extensions.get('central_store')
     if store is None:return legacy
-    frame=store.frame(legacy.get('monthly'))
-    if frame.empty:return legacy
-    import pandas as pd
-    frame=frame.sort_values(['Franchise','Month']);frame['BrightRock Running Balance']=frame.groupby('Franchise')['BrightRock Month Total'].cumsum()
-    frame.attrs['central_dataset']=True
-    import app as application
-    periods,portfolio=application.rebuild_periods_and_portfolio(frame)
-    for target in (frame,periods):
-        if not target.empty:target['Recommendation']='Review — recommendation rule requires confirmation'
+    from published_cache import FINANCIAL,signature
+    def build():
+        frame=store.frame(legacy.get('monthly'))
+        if frame.empty:return None
+        frame=frame.sort_values(['Franchise','Month']);frame['BrightRock Running Balance']=frame.groupby('Franchise')['BrightRock Month Total'].cumsum()
+        frame.attrs['central_dataset']=True
+        import app as application
+        periods,portfolio=application.rebuild_periods_and_portfolio(frame)
+        for target in (frame,periods):
+            if not target.empty:target['Recommendation']='Review — recommendation rule requires confirmation'
+        return frame,periods,portfolio
+    snapshot=FINANCIAL.get((signature(store),id(legacy.get('monthly'))),build)
+    if snapshot is None:return legacy
+    frame,periods,portfolio=snapshot
+    frame=frame.copy(deep=True);periods=periods.copy(deep=True);portfolio=portfolio.copy()
     g.central_financial_result={**legacy,'monthly':frame,'periods':periods,'portfolio':portfolio,
       'rates':{'BrightRock':10.0,'Inkulu':2.5,'MFF':2.5},'book_rates':{'MFF Book Value':2.5,'Franchise Book Value':2.5}}
     return g.central_financial_result
@@ -115,7 +121,7 @@ def register_central(app,export_dir,scope):
         if not getattr(g,'user',None) or request.endpoint not in ('overview_page','dashboard','workspace_page'):return {}
         section=(request.view_args or {}).get('section') or request.args.get('section') or 'risk'
         start,end=selected();allowed=access();pubs=[b for b in store.publications() if start<=b['month']<=end]
-        selected_franchise=request.args.get('franchise','All')
+        selected_franchise=getattr(g,'sidebar_franchise',request.args.get('franchise','All'))
         if selected_franchise!='All':allowed={selected_franchise} if allowed is None or selected_franchise in allowed else set()
         summaries=store.summaries(start,end,allowed)
         insights={}

@@ -183,6 +183,9 @@ class JobQueue:
                     elif job['kind']=='allocation_repair':
                         from allocation_repair import repair
                         result=repair(self.store,job['owner_id'],self,identifier)
+                    elif job['kind']=='performance_index':
+                        from performance_index import backfill
+                        result=backfill(self.store,self,identifier)
                     elif job['kind']=='verification':
                         from import_verification import verify_targets
                         result=verify_targets(self.store,self,job['args']['targets'],identifier)

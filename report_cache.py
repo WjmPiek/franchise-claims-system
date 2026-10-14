@@ -44,7 +44,7 @@ class ResultCache:
             self._values.clear()
 
 DETAIL_CACHE = ResultCache(ttl=30)
-REFRESH_CACHE = ResultCache(ttl=30, max_entries=4)
+REFRESH_CACHE = ResultCache(ttl=float('inf'), max_entries=4)
 
 def data_revision(connection, sql_text):
     row = next(iter(connection.execute(sql_text("""
@@ -69,3 +69,4 @@ def read_policy_details(engine, sql_text, query, params):
         with engine.connect() as connection:
             return tuple(dict(row) for row in connection.execute(sql_text(query), params).mappings())
     return DETAIL_CACHE.get(key, read)
+

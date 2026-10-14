@@ -4900,6 +4900,7 @@ def log_error_to_db(exc, route=None):
 
 @app.before_request
 def load_logged_in_user():
+    if (request.endpoint or '').startswith('static'):return None
     g.user = get_user_by_id(session.get('user_id')) if session.get('user_id') else None
     endpoint = request.endpoint or ''
     if MAINTENANCE_MODE and endpoint not in PUBLIC_ENDPOINTS and not endpoint.startswith('static'):
@@ -4938,8 +4939,8 @@ def load_logged_in_user():
     if DATABASE_URL and request.endpoint in reporting_endpoints:
         try:
             from report_cache import refresh_reporting_data
-            settings = (tuple(sorted(effective_result().get('rates', {}).items())),
-                        tuple(sorted(effective_result().get('book_rates', {}).items())),
+            settings = (tuple(sorted(LAST_RESULT.get('rates', {}).items())),
+                        tuple(sorted(LAST_RESULT.get('book_rates', {}).items())),
                         os.stat(CONFIG_FILE).st_mtime_ns if os.path.exists(CONFIG_FILE) else None)
             refresh_reporting_data(get_db_engine(), text,
                                    lambda: reload_dashboard_from_postgres(strict=True),
@@ -6035,6 +6036,10 @@ def dashboard(section='dashboard'):
     if request.method=='GET' and section=='graphs':
         from central_graphs import render_page
         return render_page(app)
+    if request.method=='GET' and section!='dashboard':
+        from central_dashboard import render_if_published
+        prepared=render_if_published(app,section)
+        if prepared is not None:return prepared
     if request.method=='POST' and request.files and app.extensions.get('central_jobs'):
         return jsonify(ok=False,error='Use the Imports tab for verified Direct and paid-claims source files.'),410
     if request.method=='GET' and section=='dashboard':return redirect(url_for('overview_page',section='risk',**request.args.to_dict()))

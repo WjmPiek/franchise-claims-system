@@ -75,6 +75,30 @@ class CentralPages(unittest.TestCase):
         with patch('central_routes.catalog',side_effect=AssertionError('Unrelated report catalogue')):
             for section in ('risk','commissions','claims','top_franchise','imports','admin'):
                 self.assertEqual(self.client.get('/overview/'+section).status_code,200,section)
+    def test_published_sidebar_pages_skip_legacy_reanalysis(self):
+        with patch.object(baseline.claims,'build_executive_dashboard_context',side_effect=AssertionError('Legacy analysis rebuilt')),patch.object(baseline.claims,'apply_franchise_config',side_effect=AssertionError('Legacy portfolio rebuilt')):
+            for section in ('risk','commissions','policies','top_franchise','claims','imports','admin','downloads'):
+                self.assertEqual(self.client.get('/overview/'+section+'?date_from=2026-09-01&date_to=2026-09-30').status_code,200,section)
+    def test_financial_cache_copies_and_rechecks_publication_versions(self):
+        from central_routes import financial_result
+        from published_cache import FINANCIAL
+        FINANCIAL.clear()
+        def read():
+            with self.app.test_request_context('/overview/risk'):
+                g.user={'id':999999,'role':'admin'}
+                return financial_result(self.app,baseline.claims.LAST_RESULT)
+        with patch.object(self.store,'frame',wraps=self.store.frame) as frame:
+            first=read();original=first['monthly'].iloc[0]['Retail Premium']
+            first['monthly'].iloc[0,first['monthly'].columns.get_loc('Retail Premium')]=-1
+            self.assertEqual(read()['monthly'].iloc[0]['Retail Premium'],original)
+            self.assertEqual(frame.call_count,1)
+            with self.store.direct.connection() as conn:
+                before=conn.execute("SELECT published_at FROM central_publications WHERE month='2026-09'").fetchone()[0]
+                conn.execute("UPDATE central_publications SET published_at=? WHERE month='2026-09'",(before+'cache-test',))
+            try:read();self.assertEqual(frame.call_count,2)
+            finally:
+                with self.store.direct.connection() as conn:conn.execute("UPDATE central_publications SET published_at=? WHERE month='2026-09'",(before,))
+                FINANCIAL.clear()
     def test_claim_profile_updates_read_claims_only_and_keep_independent_dates(self):
         with patch.object(self.store,'records',side_effect=AssertionError('Profile chart must not scan policies')):
             for key in ('claim_relationship_products','claim_product_age','claim_gender','claim_cause'):

@@ -16,7 +16,13 @@ SPECS={'relation':'Relationships of life assured','age':'Age categories','produc
  'branch_month':'Paid claims by branch and month','risk':'Product sales flags','risk_franchise':'Franchises claiming red products',
  'early':'Early incidents within 180 days','delay':'Days from reported to paid','quality':'Claims data to review'}
 
+class FastFields(dict):
+    def __init__(self,source):
+        super().__init__(source);self.normalised={}
+        for k,v in source.items():self.normalised.setdefault(normal(k),str(v).strip())
+
 def field(source,name):
+    if isinstance(source,FastFields):return source.normalised.get(normal(name),'')
     return next((str(v).strip() for k,v in source.items() if normal(k)==normal(name)),'')
 
 def source_date(source,name):
@@ -32,6 +38,7 @@ def number(value):
     except InvalidOperation:return None
 
 def classify(source):
+    source=FastFields(source)
     rel=field(source,'Relationship of Life Assured/Member');r=normal(rel)
     relation='Main Life' if r in ('MAINLIFE','MEM','MEMBER','MEMBERMAINLIFE') else 'Extended Family' if r in ('EXT','EXTENDEDFAMILY') else 'Spouse' if r in ('SPS','SPOUSE') else 'Children' if r.startswith('CHILD') or r in ('DEP','DEPEXTRACHILD') else rel or 'Unknown'
     status=field(source,'Claim Status');s=status.casefold()
@@ -44,7 +51,7 @@ def classify(source):
       payee=payee,payee_source=field(source,'PayableTo'),days=days,years=days/Decimal('365.25') if days is not None else None,
       reported_on=source_date(source,'Claim Reported Date'),paid_on=source_date(source,'Date Of Claim Paid'),
       incident_on=source_date(source,'Date of Incident'),product=field(source,'Product') or 'Unallocated',
-      claim=field(source,'Claim Number') or field(source,'ClaimNumber_Administrator'),
+      administrator=field(source,'Administrator'),claim=field(source,'Claim Number') or field(source,'ClaimNumber_Administrator'),
       bank=component(source,VERIFIED_AMOUNT_HEADER),netoff=component(source,'Amount net off against claim'),
       reported_amount=component(source,'Amount of Claim Reported'))
 
@@ -82,8 +89,8 @@ def backfill(store,queue,job_id):
         finally:path.unlink(missing_ok=True)
     return dict(ok=True,source={'rows':count},analysed_files=len(jobs),financial_data_changed=False)
 
-def populations(store,dates,allowed=None):
-    store.ensure();d=store.direct;start,end=dates['date_from'],dates['date_to'];events=[];paid=[];seen={};missing=[]
+def _source_populations(store):
+    store.ensure();d=store.direct;paid=[];seen={};missing=[]
     with d.connection() as conn:
         batches=d.records(d.execute(conn,'SELECT DISTINCT b.id,b.source_file,b.created_at,e.version FROM central_claim_batches b JOIN central_claim_publications p ON p.batch_id=b.id LEFT JOIN central_claim_event_versions e ON e.batch_id=b.id ORDER BY b.created_at,b.id'))
         for batch in batches:
@@ -91,16 +98,21 @@ def populations(store,dates,allowed=None):
             for raw in d.records(d.execute(conn,'SELECT n,franchise,source_json FROM central_claim_events WHERE batch_id=:id ORDER BY n',{'id':batch['id']})):
                 source=json.loads(raw['source_json']);item={**classify(source),'n':raw['n'],'franchise':raw['franchise'],'source_file':batch['source_file'],'batch':batch['id']}
                 # Deduplicate overlapping exports by the source claim identifier; newest snapshot wins.
-                key=(normal(field(source,'Administrator')),normal(item['claim'])) if item['claim'] else (batch['id'],raw['n'])
+                key=(normal(item['administrator']),normal(item['claim'])) if item['claim'] else (batch['id'],raw['n'])
                 seen[key]=item
         # Financial rows follow the existing monthly publications, never the reported cohort.
-        query='SELECT c.n,c.month,c.franchise,c.source_json,b.source_file,c.batch_id FROM central_claims c JOIN central_claim_publications p ON p.batch_id=c.batch_id AND p.month=c.month JOIN central_claim_batches b ON b.id=c.batch_id WHERE c.month BETWEEN :start AND :end'
-        for raw in d.records(d.execute(conn,query,{'start':start[:7],'end':end[:7]})):
-            if allowed is not None and raw['franchise'] not in allowed:continue
+        query='SELECT c.n,c.month,c.franchise,c.source_json,b.source_file,c.batch_id FROM central_claims c JOIN central_claim_publications p ON p.batch_id=c.batch_id AND p.month=c.month JOIN central_claim_batches b ON b.id=c.batch_id'
+        for raw in d.records(d.execute(conn,query)):
             item={**classify(json.loads(raw['source_json'])),'n':raw['n'],'franchise':raw['franchise'],'source_file':raw['source_file'],'batch':raw['batch_id'],'month':raw['month']}
-            if item['paid_on'] and start<=item['paid_on']<=end:paid.append(item)
-    events=[v for v in seen.values() if (allowed is None or v['franchise'] in allowed) and v['reported_on'] and start<=v['reported_on']<=end]
-    return events,paid,missing
+            paid.append(item)
+    return list(seen.values()),paid,missing
+
+def populations(store,dates,allowed=None):
+    from published_cache import CLAIM_SOURCE,signature
+    events,paid,missing=CLAIM_SOURCE.get(signature(store),lambda:_source_populations(store))
+    start,end=dates['date_from'],dates['date_to']
+    def within(r,field):return (allowed is None or r['franchise'] in allowed) and r[field] and start<=r[field]<=end
+    return ([dict(r) for r in events if within(r,'reported_on')],[dict(r) for r in paid if within(r,'paid_on')],list(missing))
 
 def grouped(records,key):
     groups={}
@@ -115,19 +127,15 @@ def grouped(records,key):
 
 def analyse(store,dates,allowed=None):
     store.ensure()
-    with store.direct.connection() as conn:
-        versions=tuple(tuple(r) for r in store.direct.execute(conn,'SELECT p.month,p.batch_id,e.version FROM central_claim_publications p LEFT JOIN central_claim_event_versions e ON e.batch_id=p.batch_id ORDER BY p.month'))
-    key=(id(store),str(store.direct.path),tuple(sorted(dates.items())),None if allowed is None else tuple(sorted(allowed)),versions,tuple((b['month'],b['id']) for b in store.publications()))
+    from published_cache import signature
+    key=(signature(store),tuple(sorted(dates.items())),None if allowed is None else tuple(sorted(allowed)))
     if key in _CACHE and time.monotonic()-_CACHE[key][0]<120:return _CACHE[key][1]
     events,paid,missing=populations(store,dates,allowed);bank=[r for r in paid if r['bank']!=0];offset=[r for r in paid if r['netoff']!=0]
     start,end=dates['date_from'][:7],dates['date_to'][:7]
     # Product cover is sourced from actual Direct MEM benefits, not claim payout amounts.
-    covers=defaultdict(set);premium=defaultdict(lambda:Decimal(0));names={}
+    from performance_index import products
+    premium,covers,names=products(store,start,end,allowed)
     pubs=[b for b in store.publications() if start<=b['month']<=end]
-    for batch in pubs:
-        for r in store.records(batch['id'],allowed,voucher=False):
-            k=normal(r['data'][11]);names[k]=r['data'][11];premium[k]+=Decimal(r['payover'])
-            if r['relation']=='MEM' and number(r['data'][10]) is not None:covers[k].add(number(r['data'][10]))
     for r in events:
         options=covers.get(normal(r['product']),set())
         r['cover']='R'+format(next(iter(options)),',.2f') if len(options)==1 else 'Unknown / conflicting Direct cover'
