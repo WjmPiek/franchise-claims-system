@@ -112,7 +112,15 @@ def register_central(app,export_dir,scope):
             from claim_insights import analyse
             from period_selection import selected_dates
             insights={'claim_insights':analyse(store,selected_dates(request.args),allowed)}
-        if not summaries:return {'central_batches':pubs,'central_ready':False,**insights}
+        import app as application
+        from premium_comparison import comparison
+        current=application.apply_user_franchise_scope(application.effective_result()['monthly'])
+        historical=application.apply_user_franchise_scope(application.LAST_RESULT.get('monthly',__import__('pandas').DataFrame()))
+        if allowed is not None:
+            if not current.empty:current=current[current['Franchise'].isin(allowed)]
+            if not historical.empty:historical=historical[historical['Franchise'].isin(allowed)]
+        premium_comparison=comparison(current,historical,start,end,selected_franchise,application.build_premium_parlour_analysis)
+        if not summaries:return {'central_batches':pubs,'central_ready':False,'central_premium_comparison':premium_comparison,**insights}
         from decimal import Decimal
         totals={}
         for row in summaries:
@@ -150,6 +158,7 @@ def register_central(app,export_dir,scope):
             item=aul_groups.setdefault(name,dict(franchise=name,rows=0,payover=Decimal(0)))
             item['rows']+=int(value['aul_rows']);item['payover']+=Decimal(value['aul_payover'])
         return {**insights,'central_ready':True,'central_totals':totals,'central_batches':pubs,
+          'central_premium_comparison':premium_comparison,
           'business_branches':__import__('business_overview').branch_totals(summaries,claims_by_franchise.values()),
           'central_rankings':rankings,'central_missing_months':[m for m in expected if m not in present],
           'central_catalog':[{'batch':{**b,'source_rows':sum(r['summary']['rows'] for r in summaries if r['month']==b['month'])},'files':allowed_catalog(b,allowed)} for b in pubs],
