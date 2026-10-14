@@ -179,6 +179,9 @@ class JobQueue:
                                 _,_,_,issues=prepare_outputs(stage,self.root/identifier,source_batch['source_file'],'mpia','mpia','policy',generate_files=False)
                                 self.store.direct.save(stage,identifier,args['source_owner'],source_batch['month'],source_batch['source_file'],central_only=True)
                         result=self.store.existing_batch(identifier);result.update(migrated_from=args['source_batch'],source_provenance='Saved source fields; original file bytes were not available for this older import.')
+                    elif job['kind']=='verification':
+                        from import_verification import verify_targets
+                        result=verify_targets(self.store,self,job['args']['targets'],identifier)
                     elif job['kind']=='export':
                         from central_reports import generate,catalog
                         args=job['args'];batch=next((b for b in self.store.publications() if b['id']==args['batch']),None)
@@ -194,7 +197,7 @@ class JobQueue:
                         result={'ok':True,'name':item['name'],'path':out.name,'batch_id':batch['id'],'metadata':metadata,'sha256':digest}
                     else:raise ValueError('Unknown processing task.')
                     if job['args'].get('audit_id'):self.audit.finish(job['args']['audit_id'],{**result,'source':{k:str(v) for k,v in result.get('source',{}).items()}})
-                    self.update(identifier,'Published' if job['kind']!='export' else 'Ready for download',state='completed',result=result)
+                    self.update(identifier,'Checks complete' if job['kind']=='verification' else 'Published' if job['kind']!='export' else 'Ready for download',state='completed',result=result)
                 except Exception as exc:
                     self.app.logger.exception('Central task failed')
                     message=str(exc)[:1500] if isinstance(exc,ValueError) else 'Processing failed. Previous valid publications remain available. See the import log.'
@@ -209,6 +212,8 @@ class JobQueue:
 
 def register_jobs(app,store,export_dir,audit,resolver=None):
     jobs=JobQueue(app,store,export_dir,audit,resolver);app.extensions['central_jobs']=jobs
+    from import_verification import register as register_verification
+    register_verification(app,store,jobs)
     @app.before_request
     def resume_central_jobs():
         # Any authenticated request restarts durable queued work after a web-worker restart.
