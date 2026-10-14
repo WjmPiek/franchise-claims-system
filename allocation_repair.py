@@ -111,7 +111,9 @@ def repair(store,owner,queue=None,job_id=None):
             if exists:
                 checked=d.execute(conn,'SELECT result FROM central_import_verification WHERE batch_id=:id',{'id':batch['id']}).fetchone()
                 if checked:
-                    predicate="json_array_length(CAST(record_json AS json)->'issues')>0" if d.get_engine else "json_array_length(record_json,'$.issues')>0"
+                    # PostgreSQL JSON operators reject escaped NULs in unrelated
+                    # source fields. Inspect the serialized issues array as text.
+                    predicate=r'''record_json !~ '"issues"[[:space:]]*:[[:space:]]*\[[[:space:]]*\]' ''' if d.get_engine else "json_array_length(record_json,'$.issues')>0"
                     reviews=d.records(d.execute(conn,'SELECT record_json FROM central_records WHERE batch_id=:id AND '+predicate,{'id':batch['id']}));reasons=Counter()
                     for item in reviews:reasons.update(json.loads(item['record_json'])['issues'])
                     result=json.loads(checked[0]);result['review']=len(reviews);result['review_reasons']=dict(reasons.most_common())

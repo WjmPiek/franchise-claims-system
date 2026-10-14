@@ -189,7 +189,7 @@ def register_central(app,export_dir,scope):
             months=[b['month'] for b in store.publications() if start<=b['month']<=end]
             if months:start=end=max(months)
         store.ensure();params={'start':start,'end':end};clauses=['p.month BETWEEN :start AND :end']
-        review_predicate="json_array_length(CAST(r.record_json AS json)->'issues')>0" if store.direct.get_engine else "json_array_length(json_extract(r.record_json,'$.issues'))>0"
+        review_predicate=r'''r.record_json !~ '"issues"[[:space:]]*:[[:space:]]*\[[[:space:]]*\]' ''' if store.direct.get_engine else "json_array_length(json_extract(r.record_json,'$.issues'))>0"
         predicates={'review':review_predicate,'aul':"r.destination='AUL'",'plan2':"r.plan='Plan 2'",'historic':"r.plan='Historic'",'unclassified':"r.plan='Unclassified'",'vouchers':"r.destination='Vouchers'",'insurers':"r.destination<>'Vouchers'",'fees':"r.relation='MEM' AND r.destination<>'Vouchers'"}
         if category in predicates:clauses.append(predicates[category])
         if category=='commissions':clauses.append("r.destination<>'Vouchers'")
