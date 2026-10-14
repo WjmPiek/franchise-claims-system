@@ -21,6 +21,7 @@ class CentralStore:
                 'CREATE TABLE IF NOT EXISTS central_batches (id TEXT PRIMARY KEY,owner_id INTEGER NOT NULL,month TEXT NOT NULL,source_file TEXT NOT NULL,version TEXT NOT NULL,created_at TEXT NOT NULL,status TEXT NOT NULL,source_rows INTEGER NOT NULL,review_rows INTEGER NOT NULL)',
                 'CREATE TABLE IF NOT EXISTS central_records (batch_id TEXT NOT NULL,n INTEGER NOT NULL,franchise TEXT NOT NULL,destination TEXT NOT NULL,plan TEXT NOT NULL,product TEXT NOT NULL,relation TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(batch_id,n))',
                 'CREATE INDEX IF NOT EXISTS central_record_scope ON central_records(batch_id,franchise,destination,plan)',
+                'CREATE INDEX IF NOT EXISTS central_record_product ON central_records(batch_id,product,relation,franchise)',
                 'CREATE TABLE IF NOT EXISTS central_member_index (batch_id TEXT NOT NULL,n INTEGER NOT NULL,franchise TEXT NOT NULL,system_ref TEXT NOT NULL,product TEXT NOT NULL,PRIMARY KEY(batch_id,n))',
                 'CREATE TABLE IF NOT EXISTS central_product_monthly (batch_id TEXT NOT NULL,franchise TEXT NOT NULL,product TEXT NOT NULL,destination TEXT NOT NULL,plan TEXT NOT NULL,summary TEXT NOT NULL,PRIMARY KEY(batch_id,franchise,product,destination,plan))',
                 'CREATE TABLE IF NOT EXISTS central_product_benefits (batch_id TEXT NOT NULL,franchise TEXT NOT NULL,product TEXT NOT NULL,cover TEXT NOT NULL,PRIMARY KEY(batch_id,franchise,product,cover))',

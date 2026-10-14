@@ -1,4 +1,5 @@
 import csv,json,sqlite3,tempfile,unittest
+from decimal import Decimal
 from pathlib import Path
 from contextlib import closing
 from unittest.mock import patch
@@ -38,10 +39,54 @@ class CentralPages(unittest.TestCase):
         for section in ('risk','commissions','policies','top_franchise','claims','downloads','graphs','admin','imports'):
             response=self.client.get('/overview/'+section+args)
             self.assertEqual(response.status_code,200,(section,response.data[:150]))
-        response=self.client.get('/calculations'+args+'&category=claims')
+        response=self.client.get('/calculations'+args+'&category=claims&view=records')
         self.assertEqual(response.status_code,200);self.assertIn(b'Bank payments 70',response.data);self.assertIn(b'Net-offs 30',response.data)
-        response=self.client.get('/calculations'+args+'&category=commissions')
+        response=self.client.get('/calculations'+args+'&category=commissions&view=records')
         self.assertIn(b'2 matching rows',response.data);self.assertIn(b'DEP',response.data)
+    def test_calculation_cards_default_to_combined_franchises_for_every_category(self):
+        from calculation_groups import policy_groups,money_expression
+        dates='?date_from=2026-09-01&date_to=2026-09-30'
+        for category in ('source','review','insurers','aul','plan2','historic','unclassified','commissions','active','faithnet','fees','vouchers','claims'):
+            page=self.client.get('/calculations'+dates+'&category='+category)
+            self.assertEqual(page.status_code,200,category)
+            self.assertIn(b'One combined row per franchise',page.data,category)
+            self.assertNotIn(b'Each row is a separate source record',page.data)
+        page=self.client.get('/calculations'+dates+'&category=insurers')
+        self.assertIn(b'2 matching source rows combined into 1 franchise rows',page.data)
+        self.assertIn(b'R320.00',page.data)
+        page=self.client.get('/calculations'+dates+'&category=vouchers')
+        self.assertIn(b'R13.00',page.data);self.assertIn(b'R4.00',page.data)
+        page=self.client.get('/calculations'+dates+'&category=claims')
+        self.assertIn(b'R70.00',page.data);self.assertIn(b'R30.00',page.data)
+        page=self.client.get('/calculations'+dates+'&q=missing-product')
+        self.assertIn(b'0 matching source rows combined into 0 franchise rows',page.data)
+        self.assertEqual(self.client.get('/calculations'+dates+'&view=bad').status_code,400)
+        expression=money_expression(True,'paid_commissions')
+        self.assertIn('substring(r.record_json',expression);self.assertNotIn('::json',expression)
+        base=" FROM central_records r JOIN central_publications p ON p.batch_id=r.batch_id WHERE p.month='2026-09'"
+        rows=policy_groups(self.store,base,{})
+        self.assertEqual(len(rows),1);self.assertEqual(str(rows[0]['retail']),'340')
+        from calculation_groups import summary_groups,FIELDS
+        for category in ('source','insurers','commissions'):
+            fast=summary_groups(self.store,'2026-09','2026-09',None,category)
+            selected_base=base+(" AND r.destination<>'Vouchers'" if category!='source' else '')
+            exact=policy_groups(self.store,selected_base,{})
+            for field in FIELDS:self.assertEqual(Decimal(str(fast[0][field])),Decimal(str(exact[0][field])),(category,field))
+        old=self.client.get('/franchise/MARTINS%20FUNERALS%20ERMELO'+dates)
+        self.assertEqual(old.status_code,302);self.assertIn('/franchise-summary?',old.location)
+
+    def test_top_product_links_use_typed_product_filter_and_keep_it_for_source_view(self):
+        product='Gold Family Plan 31 to 55 Years R 40 000'
+        params=dict(date_from='2026-09-01',date_to='2026-09-30',category='active',product=product)
+        page=self.client.get('/calculations',query_string=params)
+        self.assertEqual(page.status_code,200);self.assertIn(b'1 matching source rows combined into 1 franchise rows',page.data)
+        self.assertIn(b'R300.00',page.data);self.assertIn(b'name="product"',page.data)
+        page=self.client.get('/calculations',query_string=dict(params,view='records'))
+        self.assertEqual(page.status_code,200);self.assertIn(b'1 matching rows',page.data)
+        rankings=self.client.get('/overview/top_franchise?date_from=2026-09-01&date_to=2026-09-30')
+        self.assertIn(b'product=Gold+Family',rankings.data)
+        self.assertNotIn(b'q=Gold+Family',rankings.data)
+
     def test_scope_protects_details_and_catalogue(self):
         original=self.app.before_request_funcs
         self.app.before_request_funcs={None:[lambda:setattr(g,'user',dict(id=999998,role='viewer'))]}

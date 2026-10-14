@@ -33,6 +33,11 @@ def register_central(app,export_dir,scope):
     from table_pan import register as register_table_pan
     register_table_pan(app)
     store=app.extensions['central_store'];root=Path(export_dir)/'central_reports';root.mkdir(parents=True,exist_ok=True)
+    # Old bookmarks must use the same combined franchise destination as new links.
+    def combined_franchise_compatibility(franchise):
+        return redirect(url_for('franchise_summary',franchise=franchise,**{key:request.args[key] for key in ('date_from','date_to') if key in request.args}))
+    app.view_functions['franchise_page']=combined_franchise_compatibility
+
     def access():
         user=getattr(g,'user',None) or {}
         if not user:return None
@@ -206,6 +211,8 @@ def register_central(app,export_dir,scope):
         if user.get('role') in ('underwriter','voucher_supplier'):return redirect(url_for('central_catalog_page'))
         start,end=selected();allowed=access();franchise=request.args.get('franchise','All')
         if franchise!='All':allowed={franchise} if allowed is None or franchise in allowed else set()
+        view=request.args.get('view','franchises')
+        if view not in ('franchises','records'):return 'Unknown record view.',400
         category=request.args.get('category','source');page=max(1,request.args.get('page',1,type=int));size=50
         if category=='active':
             months=[b['month'] for b in store.publications() if start<=b['month']<=end]
@@ -224,11 +231,16 @@ def register_central(app,export_dir,scope):
                 for i,name in enumerate(sorted(allowed)):key='f'+str(i);keys.append(':'+key);params[key]=name
                 clauses.append('r.franchise IN ('+','.join(keys)+')')
         query=request.args.get('q','').strip()[:150]
+        product=request.args.get('product','')
         if category=='claims':
             claim_params={k:v for k,v in params.items() if not k.startswith('limit') and not k.startswith('offset')}
             claim_clauses=[c.replace('p.month','c.month').replace('r.franchise','c.franchise') for c in clauses if c not in predicates.values()]
             if query:claim_clauses.append('LOWER(c.source_json) LIKE :query');claim_params['query']='%'+query.lower()+'%'
             claim_base=' FROM central_claims c JOIN central_claim_publications p ON p.batch_id=c.batch_id AND p.month=c.month WHERE '+' AND '.join(claim_clauses)
+            if view=='franchises':
+                from calculation_groups import claim_groups
+                groups=claim_groups(store,claim_base,claim_params)
+                return render_template('calculation_franchises.html',groups=groups,count=sum(r['rows'] for r in groups),category=category,franchise=franchise,query=query,product=product,date_from=g.period_dates['date_from'],date_to=g.period_dates['date_to'])
             with store.direct.connection() as conn:
                 aggregate='SUM(CAST(c.amount AS NUMERIC))' if store.direct.get_engine else 'decimal_sum(c.amount)'
                 control=store.direct.execute(conn,'SELECT COUNT(*),COALESCE('+aggregate+',0),SUM(CASE WHEN CAST(c.amount AS NUMERIC)<>0 THEN 1 ELSE 0 END)'+claim_base,claim_params).fetchone()
@@ -246,16 +258,21 @@ def register_central(app,export_dir,scope):
                     aggregate='SUM(CAST(x.{field} AS NUMERIC))' if store.direct.get_engine else 'decimal_sum(x.{field})'
                     joined=claim_base.replace(' WHERE ',' LEFT JOIN central_claim_components x ON x.batch_id=c.batch_id AND x.n=c.n WHERE ')
                     amounts=store.direct.execute(conn,'SELECT COALESCE('+aggregate.format(field='net_off')+',0),COALESCE('+aggregate.format(field='bank_paid')+',0)'+joined,claim_params).fetchone();net_off,bank_paid=amounts
-            return render_template('central_claim_detail.html',records=records,count=control[0],claim_count=control[2] or 0,total=control[1],net_off=net_off,bank_paid=bank_paid,page=page,date_from=g.period_dates['date_from'],date_to=g.period_dates['date_to'],franchise=franchise,query=query)
+            return render_template('central_claim_detail.html',records=records,count=control[0],claim_count=control[2] or 0,total=control[1],net_off=net_off,bank_paid=bank_paid,page=page,date_from=g.period_dates['date_from'],date_to=g.period_dates['date_to'],franchise=franchise,query=query,product=product)
+        if product:clauses.append('r.product=:product');params['product']=product
         if query:clauses.append('LOWER(r.record_json) LIKE :query');params['query']='%'+query.lower()+'%'
         base=' FROM central_records r JOIN central_publications p ON p.batch_id=r.batch_id WHERE '+' AND '.join(clauses)
+        if view=='franchises':
+            from calculation_groups import policy_groups,summary_groups
+            groups=summary_groups(store,start,end,allowed,category) if not query and not product and category in ('source','insurers','commissions') else policy_groups(store,base,params)
+            return render_template('calculation_franchises.html',groups=groups,count=sum(r['rows'] for r in groups),category=category,franchise=franchise,query=query,product=product,date_from=g.period_dates['date_from'],date_to=g.period_dates['date_to'])
         with store.direct.connection() as conn:
             count=store.direct.execute(conn,'SELECT COUNT(*)'+base,params).fetchone()[0]
             params.update(limit=size,offset=(page-1)*size)
             result=store.direct.execute(conn,'SELECT r.record_json,p.month'+base+' ORDER BY p.month DESC,r.n LIMIT :limit OFFSET :offset',params)
             records=[{**json.loads(row[0]),'month':row[1]} for row in result]
         return render_template('central_calculations.html',records=records,count=count,page=page,category=category,
-            date_from=g.period_dates['date_from'],date_to=g.period_dates['date_to'],franchise=franchise,query=query)
+            date_from=g.period_dates['date_from'],date_to=g.period_dates['date_to'],franchise=franchise,query=query,product=product)
 
     @app.get('/reports/catalog')
     def central_catalog_page():
