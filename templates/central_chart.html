@@ -1,0 +1,8 @@
+<svg class="line-chart" id="centralGraph{{ graph.key }}" viewBox="0 0 600 240" role="img" aria-label="{{ graph.label }} by month" style="display:block;width:100%;height:auto;min-height:180px">
+<title>{{ graph.label }} by month</title>
+{% if graph.chart.points %}
+{% for tick in graph.chart.ticks %}<line x1="70" x2="570" y1="{{ tick.y }}" y2="{{ tick.y }}" stroke="#e3e7f1"/><text x="62" y="{{ tick.y+4 }}" text-anchor="end" fill="#5e687d" font-size="11">{% if graph.unit!='rows' %}R{% endif %}{{ '%0.0f'|format(tick.value) }}</text>{% endfor %}
+{% if graph.chart.points|length == 1 %}{% set p=graph.chart.points[0] %}<rect x="240" y="{{ [p.y,graph.chart.baseline]|min }}" width="120" height="{{ [2,(p.y-graph.chart.baseline)|abs]|max }}" fill="#6b4aa0" rx="4"><title>{{ p.label }}: {{ p.value|int if graph.unit=='rows' else p.value|money }}</title></rect>{% else %}<path d="{{ graph.chart.path }}" fill="none" stroke="#6b4aa0" stroke-width="3" stroke-linejoin="round"/>{% endif %}
+{% for p in graph.chart.points %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="5" fill="#6b4aa0"><title>{{ p.label }}: {{ p.value|int if graph.unit=='rows' else p.value|money }}</title></circle>{% if loop.index0 % graph.chart.label_step == 0 or loop.last %}<text x="{{ p.x }}" y="220" text-anchor="middle" fill="#5e687d" font-size="11">{{ p.label }}</text>{% endif %}{% endfor %}
+{% else %}<text x="300" y="110" text-anchor="middle" fill="#667085">No verified data in this selection</text>{% endif %}
+</svg>
