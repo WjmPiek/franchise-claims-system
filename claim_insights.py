@@ -205,7 +205,7 @@ def register(app,store,access):
         def label(r):
             return r['product'] if metric in ('risk','duration','early','quality') else r['product']+' / '+r['age'] if metric=='product_age' else r.get('cover','Unknown') if metric=='cover' else r['franchise']+' / '+r['month'] if metric=='branch_month' else r['franchise'] if metric in ('risk_franchise','netoff','delay') else r.get(metric,'Unknown')
         if group:records=[r for r in records if label(r)==group]
-        product=request.args.get('product','')
+        product=request.args.get('product','') if metric=='product_age' else ''
         if product:
             records=[r for r in records if normal(r['product'])==normal(product)]
             if metric=='product_age':rows=grouped(records,label)
