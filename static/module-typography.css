@@ -1,10 +1,14 @@
 /* Shared type scale follows the HR Management reference. */
-html body :is(.ms-main,.content-area,.content-panel) :is(h1,h2){font-family:Arial,Helvetica,sans-serif!important;font-size:24px!important;font-weight:700!important;line-height:1.3!important;letter-spacing:0!important;color:#211b30!important}
-html body :is(.ms-main,.content-area,.content-panel) :is(h3,h4,h5,h6){font-family:Arial,Helvetica,sans-serif!important;font-size:20px!important;font-weight:700!important;line-height:1.3!important;letter-spacing:0!important;color:#211b30!important}
+html body :is(.ms-main,.content-area,.content-panel) h1{font-family:Arial,Helvetica,sans-serif!important;font-size:24px!important;font-weight:700!important;line-height:1.3!important;letter-spacing:0!important;color:#211b30!important}
+html body :is(.ms-main,.content-area,.content-panel) :is(h2,h3,h4,h5,h6){font-family:Arial,Helvetica,sans-serif!important;font-size:14px!important;font-weight:400!important;line-height:1.5!important;letter-spacing:.14em!important;text-transform:uppercase!important;color:#6b4ba0!important}
 html body :is(.ms-main,.content-area,.content-panel) p{font-family:Arial,Helvetica,sans-serif!important;font-size:14px!important;font-weight:400!important;line-height:1.5!important;letter-spacing:0!important;color:#758195}
 html body :is(.ms-main,.content-area,.content-panel) .eyebrow{font-family:Arial,Helvetica,sans-serif!important;font-size:14px!important;font-weight:400!important;line-height:1.5!important;letter-spacing:.14em!important;text-transform:uppercase!important;color:#6b4ba0!important}
 html body :is(.ms-main,.content-area,.content-panel) :is(p.error,p.error-message,p[role=alert]){color:#b43b47!important}
 html body :is(.ms-main,.content-area,.content-panel) p.success{color:#138354!important}
-html body .attendance-history-page .history-metric-card .history-metric-title{margin:0;font-size:20px!important;color:#211b30!important}
+html body .attendance-history-page .history-metric-card .history-metric-title{margin:0;font-size:14px!important;font-weight:400!important;line-height:1.5!important;letter-spacing:.14em!important;text-transform:uppercase!important;color:#6b4ba0!important}
 html body .attendance-history-page .history-metric-card>span{font:400 14px/1.5 Arial,Helvetica,sans-serif!important;color:#758195!important}
 html body .attendance-history-page .history-metric-card .history-metric-description{font:400 14px/1.5 Arial,Helvetica,sans-serif!important;color:#758195!important}
+
+/* Card labels and block headings use the HR Management section-label style. */
+html body :is(.ms-main,.content-area,.content-panel) :is(.card,.form-card,.glass-card,.form-section-card,.section-header,.hero-panel,.overview-hero-panel) h1,
+html body :is(.ms-main,.content-area,.content-panel) :is(.metric-card>span,.metric>span,.stat-card>span,.hero-metrics>div>span,.staff-menu-card>strong,.staff-proof-card>strong,.business-menu-card>strong,.module-card>strong,.card-title,.card-heading,.tile-title,.kpi-label,details>summary){font-family:Arial,Helvetica,sans-serif!important;font-size:14px!important;font-weight:400!important;line-height:1.5!important;letter-spacing:.14em!important;text-transform:uppercase!important;color:#6b4ba0!important}
