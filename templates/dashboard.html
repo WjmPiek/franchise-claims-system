@@ -148,7 +148,9 @@
 .import-card .grid-form{display:flex!important;flex-direction:column!important;align-items:stretch}.import-card .grid-form label{width:100%;display:flex;flex-direction:column;gap:10px}.import-card .grid-form button{align-self:flex-start}.import-outcome{white-space:pre-wrap;margin:16px 0;padding:16px;background:#f4effa;border-radius:10px}
 </style>
 {% endif %}
-<link rel="stylesheet" href="{{ url_for('static',filename='table-pan.css',v='20261014') }}"><script defer src="{{ url_for('static',filename='table-pan.js',v='20261014') }}"></script></head>
+<link rel="stylesheet" href="{{ url_for('static',filename='table-pan.css',v='20261014') }}"><script defer src="{{ url_for('static',filename='table-pan.js',v='20261014') }}"></script><link rel="stylesheet" href="{{ url_for('static', filename='module-switcher.css', v='20261102') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='module-typography.css', v='20261102') }}">
+</head>
 <body class="claims-ui">
   <div class="container compact">
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -160,8 +162,8 @@
     {% endwith %}
 
     {% if current_user and workspace != 'home' %}
-      <div class="user-session-bar no-print">
-        <span>Logged in as <strong>{{ current_user.name or current_user.email }}</strong> ({{ current_user.role }})</span>
+      <div class="user-session-bar martins-app-topbar no-print">
+        <div class="martins-app-topbar-account"><span>Signed in as</span><strong>{{ current_user.name or current_user.email }}</strong><small>{{ {'franchise_user':'Franchise Holder','admin':'Administrator','manager':'Manager','employee':'Employee'}.get(current_user.role,current_user.role|replace('_',' ')|title) }}</small></div>
         <span class="session-links">
           {% if current_user.role == 'admin' %}
             <a href="{{ url_for('admin_users') }}">Manage Users</a>
@@ -171,7 +173,8 @@
           {% endif %}
           <a href="{{ url_for('claims_workflow') }}">Claims Workflow</a>
           <a href="{{ url_for('change_password') }}">Change Password</a>
-          <a href="{{ url_for('logout') }}">Logout</a>
+          <a class="glass-button" data-module-switch href="https://martinssystem.co.za/profiles?module=claims">Switch user / branch</a>
+              <a class="glass-button" href="{{ url_for('logout') }}">Logout</a>
         </span>
       </div>
     {% endif %}
@@ -186,17 +189,18 @@
 <div class="executive-shell ms-shell">
         {% include 'topic_sidebar.html' %}
         <main class="executive-main ms-main">
-          <header class="martins-module-topbar no-print ms-topbar">
+          <header class="martins-module-topbar martins-app-topbar no-print ms-topbar">
             <a class="martins-module-brand ms-topbar-brand" href="https://martinssystem.co.za/">
               <img src="{{ url_for('static', filename='martins_logo.png') }}" alt="Martins logo">
               <span>Martin's Funerals System</span>
             </a>
-            <div class="martins-module-account">
-              <span>Logged in as</span>
+            <div class="martins-module-account martins-app-topbar-account">
+              <span>Signed in as</span>
               <strong>{{ current_user.name or current_user.email }}</strong>
-              <span class="role-pill">{{ current_user.role }}</span>
+              <small>{{ {'franchise_user':'Franchise Holder','admin':'Administrator','manager':'Manager','employee':'Employee'}.get(current_user.role,current_user.role|replace('_',' ')|title) }}</small>
               {% if current_user.role == 'admin' %}<a href="{{ url_for('admin_users') }}">Manage Users</a>{% endif %}
-              <a href="{{ url_for('logout') }}">Logout</a>
+              <a class="glass-button" data-module-switch href="https://martinssystem.co.za/profiles?module=claims">Switch user / branch</a>
+              <a class="glass-button" href="{{ url_for('logout') }}">Logout</a>
             </div>
           </header>
           <div class="executive-topbar">
@@ -1128,5 +1132,6 @@ document.querySelector('.claims-nav-backdrop').addEventListener('click',()=>togg
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('claims-nav-open'))toggle(false);});
 document.getElementById('claims-sidebar').addEventListener('click',event=>{if(event.target.closest('a'))toggle(false);});
 })();
-</script></body>
+</script><script src="{{ url_for('static', filename='module-switcher.js', v='20261102') }}"></script>
+</body>
 </html>
